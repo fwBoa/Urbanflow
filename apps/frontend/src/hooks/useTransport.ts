@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiService } from "@/services/api";
-import type { PrimLine, PrimStop, PrimVelibStation, JourneyResult } from "@/services/api";
+import type { PrimLine, PrimStop, PrimVelibStation, JourneyResult, GeocodeResult } from "@/services/api";
 
 // ─── Lines ────────────────────────────────────────────────────────
 export function useLines(limit = 6) {
@@ -95,6 +95,42 @@ export function useVelibStations(limit = 50) {
   }, [limit]);
 
   return { stations, loading, error };
+}
+
+// ─── Geocoding — Recherche d'adresses ──────────────────────────────────
+export function useGeocode(query: string, limit = 5) {
+  const [results, setResults] = useState<GeocodeResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const search = useCallback(
+    (q: string) => {
+      if (!q || q.length < 3) {
+        setResults([]);
+        return;
+      }
+      setLoading(true);
+      apiService
+        .geocode(q, limit)
+        .then((data) => {
+          setResults(data.results || []);
+          setError(null);
+        })
+        .catch((err) => {
+          setError(err.message);
+          setResults([]);
+        })
+        .finally(() => setLoading(false));
+    },
+    [limit]
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => search(query), 400);
+    return () => clearTimeout(timer);
+  }, [query, search]);
+
+  return { results, loading, error };
 }
 
 // ─── Traffic messages ──────────────────────────────────────────────

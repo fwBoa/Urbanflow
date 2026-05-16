@@ -268,6 +268,59 @@ export class PrimService implements OnModuleInit {
     return `${this.primApiUrl}/gtfs-rt/v1`;
   }
 
+  // ─── Geocoding — Recherche d'adresses (data.gouv.fr) ────────────────
+
+  /**
+   * Recherche d'adresses via l'API Adresse data.gouv.fr
+   * https://api-adresse.data.gouv.fr/
+   * Gratuit, sans clé, couvre toutes les adresses françaises
+   *
+   * Centre la recherche sur Paris (48.8566, 2.3522) pour
+   * privilégier les résultats en Île-de-France.
+   * Essaie d'abord "housenumber" (adresse précise), puis
+   * sans filtre de type si aucun résultat (lieux, rues).
+   */
+  async geocode(query: string, limit = 5): Promise<any> {
+    const url = 'https://api-adresse.data.gouv.fr/search';
+    const baseParams: Record<string, string> = {
+      q: query,
+      limit: String(limit),
+      lat: '48.8566',   // Centre Paris
+      lon: '2.3522',
+    };
+
+    try {
+      // 1) Essai avec type=housenumber (adresse précise)
+      let response = await firstValueFrom(
+        this.httpService.get(url, { params: { ...baseParams, type: 'housenumber' } }),
+      );
+      let features = response.data?.features || [];
+
+      // 2) Si aucun résultat, réessayer sans filtre de type (rues, lieux)
+      if (features.length === 0) {
+        response = await firstValueFrom(
+          this.httpService.get(url, { params: baseParams }),
+        );
+        features = response.data?.features || [];
+      }
+
+      // Normaliser la réponse pour le frontend
+      const results = features.map((f: any) => ({
+        label: f.properties?.label || '',
+        score: f.properties?.score || 0,
+        type: f.properties?.type || '',
+        city: f.properties?.city || '',
+        postcode: f.properties?.postcode || '',
+        context: f.properties?.context || '',
+        geometry: f.geometry || {},
+      }));
+      return { total_count: results.length, results };
+    } catch (error) {
+      this.logger.error(`Geocoding API error: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
   // ─── Santé du service ────────────────────────────────────────────────
 
   /**

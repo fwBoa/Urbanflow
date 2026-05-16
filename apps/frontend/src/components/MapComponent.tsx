@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -31,6 +31,8 @@ export interface MapProps {
     available_bike_stands: number;
   }>;
   onMapClick?: (lat: number, lng: number) => void;
+  userPosition?: { lat: number; lon: number } | null;
+  onLocateUser?: () => void;
 }
 
 export default function MapComponent({
@@ -42,8 +44,11 @@ export default function MapComponent({
   showVelib = false,
   velibStations = [],
   onMapClick,
+  userPosition,
+  onLocateUser,
 }: MapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
+  const userMarkerRef = useRef<L.Marker | null>(null);
 
   // Initialize map
   useEffect(() => {
@@ -201,11 +206,66 @@ export default function MapComponent({
     };
   }, [map, onMapClick]);
 
+  // ─── User position marker ──────────────────────────────────────────
+  useEffect(() => {
+    if (!map) return;
+
+    // Remove old user marker
+    if (userMarkerRef.current) {
+      map.removeLayer(userMarkerRef.current);
+      userMarkerRef.current = null;
+    }
+
+    if (userPosition) {
+      const icon = L.divIcon({
+        className: "user-position-marker",
+        html: `<div style="
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: #2E7D9B;
+          border: 3px solid white;
+          box-shadow: 0 0 0 4px rgba(46,125,155,0.3), 0 2px 6px rgba(0,0,0,0.3);
+        "></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
+      });
+
+      userMarkerRef.current = L.marker(
+        [userPosition.lat, userPosition.lon],
+        { icon, zIndexOffset: 1000 }
+      )
+        .addTo(map)
+        .bindPopup("📍 Votre position");
+
+      // Center map on user if no polyline
+      if (polyline.length < 2) {
+        map.setView([userPosition.lat, userPosition.lon], 15);
+      }
+    }
+  }, [map, userPosition, polyline]);
+
   return (
-    <div
-      id="urbanflow-map"
-      className={`w-full h-full rounded-[var(--card-radius)] overflow-hidden ${className}`}
-      style={{ minHeight: "200px" }}
-    />
+    <div className="relative w-full h-full">
+      <div
+        id="urbanflow-map"
+        className={`w-full h-full rounded-[var(--card-radius)] overflow-hidden ${className}`}
+        style={{ minHeight: "200px" }}
+      />
+      {/* Locate me button */}
+      {onLocateUser && (
+        <button
+          onClick={onLocateUser}
+          className="absolute bottom-3 right-3 z-[500] w-10 h-10 rounded-full bg-white shadow-lg border border-[var(--color-border)] flex items-center justify-center hover:bg-[var(--color-surface)] transition-colors"
+          aria-label="Ma position"
+          title="Ma position"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E7D9B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }

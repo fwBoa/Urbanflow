@@ -41,6 +41,21 @@ export interface PrimDataResponse<T> {
   results: T[];
 }
 
+export interface GeocodeResult {
+  label: string;
+  score: number;
+  type: string;
+  city: string;
+  postcode: string;
+  context: string;
+  geometry: { type: string; coordinates: [number, number] }; // [lon, lat]
+}
+
+export interface GeocodeResponse {
+  total_count: number;
+  results: GeocodeResult[];
+}
+
 export interface JourneySegment {
   type: "walking" | "transit" | "velib";
   mode?: string;
@@ -55,6 +70,11 @@ export interface JourneySegment {
   arrivalTime?: string;
   co2Ggrams: number;
   instruction: string;
+  // ─── Détails enrichis ──────────────────────────────────────────────
+  direction?: string;        // ex: "direction Poissy"
+  platform?: string;         // ex: "Voie 2"
+  headsign?: string;         // ex: "Saint-Germain-en-Laye"
+  waitTimeMinutes?: number;  // ex: 4
 }
 
 export interface JourneyResult {
@@ -128,6 +148,11 @@ class ApiService {
   // ─── GTFS URLs ────────────────────────────────────────────────────
   async getGtfsUrls() {
     return this.fetch<{ gtfs_static: string; gtfs_rt: string }>("/api/transport/gtfs-url");
+  }
+
+  // ─── Geocoding ───────────────────────────────────────────────────────
+  async geocode(query: string, limit = 5): Promise<GeocodeResponse> {
+    return this.fetch(`/api/transport/geocode?q=${encodeURIComponent(query)}&limit=${limit}`);
   }
 
   // ─── Journey ──────────────────────────────────────────────────────

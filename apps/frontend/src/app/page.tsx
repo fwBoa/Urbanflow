@@ -66,7 +66,7 @@ export default function HomePage() {
               Itinéraire
             </button>
             <button
-              onClick={() => router.push("/search")}
+              onClick={() => router.push("/search?mode=velib")}
               className="flex-1 h-[44px] rounded-[var(--chip-radius)] bg-[var(--color-eco-green)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#6DA33A] transition-colors"
             >
               <Bike size={16} />
@@ -87,7 +87,7 @@ export default function HomePage() {
               label={mode.label}
               color={mode.color}
               subtitle={mode.subtitle}
-              onClick={() => router.push("/search")}
+              onClick={() => router.push(`/search?mode=${mode.key}`)}
             />
           ))}
         </div>
@@ -155,7 +155,7 @@ export default function HomePage() {
           {recentTrips.map((trip, i) => (
             <button
               key={i}
-              onClick={() => router.push("/search")}
+              onClick={() => router.push(`/search?mode=${trip.mode.toLowerCase().replace("'", "").replace(" ", "")}`)}
               className="w-full flex items-center gap-3 bg-white rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-sm transition-all text-left"
             >
               <div className="flex-1 min-w-0">

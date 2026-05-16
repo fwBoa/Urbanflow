@@ -1,8 +1,9 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
-import { Clock, MapPin, Footprints, Bike, Train, Bus, ArrowRight, Leaf, Navigation2 } from "lucide-react";
+import { Clock, MapPin, Footprints, Bike, Train, Bus, ArrowRight, Leaf, Navigation2, Pause, Square, Play } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
@@ -61,6 +62,13 @@ export default function TripDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // ─── Navigation mode state ──────────────────────────────────────────
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [activeSegment, setActiveSegment] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Parse journey data from URL
   let trip: JourneyResult | null = null;
   try {
@@ -80,6 +88,66 @@ export default function TripDetailPage() {
   const duration = trip ? `${trip.durationMinutes} min` : fallbackTrip.duration;
   const co2 = trip?.co2Ggrams || fallbackTrip.co2;
   const transfers = trip?.transfers ?? fallbackTrip.transfers;
+
+  // ─── Timer logic ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isNavigating && !isPaused) {
+      timerRef.current = setInterval(() => {
+        setElapsedSeconds((prev) => prev + 1);
+      }, 1000);
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isNavigating, isPaused]);
+
+  // ─── Auto-advance segment based on elapsed time ─────────────────────
+  useEffect(() => {
+    if (!isNavigating || isPaused) return;
+    let cumulativeMinutes = 0;
+    for (let i = 0; i < segments.length; i++) {
+      cumulativeMinutes += segments[i].durationMinutes;
+      if (elapsedSeconds < cumulativeMinutes * 60) {
+        setActiveSegment(i);
+        return;
+      }
+    }
+    // All segments done
+    setActiveSegment(segments.length - 1);
+  }, [elapsedSeconds, isNavigating, isPaused, segments]);
+
+  // ─── Start / Stop navigation ────────────────────────────────────────
+  const startNavigation = () => {
+    setIsNavigating(true);
+    setIsPaused(false);
+    setActiveSegment(0);
+    setElapsedSeconds(0);
+  };
+
+  const pauseNavigation = () => setIsPaused(true);
+
+  const resumeNavigation = () => setIsPaused(false);
+
+  const stopNavigation = () => {
+    setIsNavigating(false);
+    setIsPaused(false);
+    setElapsedSeconds(0);
+    setActiveSegment(0);
+    if (timerRef.current) clearInterval(timerRef.current);
+  };
+
+  // Format elapsed time
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // Progress percentage
+  const totalDurationSeconds = segments.reduce((acc, s) => acc + s.durationMinutes * 60, 0);
+  const progressPercent = totalDurationSeconds > 0 ? Math.min((elapsedSeconds / totalDurationSeconds) * 100, 100) : 0;
 
   // Build map markers from journey data
   const mapMarkers = trip
@@ -147,54 +215,90 @@ export default function TripDetailPage() {
         Détail du trajet
       </h2>
       <div className="space-y-0">
-        {segments.map((segment, i) => (
-          <div key={i} className="flex gap-3">
-            {/* Timeline line */}
-            <div className="flex flex-col items-center">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                  segment.type === "walking"
-                    ? "bg-[var(--color-surface)] text-[var(--color-text-tertiary)]"
-                    : "text-white"
-                }`}
-                style={
-                  segment.type !== "walking"
-                    ? { backgroundColor: segment.lineColor || "var(--color-primary)" }
-                    : {}
-                }
-              >
-                {segment.type === "walking" ? (
-                  <Footprints size={14} />
-                ) : segment.type === "velib" ? (
-                  <Bike size={14} />
-                ) : (
-                  <Train size={14} />
+        {segments.map((segment, i) => {
+          const isActive = isNavigating && i === activeSegment;
+          const isDone = isNavigating && i < activeSegment;
+          return (
+            <div key={i} className="flex gap-3">
+              {/* Timeline line */}
+              <div className="flex flex-col items-center">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                    isActive
+                      ? "ring-2 ring-[var(--color-primary)] ring-offset-2 scale-110"
+                      : ""
+                  } ${
+                    isDone
+                      ? "bg-[var(--color-eco-green)] text-white"
+                      : segment.type === "walking"
+                        ? "bg-[var(--color-surface)] text-[var(--color-text-tertiary)]"
+                        : "text-white"
+                  }`}
+                  style={
+                    !isDone && segment.type !== "walking"
+                      ? { backgroundColor: segment.lineColor || "var(--color-primary)" }
+                      : isDone ? {} : {}
+                  }
+                >
+                  {isDone ? (
+                    <span className="text-xs">✓</span>
+                  ) : segment.type === "walking" ? (
+                    <Footprints size={14} />
+                  ) : segment.type === "velib" ? (
+                    <Bike size={14} />
+                  ) : (
+                    <Train size={14} />
+                  )}
+                </div>
+                {i < segments.length - 1 && (
+                  <div className={`w-0.5 h-12 ${isDone ? "bg-[var(--color-eco-green)]" : "bg-[var(--color-border)]"}`} />
                 )}
               </div>
-              {i < segments.length - 1 && (
-                <div className="w-0.5 h-12 bg-[var(--color-border)]" />
-              )}
-            </div>
 
-            {/* Segment content */}
-            <div className="flex-1 pb-4">
-              <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                {segment.instruction}
-              </p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1">
-                  <Clock size={11} />
-                  {segment.durationMinutes} min
-                </span>
-                {segment.type !== "walking" && segment.numStops && (
-                  <span className="text-[11px] text-[var(--color-text-tertiary)]">
-                    {segment.numStops} arrêts
+              {/* Segment content */}
+              <div className={`flex-1 pb-4 transition-opacity ${isDone ? "opacity-50" : isActive ? "opacity-100" : "opacity-80"}`}>
+                <p className={`text-sm font-medium ${isActive ? "text-[var(--color-primary)]" : "text-[var(--color-text-primary)]"}`}>
+                  {segment.instruction}
+                  {isActive && <span className="ml-2 text-xs text-[var(--color-primary)] font-normal">← En cours</span>}
+                </p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1">
+                    <Clock size={11} />
+                    {segment.durationMinutes} min
                   </span>
+                  {segment.type !== "walking" && segment.numStops && (
+                    <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                      {segment.numStops} arrêts
+                    </span>
+                  )}
+                </div>
+                {/* ─── Détails enrichis (direction, quai, attente) ──────────── */}
+                {segment.type === "transit" && (segment.direction || segment.platform || segment.waitTimeMinutes) && (
+                  <div className="mt-2 bg-[var(--color-surface)] rounded-lg p-2 space-y-1">
+                    {segment.direction && (
+                      <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
+                        <Navigation2 size={10} className="text-[var(--color-primary)]" />
+                        Direction : <span className="font-medium">{segment.direction}</span>
+                      </p>
+                    )}
+                    {segment.platform && (
+                      <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
+                        <MapPin size={10} className="text-[var(--color-mobility-orange)]" />
+                        {segment.platform}
+                      </p>
+                    )}
+                    {segment.waitTimeMinutes && (
+                      <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
+                        <Clock size={10} className="text-[var(--color-eco-green)]" />
+                        Attente estimée : <span className="font-medium">{segment.waitTimeMinutes} min</span>
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Map */}
@@ -211,10 +315,63 @@ export default function TripDetailPage() {
         />
       </div>
 
-      {/* CTA */}
-      <button className="w-full h-[52px] rounded-[var(--cta-radius)] bg-[var(--color-primary)] text-white font-semibold text-base hover:bg-[var(--color-primary-dark)] transition-colors active:scale-[0.98]">
-        Démarrer le trajet
-      </button>
+      {/* CTA — Navigation mode */}
+      {!isNavigating ? (
+        <button
+          onClick={startNavigation}
+          className="w-full h-[52px] rounded-[var(--cta-radius)] bg-[var(--color-primary)] text-white font-semibold text-base hover:bg-[var(--color-primary-dark)] transition-colors active:scale-[0.98] flex items-center justify-center gap-2"
+        >
+          <Play size={18} />
+          Démarrer le trajet
+        </button>
+      ) : (
+        <div className="space-y-3">
+          {/* Progress bar */}
+          <div className="bg-[var(--color-surface)] rounded-full h-2 overflow-hidden">
+            <div
+              className="h-full bg-[var(--color-primary)] transition-all duration-1000 ease-linear rounded-full"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Timer + controls */}
+          <div className="flex items-center justify-between bg-[var(--color-primary)] rounded-[var(--card-radius)] p-4 text-white">
+            <div>
+              <p className="text-xs text-white/70">Temps écoulé</p>
+              <p className="text-2xl font-bold font-mono">{formatTime(elapsedSeconds)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={isPaused ? resumeNavigation : pauseNavigation}
+                className="w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+                aria-label={isPaused ? "Reprendre" : "Pause"}
+              >
+                {isPaused ? <Play size={20} /> : <Pause size={20} />}
+              </button>
+              <button
+                onClick={stopNavigation}
+                className="w-12 h-12 rounded-full bg-red-500/80 hover:bg-red-500 flex items-center justify-center transition-colors"
+                aria-label="Terminer le trajet"
+              >
+                <Square size={20} />
+              </button>
+            </div>
+          </div>
+
+          {/* Active segment info */}
+          {segments[activeSegment] && (
+            <div className="bg-white rounded-[var(--card-radius)] p-3 border border-[var(--color-border)]">
+              <p className="text-xs text-[var(--color-text-tertiary)] mb-1">Étape en cours</p>
+              <p className="text-sm font-medium text-[var(--color-primary)]">
+                {segments[activeSegment].instruction}
+              </p>
+              <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">
+                {segments[activeSegment].durationMinutes} min · Étape {activeSegment + 1}/{segments.length}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </AppShell>
   );
 }

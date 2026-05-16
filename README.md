@@ -22,8 +22,8 @@ urbanflow/
 │   │   ├── src/
 │   │   │   ├── app/
 │   │   │   │   ├── page.tsx           # Accueil
-│   │   │   │   ├── search/page.tsx    # Recherche itinéraire
-│   │   │   │   ├── trip/[id]/page.tsx  # Détail itinéraire
+│   │   │   │   ├── search/page.tsx    # Recherche itinéraire (autocomplete arrêts + adresses, mode transport, géolocalisation)
+│   │   │   │   ├── trip/[id]/page.tsx  # Détail itinéraire + mode navigation + détails enrichis (direction, quai, attente)
 │   │   │   │   ├── favorites/page.tsx  # Favoris & historique
 │   │   │   │   └── profile/page.tsx    # Profil utilisateur
 │   │   │   ├── components/            # 10 composants réutilisables
@@ -38,17 +38,20 @@ urbanflow/
 │   │   │   │   ├── MapComponent.tsx    # Carte Leaflet interactive
 │   │   │   │   └── DynamicMap.tsx      # Wrapper next/dynamic (SSR off)
 │   │   │   ├── hooks/
-│   │   │   │   └── useTransport.ts     # Hooks React (useLines, useStopSearch, etc.)
+│   │   │   │   ├── useTransport.ts     # Hooks React (useLines, useStopSearch, useGeocode, useJourney, etc.)
+│   │   │   │   ├── useLocalStorage.ts  # Hook localStorage typé
+│   │   │   │   └── useGeolocation.ts   # Hook géolocalisation navigateur (GPS)
 │   │   │   └── services/
-│   │   │       └── api.ts              # Service API typé (8 endpoints PRIM)
+│   │   │       ├── api.ts              # Service API typé (10 endpoints PRIM + geocoding + journey)
+│   │   │       └── favorites.ts        # Service favoris, historique, stats, préférences
 │   │   └── ...
 │   └── backend/           # NestJS (port 4000)
 │       └── src/transport/ # Module Transport PRIM
-│           ├── prim.service.ts        # Appels API PRIM
+│           ├── prim.service.ts        # Appels API PRIM + geocoding data.gouv.fr
 │           ├── gtfs-parser.service.ts  # Parsing GTFS statiques
 │           ├── journey.service.ts      # Calcul d'itinéraires
 │           ├── carbon.service.ts       # Empreinte CO2 (ADEME)
-│           ├── transport.controller.ts # Endpoints REST
+│           ├── transport.controller.ts # Endpoints REST (journey enrichi : direction, platform, waitTime)
 │           └── transport.module.ts      # Module NestJS
 ├── packages/
 │   └── shared/            # Types et constantes partagés (GTFS/PRIM)
@@ -72,6 +75,8 @@ urbanflow/
 | `GET /api/transport/velib` | Stations Vélib' temps réel |
 | `GET /api/transport/elevators` | État des ascenseurs |
 | `GET /api/transport/gtfs-url` | URLs de téléchargement GTFS |
+| `GET /api/transport/geocode?q=...&limit=N` | Recherche d'adresses (data.gouv.fr, centré Île-de-France) |
+| `GET /api/transport/journey?originLat=...&originLon=...&destLat=...&destLon=...` | Calcul d'itinéraire multimodal (avec détails : direction, quai, attente) |
 
 ## Démarrage rapide
 
