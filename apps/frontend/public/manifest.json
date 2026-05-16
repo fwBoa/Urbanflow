@@ -1,22 +1,31 @@
 {
   "name": "UrbanFlow Mobility",
   "short_name": "UrbanFlow",
-  "description": "Plateforme intelligente de mobilité multimodale pour Paris",
+  "description": "Plateforme intelligente de mobilité multimodale pour Paris et son agglomération",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",
   "theme_color": "#2E7D9B",
   "orientation": "portrait-primary",
+  "categories": ["navigation", "travel", "transport"],
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

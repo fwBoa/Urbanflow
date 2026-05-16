@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import "./globals.css";
 
 const inter = Inter({
@@ -17,6 +18,17 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "default",
     title: "UrbanFlow",
+  },
+  openGraph: {
+    title: "UrbanFlow Mobility",
+    description:
+      "Plateforme intelligente de mobilité multimodale pour Paris et son agglomération",
+    type: "website",
+    locale: "fr_FR",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png",
   },
 };
 
@@ -36,6 +48,7 @@ export default function RootLayout({
     <html lang="fr" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans bg-white text-[var(--color-text-primary)]">
         {children}
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );
