@@ -35,6 +35,8 @@ function getStopIcon(arrtype: string) {
   }
 }
 
+const DEFAULT_MAP_CENTER: [number, number] = [48.8566, 2.3522];
+
 export default function SearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -408,7 +410,7 @@ export default function SearchPage() {
       {/* Map */}
       <div className="rounded-[var(--card-radius)] h-40 mb-4 border border-[var(--color-border)] overflow-hidden">
         <DynamicMap
-          center={[48.8566, 2.3522]}
+          center={DEFAULT_MAP_CENTER}
           zoom={12}
           markers={mapMarkers.length > 0 ? mapMarkers : [
             { position: [48.8606, 2.3456], label: "Châtelet", color: "#2E7D9B" },

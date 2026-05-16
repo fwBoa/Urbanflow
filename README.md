@@ -139,12 +139,7 @@ cd packages/shared && npm run build
 cd apps/backend && npm run test
 ```
 
-## Documentation
 
-- Dossier technique : `../Dossier_Technique_Urban_Flow_Mobility.md`
-- Maquettes Figma : https://www.figma.com/design/JEcRNJTv6EnI4IAWTnIRO8/T6
-- Résumé développement : `../RESUME_DEVELOPPEMENT.md`
-- Justifications techniques : `../justifications/justifications-techniques.md`
 
 ## Licence
 

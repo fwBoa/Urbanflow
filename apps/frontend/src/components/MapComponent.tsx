@@ -56,14 +56,20 @@ export default function MapComponent({
   const [map, setMap] = useState<L.Map | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
+  const prevUserPosRef = useRef<{ lat: number; lon: number } | null>(null);
+
+  const initialCenterRef = useRef(center);
+  const initialZoomRef = useRef(zoom);
 
   // Initialize map
   useEffect(() => {
     const mapInstance = L.map("urbanflow-map", {
-      center,
-      zoom,
+      center: initialCenterRef.current,
+      zoom: initialZoomRef.current,
       zoomControl: true,
       attributionControl: true,
+      // Désactiver le double-clic-zoom si on a un handler clic
+      doubleClickZoom: onMapClick ? false : true,
     });
 
     // OpenStreetMap tiles
@@ -81,117 +87,98 @@ export default function MapComponent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update center when props change
-  useEffect(() => {
-    if (map) {
-      map.setView(center, zoom);
-    }
-  }, [map, center, zoom]);
+  const routeMarkersRef = useRef<L.Marker[]>([]);
+  const velibMarkersRef = useRef<L.Marker[]>([]);
 
   // Add markers
   useEffect(() => {
     if (!map) return;
 
-    // Clear existing markers
-    map.eachLayer((layer) => {
-      if (layer instanceof L.Marker || layer instanceof L.CircleMarker) {
-        map.removeLayer(layer);
-      }
-    });
+    // Clear only route markers (not user marker)
+    routeMarkersRef.current.forEach((m) => map.removeLayer(m));
+    routeMarkersRef.current = [];
 
     // Add regular markers
     markers.forEach((m) => {
       const markerColor = m.color || "var(--color-primary)";
 
       if (m.color || m.label) {
-        // Custom colored marker using divIcon
         const icon = L.divIcon({
           className: "custom-marker",
           html: `<div style="
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: ${markerColor};
-            border: 3px solid white;
+            width: 28px; height: 28px; border-radius: 50%;
+            background: ${markerColor}; border: 3px solid white;
             box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 12px;
-            font-weight: 600;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 12px; font-weight: 600;
           ">${m.label ? m.label.charAt(0) : ""}</div>`,
           iconSize: [28, 28],
           iconAnchor: [14, 14],
         });
-
-        L.marker(m.position, { icon }).addTo(map).bindPopup(m.label || "");
+        const marker = L.marker(m.position, { icon }).addTo(map).bindPopup(m.label || "");
+        routeMarkersRef.current.push(marker);
       } else {
-        L.marker(m.position).addTo(map);
+        const marker = L.marker(m.position).addTo(map);
+        routeMarkersRef.current.push(marker);
       }
     });
+  }, [map, markers]);
 
-    // Add Vélib' stations
+  // Add Vélib' stations
+  useEffect(() => {
+    if (!map) return;
+
+    velibMarkersRef.current.forEach((m) => map.removeLayer(m));
+    velibMarkersRef.current = [];
+
     if (showVelib && velibStations.length > 0) {
       velibStations.forEach((station) => {
         const ratio =
           station.available_bike_stands > 0
-            ? station.available_bikes /
-              (station.available_bikes + station.available_bike_stands)
+            ? station.available_bikes / (station.available_bikes + station.available_bike_stands)
             : 0;
-
         const color =
-          ratio > 0.5
-            ? "var(--color-eco-green)"
-            : ratio > 0.2
-            ? "var(--color-mobility-orange)"
-            : "var(--color-favorite-red)";
+          ratio > 0.5 ? "var(--color-eco-green)" : ratio > 0.2 ? "var(--color-mobility-orange)" : "var(--color-favorite-red)";
 
         const icon = L.divIcon({
           className: "velib-marker",
           html: `<div style="
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background: ${color};
-            border: 2px solid white;
+            width: 22px; height: 22px; border-radius: 50%;
+            background: ${color}; border: 2px solid white;
             box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 10px;
-            font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 10px; font-weight: 700;
           ">🚲</div>`,
           iconSize: [22, 22],
           iconAnchor: [11, 11],
         });
 
-        L.marker([station.position.lat, station.position.lon], { icon })
+        const marker = L.marker([station.position.lat, station.position.lon], { icon })
           .addTo(map)
           .bindPopup(
             `<strong>${station.name}</strong><br/>🚲 ${station.available_bikes} vélos disponibles<br/>🅿️ ${station.available_bike_stands} places libres`
           );
+        velibMarkersRef.current.push(marker);
       });
     }
-  }, [map, markers, showVelib, velibStations]);
+  }, [map, showVelib, velibStations]);
+
+  const polylineRef = useRef<L.Polyline | null>(null);
 
   // Add polyline (route)
   useEffect(() => {
     if (!map || polyline.length < 2) return;
 
-    // Clear existing polylines
-    map.eachLayer((layer) => {
-      if (layer instanceof L.Polyline) {
-        map.removeLayer(layer);
-      }
-    });
+    // Remove old polyline only
+    if (polylineRef.current) {
+      map.removeLayer(polylineRef.current);
+      polylineRef.current = null;
+    }
 
-    L.polyline(polyline, {
+    polylineRef.current = L.polyline(polyline, {
       color: "var(--color-primary)",
       weight: 4,
       opacity: 0.8,
-      dashArray: undefined,
     }).addTo(map);
 
     // Fit map to polyline bounds
@@ -215,7 +202,16 @@ export default function MapComponent({
 
   // ─── User position marker + accuracy circle ────────────────────────
   useEffect(() => {
-    if (!map) return;
+    if (!map || !userPosition) return;
+
+    // Skip update if position hasn't changed significantly (< 5m)
+    if (prevUserPosRef.current) {
+      const dLat = Math.abs(userPosition.lat - prevUserPosRef.current.lat);
+      const dLon = Math.abs(userPosition.lon - prevUserPosRef.current.lon);
+      // ~5m ≈ 0.000045°
+      if (dLat < 0.000045 && dLon < 0.000045) return;
+    }
+    prevUserPosRef.current = { lat: userPosition.lat, lon: userPosition.lon };
 
     // Remove old user marker + accuracy circle
     if (userMarkerRef.current) {
@@ -227,48 +223,46 @@ export default function MapComponent({
       accuracyCircleRef.current = null;
     }
 
-    if (userPosition) {
-      const icon = L.divIcon({
-        className: "user-position-marker",
-        html: `<div style="
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          background: #2E7D9B;
-          border: 3px solid white;
-          box-shadow: 0 0 0 4px rgba(46,125,155,0.3), 0 2px 6px rgba(0,0,0,0.3);
-        "></div>`,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8],
-      });
+    const icon = L.divIcon({
+      className: "user-position-marker",
+      html: `<div style="
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #2E7D9B;
+        border: 3px solid white;
+        box-shadow: 0 0 0 4px rgba(46,125,155,0.3), 0 2px 6px rgba(0,0,0,0.3);
+      "></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    });
 
-      userMarkerRef.current = L.marker(
+    userMarkerRef.current = L.marker(
+      [userPosition.lat, userPosition.lon],
+      { icon, zIndexOffset: 1000 }
+    )
+      .addTo(map)
+      .bindPopup("📍 Votre position");
+
+    // Accuracy circle
+    if (userPosition.accuracy && userPosition.accuracy > 0) {
+      accuracyCircleRef.current = L.circle(
         [userPosition.lat, userPosition.lon],
-        { icon, zIndexOffset: 1000 }
-      )
-        .addTo(map)
-        .bindPopup("📍 Votre position");
-
-      // Accuracy circle
-      if (userPosition.accuracy && userPosition.accuracy > 0) {
-        accuracyCircleRef.current = L.circle(
-          [userPosition.lat, userPosition.lon],
-          {
-            radius: userPosition.accuracy,
-            color: "#2E7D9B",
-            fillColor: "rgba(46,125,155,0.1)",
-            fillOpacity: 0.3,
-            weight: 1,
-          }
-        ).addTo(map);
-      }
-
-      // Center map on user if follow mode or no polyline
-      if (followUser || polyline.length < 2) {
-        map.setView([userPosition.lat, userPosition.lon], map.getZoom() || 15);
-      }
+        {
+          radius: userPosition.accuracy,
+          color: "#2E7D9B",
+          fillColor: "rgba(46,125,155,0.1)",
+          fillOpacity: 0.3,
+          weight: 1,
+        }
+      ).addTo(map);
     }
-  }, [map, userPosition, polyline, followUser]);
+
+    // Center map on user ONLY in follow mode (not when polyline < 2)
+    if (followUser) {
+      map.panTo([userPosition.lat, userPosition.lon]);
+    }
+  }, [map, userPosition, followUser]);
 
   return (
     <div className="relative w-full h-full">
