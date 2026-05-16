@@ -6,6 +6,8 @@ import { GtfsParserService } from './gtfs-parser.service';
 import { JourneyService } from './journey.service';
 import { CarbonService } from './carbon.service';
 
+import { OsrmService } from './osrm.service';
+
 /**
  * Module Transport — Intégration PRIM (Île-de-France Mobilités)
  *
@@ -14,11 +16,12 @@ import { CarbonService } from './carbon.service';
  * - GtfsParserService : Parsing des fichiers GTFS statiques
  * - JourneyService : Calcul d'itinéraires (algorithme RAPTOR-like)
  * - CarbonService : Calcul empreinte carbone (facteurs ADEME)
+ * - OsrmService : Routing réel via OpenStreetMap (OSRM)
  */
 @Module({
   imports: [HttpModule],
   controllers: [TransportController],
-  providers: [PrimService, GtfsParserService, JourneyService, CarbonService],
-  exports: [PrimService, GtfsParserService, JourneyService, CarbonService],
+  providers: [PrimService, GtfsParserService, JourneyService, CarbonService, OsrmService],
+  exports: [PrimService, GtfsParserService, JourneyService, CarbonService, OsrmService],
 })
 export class TransportModule {}

@@ -171,6 +171,28 @@ class ApiService {
     return this.fetch(`/api/transport/reverse-geocode?lat=${lat}&lon=${lon}`);
   }
 
+  // ─── OSRM Routing — Géométrie réelle ────────────────────────────────
+  async getRoute(params: {
+    originLat: number;
+    originLon: number;
+    destLat: number;
+    destLon: number;
+    profile?: 'foot' | 'bike' | 'car';
+  }): Promise<{
+    geometry: { type: string; coordinates: [number, number][] };
+    distance: number;
+    duration: number;
+  }> {
+    const query = new URLSearchParams({
+      originLat: String(params.originLat),
+      originLon: String(params.originLon),
+      destLat: String(params.destLat),
+      destLon: String(params.destLon),
+    });
+    if (params.profile) query.set('profile', params.profile);
+    return this.fetch(`/api/transport/route?${query.toString()}`);
+  }
+
   // ─── Journey ──────────────────────────────────────────────────────
   async searchJourney(params: {
     originLat: number;

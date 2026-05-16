@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Zap, Leaf, Wallet, MapPin, Navigation, Clock, Loader2, Building2, Train, Bus, Bike } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -8,7 +8,7 @@ import SearchBar from "@/components/SearchBar";
 import FilterChip from "@/components/FilterChip";
 import TripCard from "@/components/TripCard";
 import DynamicMap from "@/components/DynamicMap";
-import { useStopSearch, useGeocode, useJourney, useReverseGeocode } from "@/hooks/useTransport";
+import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute } from "@/hooks/useTransport";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { addToHistory } from "@/services/favorites";
 import type { PrimStop, GeocodeResult } from "@/services/api";
@@ -65,6 +65,7 @@ export default function SearchPage() {
   const { lat: userLat, lon: userLon, accuracy: userAccuracy, loading: geoLoading, error: geoError, watching: isWatching, locate, startWatch, stopWatch } = useGeolocation();
   const [followUser, setFollowUser] = useState(false);
   const { reverseGeocode } = useReverseGeocode();
+  const { geometry: routeGeometry, fetchRoute } = useRoute();
   const [clickTarget, setClickTarget] = useState<"origin" | "destination" | null>(null);
 
   // Toggle suivi GPS continu
@@ -165,19 +166,29 @@ export default function SearchPage() {
     return markers;
   }, [selectedOrigin, selectedDest, originStops, destStops, origin, destination]);
 
-  // Build polyline from journey segments
-  const mapPolyline = useMemo(() => {
-    if (journeys.length > 0 && selectedOrigin && selectedDest) {
-      return [
-        [selectedOrigin.lat, selectedOrigin.lon] as [number, number],
-        [selectedDest.lat, selectedDest.lon] as [number, number],
-      ];
+  // Build polyline from OSRM route (real geometry) or fallback to straight line
+  const [mapPolyline, setMapPolyline] = useState<[number, number][]>([]);
+
+  useEffect(() => {
+    if (selectedOrigin && selectedDest) {
+      fetchRoute(selectedOrigin.lat, selectedOrigin.lon, selectedDest.lat, selectedDest.lon, 'foot')
+        .then((coords) => {
+          if (coords.length > 0) {
+            setMapPolyline(coords);
+          } else {
+            // Fallback: straight line
+            setMapPolyline([
+              [selectedOrigin.lat, selectedOrigin.lon],
+              [selectedDest.lat, selectedDest.lon],
+            ]);
+          }
+        });
+    } else if (mapMarkers.length >= 2) {
+      setMapPolyline(mapMarkers.map((m) => m.position));
+    } else {
+      setMapPolyline([]);
     }
-    if (mapMarkers.length >= 2) {
-      return mapMarkers.map((m) => m.position);
-    }
-    return undefined;
-  }, [journeys, selectedOrigin, selectedDest, mapMarkers]);
+  }, [selectedOrigin, selectedDest, mapMarkers, fetchRoute]);
 
   // ─── Sélection d'une suggestion (arrêt ou adresse) ──────────────────
   const handleOriginSelect = (item: SuggestionItem) => {

@@ -158,6 +158,43 @@ export function useReverseGeocode() {
   return { result, loading, error, reverseGeocode };
 }
 
+// ─── OSRM Routing — Géométrie réelle ─────────────────────────────────
+export function useRoute() {
+  const [geometry, setGeometry] = useState<[number, number][]>([]);
+  const [distance, setDistance] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRoute = useCallback(async (
+    originLat: number,
+    originLon: number,
+    destLat: number,
+    destLon: number,
+    profile?: 'foot' | 'bike' | 'car',
+  ) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiService.getRoute({ originLat, originLon, destLat, destLon, profile });
+      // OSRM GeoJSON: [lon, lat] → Leaflet: [lat, lon]
+      const coords = data.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]] as [number, number]);
+      setGeometry(coords);
+      setDistance(data.distance);
+      setDuration(data.duration);
+      return coords;
+    } catch (err: any) {
+      setError(err.message);
+      setGeometry([]);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { geometry, distance, duration, loading, error, fetchRoute };
+}
+
 // ─── Traffic messages ──────────────────────────────────────────────
 export function useTrafficMessages(limit = 5) {
   const [messages, setMessages] = useState<unknown[]>([]);

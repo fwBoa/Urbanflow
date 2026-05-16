@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrimService } from './prim.service';
 import { JourneyService, JourneyQuery } from './journey.service';
+import { OsrmService } from './osrm.service';
 
 /**
  * Contrôleur Transport — Expose les données PRIM (Île-de-France Mobilités)
@@ -28,6 +29,7 @@ export class TransportController {
   constructor(
     private readonly primService: PrimService,
     private readonly journeyService: JourneyService,
+    private readonly osrmService: OsrmService,
   ) {}
 
   // ─── Santé ────────────────────────────────────────────────────────────
@@ -220,6 +222,38 @@ export class TransportController {
     }
 
     return journeys;
+  }
+
+  // ─── Routing réel OSRM — Géométrie suivant les rues ──────────────────
+
+  @Get('route')
+  async getRoute(
+    @Query('originLat') originLat?: string,
+    @Query('originLon') originLon?: string,
+    @Query('destLat') destLat?: string,
+    @Query('destLon') destLon?: string,
+    @Query('profile') profile?: string,
+  ) {
+    if (!originLat || !originLon || !destLat || !destLon) {
+      throw new HttpException(
+        'originLat, originLon, destLat, destLon are required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const result = await this.osrmService.getRoute(
+      parseFloat(originLat),
+      parseFloat(originLon),
+      parseFloat(destLat),
+      parseFloat(destLon),
+      profile as any || 'foot',
+    );
+    if (!result) {
+      throw new HttpException(
+        'Impossible de calculer l\'itinéraire',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return result;
   }
 
   /**
