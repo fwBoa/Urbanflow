@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiService } from "@/services/api";
-import type { PrimLine, PrimStop, PrimVelibStation, JourneyResult, GeocodeResult } from "@/services/api";
+import type { PrimLine, PrimStop, PrimVelibStation, JourneyResult, GeocodeResult, ReverseGeocodeResult } from "@/services/api";
 
 // ─── Lines ────────────────────────────────────────────────────────
 export function useLines(limit = 6) {
@@ -131,6 +131,31 @@ export function useGeocode(query: string, limit = 5) {
   }, [query, search]);
 
   return { results, loading, error };
+}
+
+// ─── Reverse Geocoding — Coordonnées → adresse ────────────────────────
+export function useReverseGeocode() {
+  const [result, setResult] = useState<ReverseGeocodeResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reverseGeocode = useCallback(async (lat: number, lon: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiService.reverseGeocode(lat, lon);
+      setResult(data);
+      return data;
+    } catch (err: any) {
+      setError(err.message);
+      setResult(null);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { result, loading, error, reverseGeocode };
 }
 
 // ─── Traffic messages ──────────────────────────────────────────────

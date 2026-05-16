@@ -321,6 +321,45 @@ export class PrimService implements OnModuleInit {
     }
   }
 
+  // ─── Reverse Geocoding — Coordonnées → adresse ──────────────────────
+
+  /**
+   * Géocodage inverse : convertit des coordonnées (lat, lon) en adresse lisible.
+   * Utilise l'API data.gouv.fr (Nominatim-like).
+   */
+  async reverseGeocode(lat: number, lon: number): Promise<any> {
+    const url = 'https://api-adresse.data.gouv.fr/reverse';
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(url, {
+          params: { lat: String(lat), lon: String(lon) },
+        }),
+      );
+
+      const features = response.data?.features || [];
+      if (features.length === 0) {
+        return { label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`, type: 'coordinates', city: '', postcode: '' };
+      }
+
+      const f = features[0];
+      return {
+        label: f.properties?.label || '',
+        type: f.properties?.type || '',
+        city: f.properties?.city || '',
+        postcode: f.properties?.postcode || '',
+        context: f.properties?.context || '',
+        geometry: f.geometry || {},
+        housenumber: f.properties?.housenumber || '',
+        street: f.properties?.street || '',
+      };
+    } catch (error) {
+      this.logger.error(`Reverse geocoding API error: ${error.message}`, error.stack);
+      // Fallback : retourner les coordonnées brutes
+      return { label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`, type: 'coordinates', city: '', postcode: '' };
+    }
+  }
+
   // ─── Santé du service ────────────────────────────────────────────────
 
   /**

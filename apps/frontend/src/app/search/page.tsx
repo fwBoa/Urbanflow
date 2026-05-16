@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Zap, Leaf, Wallet, MapPin, Navigation, Clock, Loader2, Building2, Train, Bus, Bike } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -8,7 +8,7 @@ import SearchBar from "@/components/SearchBar";
 import FilterChip from "@/components/FilterChip";
 import TripCard from "@/components/TripCard";
 import DynamicMap from "@/components/DynamicMap";
-import { useStopSearch, useGeocode, useJourney } from "@/hooks/useTransport";
+import { useStopSearch, useGeocode, useJourney, useReverseGeocode } from "@/hooks/useTransport";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { addToHistory } from "@/services/favorites";
 import type { PrimStop, GeocodeResult } from "@/services/api";
@@ -60,7 +60,21 @@ export default function SearchPage() {
   const [selectedDest, setSelectedDest] = useState<{ lat: number; lon: number } | null>(null);
 
   // ─── Géolocalisation ─────────────────────────────────────────────────
-  const { lat: userLat, lon: userLon, loading: geoLoading, error: geoError, locate } = useGeolocation();
+  const { lat: userLat, lon: userLon, accuracy: userAccuracy, loading: geoLoading, error: geoError, watching: isWatching, locate, startWatch, stopWatch } = useGeolocation();
+  const [followUser, setFollowUser] = useState(false);
+  const { reverseGeocode } = useReverseGeocode();
+  const [clickTarget, setClickTarget] = useState<"origin" | "destination" | null>(null);
+
+  // Toggle suivi GPS continu
+  const toggleWatch = useCallback(() => {
+    if (isWatching) {
+      stopWatch();
+      setFollowUser(false);
+    } else {
+      startWatch();
+      setFollowUser(true);
+    }
+  }, [isWatching, startWatch, stopWatch]);
 
   // Utiliser ma position comme origine
   const useMyPosition = () => {
@@ -71,6 +85,25 @@ export default function SearchPage() {
       locate();
     }
   };
+
+  // ─── Clic sur la carte → reverse geocoding ──────────────────────────
+  const handleMapClick = useCallback(async (lat: number, lng: number) => {
+    const result = await reverseGeocode(lat, lng);
+    const label = result?.label || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+    // Si pas d'origine → définir comme départ, sinon comme destination
+    if (!selectedOrigin) {
+      setOrigin(label);
+      setSelectedOrigin({ lat, lon: lng });
+    } else if (!selectedDest) {
+      setDestination(label);
+      setSelectedDest({ lat, lon: lng });
+    } else {
+      // Les deux sont remplis → remplacer la destination
+      setDestination(label);
+      setSelectedDest({ lat, lon: lng });
+    }
+  }, [selectedOrigin, selectedDest, reverseGeocode]);
 
   // Recherche simultanée : arrêts PRIM + adresses
   const { stops: originStops } = useStopSearch(origin);
@@ -382,10 +415,20 @@ export default function SearchPage() {
             { position: [48.8925, 2.2375], label: "La Défense", color: "#E53935" },
           ]}
           polyline={mapPolyline}
-          userPosition={userLat && userLon ? { lat: userLat, lon: userLon } : null}
+          userPosition={userLat && userLon ? { lat: userLat, lon: userLon, accuracy: userAccuracy ?? undefined } : null}
           onLocateUser={locate}
+          isWatching={isWatching}
+          onToggleWatch={toggleWatch}
+          followUser={followUser}
+          onMapClick={handleMapClick}
         />
       </div>
+      {/* Click-on-map hint */}
+      {(!selectedOrigin || !selectedDest) && (
+        <p className="text-[var(--color-text-tertiary)] text-xs text-center mb-3">
+          💡 Cliquez sur la carte pour définir {!selectedOrigin ? "le départ" : "l'arrivée"}
+        </p>
+      )}
 
       {/* Results */}
       <div className="space-y-3">

@@ -31,8 +31,11 @@ export interface MapProps {
     available_bike_stands: number;
   }>;
   onMapClick?: (lat: number, lng: number) => void;
-  userPosition?: { lat: number; lon: number } | null;
+  userPosition?: { lat: number; lon: number; accuracy?: number; heading?: number | null } | null;
   onLocateUser?: () => void;
+  isWatching?: boolean;           // watchPosition actif
+  onToggleWatch?: () => void;     // toggle suivi continu
+  followUser?: boolean;           // centrer la carte sur l'utilisateur
 }
 
 export default function MapComponent({
@@ -46,9 +49,13 @@ export default function MapComponent({
   onMapClick,
   userPosition,
   onLocateUser,
+  isWatching = false,
+  onToggleWatch,
+  followUser = false,
 }: MapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
+  const accuracyCircleRef = useRef<L.Circle | null>(null);
 
   // Initialize map
   useEffect(() => {
@@ -206,14 +213,18 @@ export default function MapComponent({
     };
   }, [map, onMapClick]);
 
-  // ─── User position marker ──────────────────────────────────────────
+  // ─── User position marker + accuracy circle ────────────────────────
   useEffect(() => {
     if (!map) return;
 
-    // Remove old user marker
+    // Remove old user marker + accuracy circle
     if (userMarkerRef.current) {
       map.removeLayer(userMarkerRef.current);
       userMarkerRef.current = null;
+    }
+    if (accuracyCircleRef.current) {
+      map.removeLayer(accuracyCircleRef.current);
+      accuracyCircleRef.current = null;
     }
 
     if (userPosition) {
@@ -238,12 +249,26 @@ export default function MapComponent({
         .addTo(map)
         .bindPopup("📍 Votre position");
 
-      // Center map on user if no polyline
-      if (polyline.length < 2) {
-        map.setView([userPosition.lat, userPosition.lon], 15);
+      // Accuracy circle
+      if (userPosition.accuracy && userPosition.accuracy > 0) {
+        accuracyCircleRef.current = L.circle(
+          [userPosition.lat, userPosition.lon],
+          {
+            radius: userPosition.accuracy,
+            color: "#2E7D9B",
+            fillColor: "rgba(46,125,155,0.1)",
+            fillOpacity: 0.3,
+            weight: 1,
+          }
+        ).addTo(map);
+      }
+
+      // Center map on user if follow mode or no polyline
+      if (followUser || polyline.length < 2) {
+        map.setView([userPosition.lat, userPosition.lon], map.getZoom() || 15);
       }
     }
-  }, [map, userPosition, polyline]);
+  }, [map, userPosition, polyline, followUser]);
 
   return (
     <div className="relative w-full h-full">
@@ -252,19 +277,54 @@ export default function MapComponent({
         className={`w-full h-full rounded-[var(--card-radius)] overflow-hidden ${className}`}
         style={{ minHeight: "200px" }}
       />
-      {/* Locate me button */}
-      {onLocateUser && (
-        <button
-          onClick={onLocateUser}
-          className="absolute bottom-3 right-3 z-[500] w-10 h-10 rounded-full bg-white shadow-lg border border-[var(--color-border)] flex items-center justify-center hover:bg-[var(--color-surface)] transition-colors"
-          aria-label="Ma position"
-          title="Ma position"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E7D9B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-          </svg>
-        </button>
+      {/* Map toolbar */}
+      <div className="absolute bottom-3 right-3 z-[500] flex flex-col gap-2">
+        {/* Locate me button */}
+        {onLocateUser && (
+          <button
+            onClick={onLocateUser}
+            className="w-10 h-10 rounded-full bg-white shadow-lg border border-[var(--color-border)] flex items-center justify-center hover:bg-[var(--color-surface)] transition-colors"
+            aria-label="Ma position"
+            title="Ma position"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E7D9B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            </svg>
+          </button>
+        )}
+        {/* Watch GPS toggle button */}
+        {onToggleWatch && (
+          <button
+            onClick={onToggleWatch}
+            className={`w-10 h-10 rounded-full shadow-lg border flex items-center justify-center transition-colors ${
+              isWatching
+                ? "bg-[#2E7D9B] border-[#2E7D9B] text-white"
+                : "bg-white border-[var(--color-border)] hover:bg-[var(--color-surface)]"
+            }`}
+            aria-label={isWatching ? "Arrêter le suivi GPS" : "Suivi GPS continu"}
+            title={isWatching ? "Arrêter le suivi GPS" : "Suivi GPS continu"}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={isWatching ? "white" : "#2E7D9B"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="6" />
+              <circle cx="12" cy="12" r="2" />
+              {isWatching && (
+                <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="3s" repeatCount="indefinite" />
+              )}
+            </svg>
+          </button>
+        )}
+      </div>
+      {/* GPS status indicator */}
+      {isWatching && (
+        <div className="absolute top-3 left-3 z-[500] px-3 py-1.5 rounded-full bg-[#2E7D9B] text-white text-xs font-medium shadow-lg flex items-center gap-1.5">
+          <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          GPS actif
+          {userPosition?.accuracy && (
+            <span className="opacity-75">±{Math.round(userPosition.accuracy)}m</span>
+          )}
+        </div>
       )}
     </div>
   );

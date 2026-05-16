@@ -56,6 +56,17 @@ export interface GeocodeResponse {
   results: GeocodeResult[];
 }
 
+export interface ReverseGeocodeResult {
+  label: string;
+  type: string;
+  city: string;
+  postcode: string;
+  context?: string;
+  geometry?: { type: string; coordinates: [number, number] };
+  housenumber?: string;
+  street?: string;
+}
+
 export interface JourneySegment {
   type: "walking" | "transit" | "velib";
   mode?: string;
@@ -153,6 +164,11 @@ class ApiService {
   // ─── Geocoding ───────────────────────────────────────────────────────
   async geocode(query: string, limit = 5): Promise<GeocodeResponse> {
     return this.fetch(`/api/transport/geocode?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+
+  // ─── Reverse Geocoding ───────────────────────────────────────────────
+  async reverseGeocode(lat: number, lon: number): Promise<ReverseGeocodeResult> {
+    return this.fetch(`/api/transport/reverse-geocode?lat=${lat}&lon=${lon}`);
   }
 
   // ─── Journey ──────────────────────────────────────────────────────

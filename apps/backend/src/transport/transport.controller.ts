@@ -163,6 +163,22 @@ export class TransportController {
     return this.primService.geocode(query, limit ? parseInt(limit, 10) : 5);
   }
 
+  // ─── Reverse Geocoding — Coordonnées → adresse (F6) ──────────────────
+
+  @Get('reverse-geocode')
+  async reverseGeocode(
+    @Query('lat') lat?: string,
+    @Query('lon') lon?: string,
+  ) {
+    if (!lat || !lon) {
+      throw new HttpException(
+        'Query parameters "lat" and "lon" are required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.primService.reverseGeocode(parseFloat(lat), parseFloat(lon));
+  }
+
   // ─── Calcul d'itinéraire (F2) ────────────────────────────────────────
 
   @Get('journey')
