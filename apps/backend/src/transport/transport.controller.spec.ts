@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TransportController } from './transport.controller';
 import { PrimService } from './prim.service';
 import { CarbonService } from './carbon.service';
+import { JourneyService } from './journey.service';
+import { GtfsParserService } from './gtfs-parser.service';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 
@@ -16,6 +18,8 @@ describe('TransportController', () => {
       providers: [
         PrimService,
         CarbonService,
+        JourneyService,
+        GtfsParserService,
         {
           provide: ConfigService,
           useValue: {

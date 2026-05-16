@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiService } from "@/services/api";
-import type { PrimLine, PrimStop, PrimVelibStation } from "@/services/api";
+import type { PrimLine, PrimStop, PrimVelibStation, JourneyResult } from "@/services/api";
 
 // ─── Lines ────────────────────────────────────────────────────────
 export function useLines(limit = 6) {
@@ -141,4 +141,43 @@ export function useHealthCheck() {
   }, []);
 
   return { status, loading };
+}
+
+// ─── Journey search ────────────────────────────────────────────────
+export function useJourney(
+  origin: { lat: number; lon: number } | null,
+  destination: { lat: number; lon: number } | null,
+  departureTime?: string,
+) {
+  const [journeys, setJourneys] = useState<JourneyResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!origin || !destination) {
+      setJourneys([]);
+      return;
+    }
+
+    setLoading(true);
+    apiService
+      .searchJourney({
+        originLat: origin.lat,
+        originLon: origin.lon,
+        destLat: destination.lat,
+        destLon: destination.lon,
+        departureTime,
+      })
+      .then((data) => {
+        setJourneys(Array.isArray(data) ? data : []);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setJourneys([]);
+      })
+      .finally(() => setLoading(false));
+  }, [origin, destination, departureTime]);
+
+  return { journeys, loading, error };
 }

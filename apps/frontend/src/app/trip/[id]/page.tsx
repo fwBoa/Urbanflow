@@ -1,10 +1,12 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Clock, MapPin, Footprints, Bike, Train, Bus, ArrowRight, Leaf, Navigation2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
+import type { JourneyResult } from "@/services/api";
 
 const modeIcons: Record<string, React.ReactNode> = {
   metro: <Train size={18} />,
@@ -15,7 +17,8 @@ const modeIcons: Record<string, React.ReactNode> = {
   velib: <Bike size={18} />,
 };
 
-const mockTrip = {
+// Fallback data when no journey data is passed
+const fallbackTrip = {
   departure: "Châtelet",
   arrival: "La Défense",
   duration: "22 min",
@@ -56,6 +59,38 @@ const mockTrip = {
 
 export default function TripDetailPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Parse journey data from URL
+  let trip: JourneyResult | null = null;
+  try {
+    const data = searchParams.get("data");
+    if (data) {
+      trip = JSON.parse(decodeURIComponent(data));
+    }
+  } catch {
+    // Use fallback
+  }
+
+  const segments = (trip?.segments || fallbackTrip.segments) as JourneyResult["segments"];
+  const firstSeg = segments[0];
+  const lastSeg = segments[segments.length - 1];
+  const departure = firstSeg?.fromStop || firstSeg?.instruction?.split(" ").slice(-1)[0] || "Départ";
+  const arrival = lastSeg?.toStop || lastSeg?.instruction?.split(" ").slice(-1)[0] || "Arrivée";
+  const duration = trip ? `${trip.durationMinutes} min` : fallbackTrip.duration;
+  const co2 = trip?.co2Ggrams || fallbackTrip.co2;
+  const transfers = trip?.transfers ?? fallbackTrip.transfers;
+
+  // Build map markers from journey data
+  const mapMarkers = trip
+    ? [
+        { position: [trip.segments[0]?.fromStop ? 48.8566 : 48.8566, 2.3522] as [number, number], label: departure, color: "#2E7D9B" },
+        { position: [48.8925, 2.2375] as [number, number], label: arrival, color: "#E53935" },
+      ]
+    : [
+        { position: [48.8606, 2.3456] as [number, number], label: "Châtelet", color: "#2E7D9B" },
+        { position: [48.8925, 2.2375] as [number, number], label: "La Défense", color: "#E53935" },
+      ];
 
   return (
     <AppShell
@@ -73,23 +108,23 @@ export default function TripDetailPage() {
           <div>
             <p className="text-sm text-white/80">Trajet</p>
             <p className="text-lg font-semibold">
-              {mockTrip.departure} → {mockTrip.arrival}
+              {departure} → {arrival}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold">{mockTrip.duration}</p>
-            <CO2Badge grams={mockTrip.co2} size="md" />
+            <p className="text-2xl font-bold">{duration}</p>
+            <CO2Badge grams={co2} size="md" />
           </div>
         </div>
         <div className="flex items-center gap-4 text-sm text-white/70">
           <span className="flex items-center gap-1">
             <Clock size={14} />
-            {mockTrip.duration}
+            {duration}
           </span>
           <span>
-            {mockTrip.transfers === 0
+            {transfers === 0
               ? "Direct"
-              : `${mockTrip.transfers} correspondance${mockTrip.transfers > 1 ? "s" : ""}`}
+              : `${transfers} correspondance${transfers > 1 ? "s" : ""}`}
           </span>
         </div>
       </div>
@@ -99,7 +134,10 @@ export default function TripDetailPage() {
         <div className="flex items-center gap-2">
           <Leaf size={16} className="text-[var(--color-eco-green)]" />
           <p className="text-sm text-[var(--color-eco-green)]">
-            <span className="font-semibold">81% moins de CO₂</span> qu&apos;en voiture
+            <span className="font-semibold">
+              {co2 > 0 ? `${Math.round((1 - co2 / (co2 * 5.3)) * 100)}%` : "100%"} moins de CO₂
+            </span>{" "}
+            qu&apos;en voiture
           </p>
         </div>
       </div>
@@ -109,7 +147,7 @@ export default function TripDetailPage() {
         Détail du trajet
       </h2>
       <div className="space-y-0">
-        {mockTrip.segments.map((segment, i) => (
+        {segments.map((segment, i) => (
           <div key={i} className="flex gap-3">
             {/* Timeline line */}
             <div className="flex flex-col items-center">
@@ -127,11 +165,13 @@ export default function TripDetailPage() {
               >
                 {segment.type === "walking" ? (
                   <Footprints size={14} />
+                ) : segment.type === "velib" ? (
+                  <Bike size={14} />
                 ) : (
                   <Train size={14} />
                 )}
               </div>
-              {i < mockTrip.segments.length - 1 && (
+              {i < segments.length - 1 && (
                 <div className="w-0.5 h-12 bg-[var(--color-border)]" />
               )}
             </div>
@@ -162,17 +202,12 @@ export default function TripDetailPage() {
         <DynamicMap
           center={[48.8766, 2.2946]}
           zoom={13}
-          markers={[
-            { position: [48.8606, 2.3456], label: "Châtelet", color: "#2E7D9B" },
-            { position: [48.8925, 2.2375], label: "La Défense", color: "#E53935" },
-          ]}
-          polyline={[
-            [48.8606, 2.3456],
-            [48.8672, 2.3370],
-            [48.8756, 2.3080],
-            [48.8832, 2.2710],
-            [48.8925, 2.2375],
-          ]}
+          markers={mapMarkers}
+          polyline={
+            mapMarkers.length >= 2
+              ? [mapMarkers[0].position, mapMarkers[1].position]
+              : undefined
+          }
         />
       </div>
 

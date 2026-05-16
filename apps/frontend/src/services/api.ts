@@ -129,6 +129,29 @@ class ApiService {
   async getGtfsUrls() {
     return this.fetch<{ gtfs_static: string; gtfs_rt: string }>("/api/transport/gtfs-url");
   }
+
+  // ─── Journey ──────────────────────────────────────────────────────
+  async searchJourney(params: {
+    originLat: number;
+    originLon: number;
+    destLat: number;
+    destLon: number;
+    departureTime?: string;
+    modes?: string;
+    maxTransfers?: number;
+  }): Promise<JourneyResult[]> {
+    const query = new URLSearchParams({
+      originLat: String(params.originLat),
+      originLon: String(params.originLon),
+      destLat: String(params.destLat),
+      destLon: String(params.destLon),
+    });
+    if (params.departureTime) query.set("departureTime", params.departureTime);
+    if (params.modes) query.set("modes", params.modes);
+    if (params.maxTransfers !== undefined) query.set("maxTransfers", String(params.maxTransfers));
+
+    return this.fetch(`/api/transport/journey?${query.toString()}`);
+  }
 }
 
 export const apiService = new ApiService();
