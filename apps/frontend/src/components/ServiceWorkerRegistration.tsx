@@ -6,6 +6,8 @@ export default function ServiceWorkerRegistration() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
+    // Only register SW in production
+    if (process.env.NODE_ENV !== "production") return;
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
       return;
     }

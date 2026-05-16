@@ -1,5 +1,3 @@
-/// <reference lib="webworker" />
-
 const CACHE_NAME = "urbanflow-v1";
 const STATIC_ASSETS = [
   "/",
