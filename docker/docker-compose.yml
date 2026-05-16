@@ -1,0 +1,59 @@
+services:
+  # ─── PostgreSQL ───
+  postgres:
+    image: postgres:16-alpine
+    container_name: urbanflow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-urbanflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-urbanflow_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-urbanflow}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-urbanflow}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend (NestJS) ───
+  backend:
+    build:
+      context: ../apps/backend
+      dockerfile: Dockerfile
+    container_name: urbanflow-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-urbanflow}:${POSTGRES_PASSWORD:-urbanflow_dev}@postgres:5432/${POSTGRES_DB:-urbanflow}
+      PORT: 4000
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../apps/backend/src:/app/src
+
+  # ─── Frontend (Next.js) ───
+  frontend:
+    build:
+      context: ../apps/frontend
+      dockerfile: Dockerfile
+    container_name: urbanflow-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - '3000:3000'
+    depends_on:
+      - backend
+    volumes:
+      - ../apps/frontend/src:/app/src
+
+volumes:
+  postgres_data:

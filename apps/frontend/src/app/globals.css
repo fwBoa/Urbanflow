@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+:root {
+  /* ─── Urban Flow Mobility — Design Tokens ─── */
+  --color-primary: #2E7D9B;
+  --color-primary-light: #4A9DB8;
+  --color-primary-dark: #1A5A73;
+  --color-eco-green: #7CB342;
+  --color-mobility-orange: #FF6B35;
+  --color-favorite-red: #E53935;
+
+  --color-text-primary: #1A1A2E;
+  --color-text-secondary: #4A4A5A;
+  --color-text-tertiary: #8A8A9A;
+
+  --color-background: #FFFFFF;
+  --color-surface: #F5F7FA;
+  --color-border: #E2E8F0;
+  --color-border-focus: #2E7D9B;
+  --color-map-area: #D4E6F1;
+
+  /* ─── Transport mode colors ─── */
+  --color-metro: #2E7D9B;
+  --color-bus: #7CB342;
+  --color-velo: #4CAF50;
+  --color-trottinette: #4A9DB8;
+  --color-voiture: #FF6B35;
+  --color-marche: #FF9800;
+  --color-rer: #1A5A73;
+  --color-tram: #7CB342;
+
+  /* ─── Spacing ─── */
+  --header-height: 60px;
+  --navbar-height: 80px;
+  --card-radius: 12px;
+  --card-padding: 16px;
+  --cta-radius: 26px;
+  --cta-height: 52px;
+  --chip-radius: 18px;
+
+  /* ─── Typography ─── */
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--color-background);
+  --color-foreground: var(--color-text-primary);
+  --color-primary: var(--color-primary);
+  --color-primary-light: var(--color-primary-light);
+  --color-primary-dark: var(--color-primary-dark);
+  --color-surface: var(--color-surface);
+  --color-border: var(--color-border);
+  --font-sans: var(--font-family);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Focus visible for accessibility ─── */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Safe area insets (iPhone notch, bottom bar) ─── */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ─── Smooth scrolling ─── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ─── Custom scrollbar ─── */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+/* ─── Selection color ─── */
+::selection {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* ─── PWA standalone mode adjustments ─── */
+@media (display-mode: standalone) {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 20px);
+  }
+}
