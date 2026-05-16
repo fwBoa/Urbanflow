@@ -9,6 +9,7 @@ import FilterChip from "@/components/FilterChip";
 import TripCard from "@/components/TripCard";
 import DynamicMap from "@/components/DynamicMap";
 import { useStopSearch, useJourney } from "@/hooks/useTransport";
+import { addToHistory } from "@/services/favorites";
 
 const filters = [
   { key: "fast", label: "Rapide", icon: <Zap size={14} /> },
@@ -120,6 +121,21 @@ export default function SearchPage() {
     return transitSegments[0]?.lineColor || "#2E7D9B";
   };
 
+  // Handle trip click — save to history and navigate
+  const handleTripClick = (journey: typeof journeys[0], index: number) => {
+    const fromName = journey.segments[0]?.fromStop || "Départ";
+    const toName = journey.segments[journey.segments.length - 1]?.toStop || "Arrivée";
+    addToHistory({
+      from: fromName,
+      to: toName,
+      mode: getModeLabel(journey),
+      modeColor: getModeColor(journey),
+      duration: `${journey.durationMinutes} min`,
+      co2: journey.co2Ggrams,
+    });
+    router.push(`/trip/${index}?data=${encodeURIComponent(JSON.stringify(journey))}`);
+  };
+
   return (
     <AppShell title="Recherche" showBack>
       {/* Search inputs */}
@@ -228,7 +244,7 @@ export default function SearchPage() {
                 co2={trip.co2Ggrams}
                 mode={getModeLabel(trip)}
                 modeColor={getModeColor(trip)}
-                onClick={() => router.push(`/trip/${i}?data=${encodeURIComponent(JSON.stringify(trip))}`)}
+                onClick={() => handleTripClick(trip, i)}
               />
             ))}
           </>
