@@ -2,7 +2,7 @@
 name: Bug Report
 about: Signaler un bug dans Urban Flow Mobility
 title: '[BUG] '
-labels: ''
+labels: 'bug'
 assignees: ''
 ---
 
@@ -39,7 +39,7 @@ Si applicable, ajoutez des captures d'écran.
 ## 🏷️ Classification
 
 - **Sévérité** : [ ] P0-Critique [ ] P1-Majeur [ ] P2-Modéré [ ] P3-Mineur
-- **Catégorie** : [ ] bug-affichage [ ] bug-api [ ] bug-carte [ ] bug-pwa [ ] bug-a11y [ ] bug-perf [ ] bug-securite
+- **Catégorie** : [ ] bug-api [ ] bug-carte [ ] bug-pwa
 - **Contrainte brief** : [ ] C1 [ ] C2 [ ] C3 [ ] C4 [ ] C5 [ ] C6 [ ] C7 [ ] C8 [ ] C9 [ ] C10 [ ] C11 [ ] C12
 
 ## 📝 Contexte additionnel

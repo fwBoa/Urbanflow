@@ -2,7 +2,7 @@
 name: Feature Request
 about: Proposer une nouvelle fonctionnalité
 title: '[FEATURE] '
-labels: ''
+labels: 'enhancement'
 assignees: ''
 ---
 
