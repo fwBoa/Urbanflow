@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiService } from "@/services/api";
-import type { PrimLine, PrimStop, PrimVelibStation, JourneyResult, GeocodeResult, ReverseGeocodeResult } from "@/services/api";
+import type { PrimLine, PrimStop, PrimVelibStation, NearbyVelibStation, JourneyResult, GeocodeResult, ReverseGeocodeResult } from "@/services/api";
+
+// Re-export types for convenience
+export type { NearbyVelibStation } from "@/services/api";
 
 // ─── Transport Modes ────────────────────────────────────────────────
 export interface TransportModeLine {
@@ -174,6 +177,35 @@ export function useVelibStations(limit = 50) {
       })
       .finally(() => setLoading(false));
   }, [limit]);
+
+  return { stations, loading, error };
+}
+
+// ─── Vélib' proches (F4) ──────────────────────────────────────────
+export function useNearbyVelib(lat: number | null, lon: number | null, radiusKm = 2, limit = 10) {
+  const [stations, setStations] = useState<NearbyVelibStation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (lat === null || lon === null) {
+      setStations([]);
+      return;
+    }
+
+    setLoading(true);
+    apiService
+      .getNearbyVelibStations(lat, lon, radiusKm, limit)
+      .then((data) => {
+        setStations(data.stations || []);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setStations([]);
+      })
+      .finally(() => setLoading(false));
+  }, [lat, lon, radiusKm, limit]);
 
   return { stations, loading, error };
 }

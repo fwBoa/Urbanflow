@@ -36,6 +36,21 @@ export interface PrimVelibStation {
   last_update: string;
 }
 
+export interface NearbyVelibStation {
+  id: string;
+  name: string;
+  position: { lon: number; lat: number };
+  available_bikes: number;
+  available_ebikes: number;
+  available_mechanical: number;
+  available_bike_stands: number;
+  capacity: number;
+  is_renting: boolean;
+  is_returning: boolean;
+  distance: number; // en mètres
+  arrondissement: string;
+}
+
 export interface PrimDataResponse<T> {
   total_count: number;
   results: T[];
@@ -174,6 +189,18 @@ class ApiService {
   // ─── Vélib' ────────────────────────────────────────────────────────
   async getVelibStations(limit = 20, offset = 0): Promise<PrimDataResponse<PrimVelibStation>> {
     return this.fetch(`/api/transport/velib?limit=${limit}&offset=${offset}`);
+  }
+
+  // ─── Vélib' proches (F4) ──────────────────────────────────────────
+  async getNearbyVelibStations(
+    lat: number,
+    lon: number,
+    radiusKm = 2,
+    limit = 10,
+  ): Promise<{ stations: NearbyVelibStation[]; total: number }> {
+    return this.fetch(
+      `/api/transport/velib-nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`
+    );
   }
 
   // ─── Elevators ─────────────────────────────────────────────────────

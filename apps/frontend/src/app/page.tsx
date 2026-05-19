@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Bike, Navigation, Clock, ChevronRight, CheckCircle, AlertCircle } from "lucide-react";
+import { MapPin, Bike, Navigation, Clock, ChevronRight, CheckCircle, AlertCircle, Locate, Zap, Battery } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import SearchBar from "@/components/SearchBar";
 import TransportCard from "@/components/TransportCard";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
-import { useVelibStations, useTransportModes, useLinesByMode } from "@/hooks/useTransport";
-import type { TransportMode, LineByMode, LinesByMode } from "@/hooks/useTransport";
+import { useVelibStations, useTransportModes, useLinesByMode, useNearbyVelib } from "@/hooks/useTransport";
+import type { TransportMode, LineByMode, LinesByMode, NearbyVelibStation } from "@/hooks/useTransport";
 
 // ─── Lines by Mode Section ────────────────────────────────────────────
 const MODE_TABS = [
@@ -104,8 +104,8 @@ function LineBadge({ line }: { line: LineByMode }) {
 // Fallback modes when API is loading or unavailable
 const fallbackModes: TransportMode[] = [
   { key: "metro", label: "Métro", emoji: "🚇", color: "#2E7D9B", count: 16, activeCount: 16, lines: [] },
-  { key: "bus", label: "Bus", emoji: "🚌", color: "#FF9800", count: 350, activeCount: 350, lines: [] },
-  { key: "velo", label: "Vélib'", emoji: "🚲", color: "#7CB342", count: 1400, activeCount: 1400, lines: [] },
+  { key: "bus", label: "Bus", emoji: "🚌", color: "#FF9800", count: 2062, activeCount: 2062, lines: [] },
+  { key: "velib", label: "Vélib'", emoji: "🚲", color: "#7CB342", count: 1400, activeCount: 1400, lines: [] },
   { key: "rer", label: "RER", emoji: "🚉", color: "#FF6B35", count: 5, activeCount: 5, lines: [] },
   { key: "tram", label: "Tram", emoji: "🚊", color: "#9C27B0", count: 12, activeCount: 12, lines: [] },
   { key: "transilien", label: "Transilien", emoji: "🚆", color: "#7CB342", count: 9, activeCount: 9, lines: [] },
@@ -122,6 +122,165 @@ const velibMode: TransportMode = {
   lines: [],
 };
 
+// ─── Vélib' proches Section (F4) ──────────────────────────────────────
+function NearbyVelibSection({ stations, loading, error, onRequestLocation }: {
+  stations: NearbyVelibStation[];
+  loading: boolean;
+  error: string | null;
+  onRequestLocation: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Bike size={18} className="text-[var(--color-eco-green)]" />
+          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+            Vélib&apos; proches
+          </h2>
+          <span className="text-[11px] text-[var(--color-text-tertiary)] animate-pulse">Localisation…</span>
+        </div>
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="animate-pulse bg-[var(--color-border)] rounded-[var(--card-radius)] h-16" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error && stations.length === 0) {
+    return (
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Bike size={18} className="text-[var(--color-eco-green)]" />
+          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+            Vélib&apos; proches
+          </h2>
+        </div>
+        <div className="bg-[var(--color-surface)] rounded-[var(--card-radius)] p-4 text-center">
+          <p className="text-sm text-[var(--color-text-tertiary)] mb-3">{error}</p>
+          <button
+            onClick={onRequestLocation}
+            className="px-4 py-2 rounded-[var(--chip-radius)] bg-[var(--color-eco-green)] text-white text-sm font-medium hover:bg-[#6DA33A] transition-colors"
+          >
+            <Locate size={14} className="inline mr-1" />
+            Activer la localisation
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (stations.length === 0) {
+    return (
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Bike size={18} className="text-[var(--color-eco-green)]" />
+          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+            Vélib&apos; proches
+          </h2>
+        </div>
+        <div className="bg-[var(--color-surface)] rounded-[var(--card-radius)] p-4 text-center">
+          <p className="text-sm text-[var(--color-text-tertiary)] mb-3">
+            Aucune station Vélib&apos; trouvée à proximité
+          </p>
+          <button
+            onClick={onRequestLocation}
+            className="px-4 py-2 rounded-[var(--chip-radius)] bg-[var(--color-eco-green)] text-white text-sm font-medium hover:bg-[#6DA33A] transition-colors"
+          >
+            <Locate size={14} className="inline mr-1" />
+            Localiser
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Bike size={18} className="text-[var(--color-eco-green)]" />
+        <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+          Vélib&apos; proches
+        </h2>
+        <span className="text-[11px] text-[var(--color-text-tertiary)]">
+          {stations.length} station{stations.length > 1 ? "s" : ""} · 2 km
+        </span>
+      </div>
+      <div className="space-y-2">
+        {stations.map((station) => (
+          <VelibStationCard key={station.id} station={station} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VelibStationCard({ station }: { station: NearbyVelibStation }) {
+  const distText =
+    station.distance < 1000
+      ? `${station.distance} m`
+      : `${(station.distance / 1000).toFixed(1)} km`;
+
+  const bikeColor =
+    station.available_bikes > 5
+      ? "text-[var(--color-eco-green)]"
+      : station.available_bikes > 0
+        ? "text-[var(--color-mobility-orange)]"
+        : "text-[var(--color-favorite-red)]";
+
+  return (
+    <div className="flex items-center gap-3 bg-white rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-sm transition-all">
+      {/* Distance badge */}
+      <div className="flex flex-col items-center min-w-[48px]">
+        <span className="text-[13px] font-bold text-[var(--color-primary)]">{distText}</span>
+        <span className="text-[10px] text-[var(--color-text-tertiary)]">
+          {station.arrondissement}
+        </span>
+      </div>
+
+      {/* Station info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+          {station.name}
+        </p>
+        <div className="flex items-center gap-3 mt-1">
+          <span className={`text-[12px] font-semibold ${bikeColor} flex items-center gap-0.5`}>
+            <Bike size={12} />
+            {station.available_bikes}
+          </span>
+          {station.available_ebikes > 0 && (
+            <span className="text-[11px] text-[var(--color-primary)] flex items-center gap-0.5">
+              <Zap size={11} />
+              {station.available_ebikes}
+            </span>
+          )}
+          <span className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-0.5">
+            <Battery size={11} />
+            {station.available_bike_stands} places
+          </span>
+        </div>
+      </div>
+
+      {/* Availability indicator */}
+      <div className="flex flex-col items-center">
+        <div
+          className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+            station.available_bikes > 5
+              ? "bg-[var(--color-eco-green)]"
+              : station.available_bikes > 0
+                ? "bg-[var(--color-mobility-orange)]"
+                : "bg-[var(--color-favorite-red)]"
+          }`}
+        >
+          {station.available_bikes}
+        </div>
+        <span className="text-[9px] text-[var(--color-text-tertiary)] mt-0.5">vélos</span>
+      </div>
+    </div>
+  );
+}
+
 const recentTrips = [
   { from: "Maison", to: "Gare du Nord", duration: "28 min", co2: 45, mode: "Métro" },
   { from: "Boulot", to: "République", duration: "15 min", co2: 0, mode: "Vélo" },
@@ -134,6 +293,43 @@ export default function HomePage() {
   const { stations: velibStations } = useVelibStations(50);
   const { modes: apiModes, loading: modesLoading } = useTransportModes();
   const { linesByMode, loading: linesByModeLoading } = useLinesByMode();
+
+  // ─── Geolocation for nearby Vélib' (F4) ────────────────────────────
+  const [userPosition, setUserPosition] = useState<{ lat: number; lon: number } | null>(null);
+  const [geoError, setGeoError] = useState<string | null>(null);
+
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setGeoError("La géolocalisation n'est pas supportée par votre navigateur");
+      return;
+    }
+    setGeoError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserPosition({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+      },
+      (err) => {
+        setGeoError(
+          err.code === err.PERMISSION_DENIED
+            ? "Activez la localisation pour voir les Vélib' proches"
+            : "Impossible de déterminer votre position"
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }, []);
+
+  // Auto-request location on mount
+  useEffect(() => {
+    requestLocation();
+  }, [requestLocation]);
+
+  const { stations: nearbyVelib, loading: nearbyLoading, error: nearbyError } = useNearbyVelib(
+    userPosition?.lat ?? null,
+    userPosition?.lon ?? null,
+    2,
+    8
+  );
 
   // Build display modes: API modes + Vélib' (not in PRIM lines data)
   // Order: Métro, RER, Tram, Bus, Vélib', Transilien
@@ -220,18 +416,36 @@ export default function HomePage() {
         </h2>
         <LinesByModeSection linesByMode={linesByMode} loading={linesByModeLoading} />
 
+        {/* Nearby Vélib' (F4) */}
+        <NearbyVelibSection
+          stations={nearbyVelib}
+          loading={nearbyLoading && userPosition !== null}
+          error={geoError || nearbyError}
+          onRequestLocation={requestLocation}
+        />
+
         {/* Map */}
         <div className="rounded-[var(--card-radius)] h-44 mb-6 border border-[var(--color-border)] overflow-hidden">
           <DynamicMap
-            center={[48.8566, 2.3522]}
-            zoom={13}
+            center={userPosition ? [userPosition.lat, userPosition.lon] : [48.8566, 2.3522]}
+            zoom={userPosition ? 15 : 13}
             showVelib
-            velibStations={velibStations.map((s) => ({
-              position: s.position,
-              name: s.name,
-              available_bikes: s.available_bikes,
-              available_bike_stands: s.available_bike_stands,
-            }))}
+            velibStations={nearbyVelib.length > 0
+              ? nearbyVelib.map((s) => ({
+                  position: s.position,
+                  name: s.name,
+                  available_bikes: s.available_bikes,
+                  available_bike_stands: s.available_bike_stands,
+                }))
+              : velibStations.map((s) => ({
+                  position: s.position,
+                  name: s.name,
+                  available_bikes: s.available_bikes,
+                  available_bike_stands: s.available_bike_stands,
+                }))
+            }
+            userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon } : null}
+            onLocateUser={requestLocation}
           />
         </div>
 

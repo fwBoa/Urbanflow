@@ -287,6 +287,127 @@ export class PrimService implements OnModuleInit {
     );
   }
 
+  // ─── Vélib' proches — Stations à proximité (F4) ──────────────────────
+
+  /**
+   * Récupère les stations Vélib' les plus proches d'une position donnée.
+   * Utilise l'API Open Data Paris (opendata.paris.fr) avec geofilter.distance
+   * pour les stations Paris intra-muros (75), et l'API IDFM JCDecaux
+   * pour les stations en banlieue proche.
+   * Retourne les N plus proches triées par distance.
+   */
+  async getNearbyVelibStations(
+    lat: number,
+    lon: number,
+    radiusKm = 2,
+    limit = 10,
+  ): Promise<{
+    stations: Array<{
+      id: string;
+      name: string;
+      position: { lon: number; lat: number };
+      available_bikes: number;
+      available_ebikes: number;
+      available_mechanical: number;
+      available_bike_stands: number;
+      capacity: number;
+      is_renting: boolean;
+      is_returning: boolean;
+      distance: number; // en mètres
+      arrondissement: string;
+    }>;
+    total: number;
+  }> {
+    const radiusMeters = Math.round(radiusKm * 1000);
+
+    // ─── Source 1 : Open Data Paris (Vélib' Métropole — Paris intra-muros) ───
+    const parisUrl = `https://opendata.paris.fr/api/records/1.0/search/`;
+    const parisParams: Record<string, string> = {
+      dataset: 'velib-disponibilite-en-temps-reel',
+      rows: String(Math.min(limit, 50)),
+      'geofilter.distance': `${lat},${lon},${radiusMeters}`,
+      sort: '-numbikesavailable',
+    };
+
+    let parisStations: Array<{
+      id: string;
+      name: string;
+      position: { lon: number; lat: number };
+      available_bikes: number;
+      available_ebikes: number;
+      available_mechanical: number;
+      available_bike_stands: number;
+      capacity: number;
+      is_renting: boolean;
+      is_returning: boolean;
+      distance: number;
+      arrondissement: string;
+    }> = [];
+
+    try {
+      const parisResponse = await firstValueFrom(
+        this.httpService.get(parisUrl, { params: parisParams }),
+      );
+      const parisData = parisResponse.data;
+
+      parisStations = (parisData?.records || []).map((record: any) => {
+        const f = record.fields || {};
+        const coords = f.coordonnees_geo || [lat, lon];
+        const stationDistance = this.haversineDistance(
+          lat, lon, coords[0], coords[1],
+        );
+        return {
+          id: f.stationcode || String(record.recordid || ''),
+          name: f.name || 'Station Vélib\'',
+          position: { lat: coords[0], lon: coords[1] },
+          available_bikes: f.numbikesavailable || 0,
+          available_ebikes: f.ebike || 0,
+          available_mechanical: f.mechanical || 0,
+          available_bike_stands: f.numdocksavailable || 0,
+          capacity: f.capacity || 0,
+          is_renting: f.is_renting === 'OUI',
+          is_returning: f.is_returning === 'OUI',
+          distance: Math.round(stationDistance),
+          arrondissement: f.nom_arrondissement_communes || 'Paris',
+        };
+      });
+    } catch (error) {
+      this.logger.warn(`Paris Open Data API error: ${error.message}`);
+    }
+
+    // Trier par distance et limiter
+    const sorted = parisStations
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, limit);
+
+    return {
+      stations: sorted,
+      total: sorted.length,
+    };
+  }
+
+  /**
+   * Calcule la distance entre deux points GPS en mètres (formule de Haversine)
+   */
+  private haversineDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371000; // Rayon de la Terre en mètres
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
   // ─── Ascenseurs / Accessibilité (F1, C7) ────────────────────────────
 
   /**

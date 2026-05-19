@@ -60,3 +60,18 @@ Méthode : Observer → Analyser → Agir → Vérifier → Standardiser
   - Chaque ligne affiche son badge coloré (ex: 1 jaune, A rouge, T1 bleu), un ✅ vert pour "active" ou un ⚠️ orange pour "prochainement active" (ex: ligne 18, T1a, T1b).
   - Les onglets sont cliquables et changent dynamiquement l'affichage des lignes.
 - **Vérification** : Onglet Métro affiche 17 lignes (1-14 + 7B, 3B, 18). Ligne 18 en "prochainement active" avec badge orange. Onglet RER affiche A, B, C, D, E avec leurs couleurs.
+
+## Bloc 10 — Vélib' proches (F4)
+- **Problème** : Aucune station Vélib' à proximité n'était affichée sur la page d'accueil. L'utilisateur devait chercher manuellement.
+- **Origine** : Le dataset JCDecaux (`jcdecaux-bike-stations-data`) de l'API PRIM contient 2 890 stations dans le monde entier, mais aucune station Paris intra-muros (75). Les stations Vélib' de Paris sont gérées par Vélib' Métropole et ne figurent pas dans ce dataset.
+- **Solution** :
+  - Backend : nouvel endpoint `GET /api/transport/velib-nearby?lat=...&lon=...&radius=2&limit=10` qui interroge l'API Open Data Paris (`opendata.paris.fr`) avec `geofilter.distance` pour les stations Vélib' Métropole Paris intra-muros. Retourne : nom, position, vélos disponibles (total + électriques + mécaniques), places libres, capacité, statut location/retour, distance en mètres, arrondissement.
+  - Frontend API : méthode `getNearbyVelibStations(lat, lon, radiusKm, limit)` avec type `NearbyVelibStation`.
+  - Frontend Hook : `useNearbyVelib(lat, lon, radiusKm, limit)` avec géolocalisation automatique via `navigator.geolocation.getCurrentPosition`.
+  - Frontend UI : section "Vélib' proches" sur la page d'accueil avec :
+    - Géolocalisation automatique au chargement de la page
+    - Bouton "Localiser" si la permission n'est pas accordée
+    - Cartes de stations avec : distance (m/km), nom, vélos disponibles (🚲 total + ⚡ électriques + 🔋 places), badge coloré (vert > 5, orange 1-5, rouge 0)
+    - Carte centrée sur la position utilisateur avec marqueur bleu
+  - Périmètre : Paris intra-muros (75) uniquement, via l'API Open Data Paris.
+- **Vérification** : `curl /api/transport/velib-nearby?lat=48.8566&lon=2.3522&radius=1&limit=5` retourne 5 stations triées par distance (ex: "Place de l'Hôtel de Ville" à 98m, "Arcole - Notre-Dame" à 366m). La page d'accueil affiche les stations proches avec vélos électriques et mécaniques séparés.

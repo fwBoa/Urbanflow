@@ -22,6 +22,7 @@ import { OsrmService } from './osrm.service';
  * - GET /api/transport/stop-lines      → Arrêts et lignes associées
  * - GET /api/transport/traffic         → Messages d'actualité / perturbations
  * - GET /api/transport/velib           → Stations Vélib' temps réel
+ * - GET /api/transport/velib-nearby    → Stations Vélib' proches (lat/lon)
  * - GET /api/transport/elevators       → État des ascenseurs
  * - GET /api/transport/gtfs-url        → URL de téléchargement GTFS
  */
@@ -135,6 +136,29 @@ export class TransportController {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });
+  }
+
+  // ─── Vélib' proches (F4) ──────────────────────────────────────────────
+
+  @Get('velib-nearby')
+  async getNearbyVelibStations(
+    @Query('lat') lat?: string,
+    @Query('lon') lon?: string,
+    @Query('radius') radius?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!lat || !lon) {
+      throw new HttpException(
+        'Query parameters "lat" and "lon" are required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.primService.getNearbyVelibStations(
+      parseFloat(lat),
+      parseFloat(lon),
+      radius ? parseFloat(radius) : 2,
+      limit ? parseInt(limit, 10) : 10,
+    );
   }
 
   // ─── Ascenseurs / Accessibilité (F1, C7) ──────────────────────────────
