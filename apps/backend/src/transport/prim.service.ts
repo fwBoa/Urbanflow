@@ -255,10 +255,10 @@ export class PrimService implements OnModuleInit {
     });
 
     return {
-      metro: (metroData?.results || []).map(mapLine),
-      rer: (rerData?.results || []).map(mapLine),
-      tram: (tramData?.results || []).map(mapLine),
-      transilien: (transilienData?.results || []).map(mapLine),
+      metro: (metroData?.results || []).filter((l: any) => l.status === 'active').map(mapLine),
+      rer: (rerData?.results || []).filter((l: any) => l.status === 'active').map(mapLine),
+      tram: (tramData?.results || []).filter((l: any) => l.status === 'active').map(mapLine),
+      transilien: (transilienData?.results || []).filter((l: any) => l.status === 'active').map(mapLine),
     };
   }
 
