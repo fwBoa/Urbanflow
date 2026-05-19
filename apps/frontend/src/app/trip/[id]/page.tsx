@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Clock, MapPin, Footprints, Bike, Train, Bus, ArrowRight, Leaf, Navigation2, Pause, Square, Play } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
+import { useRoute } from "@/hooks/useTransport";
 import type { JourneyResult } from "@/services/api";
 
 const modeIcons: Record<string, React.ReactNode> = {
@@ -89,6 +90,59 @@ export default function TripDetailPage() {
   const co2 = trip?.co2Ggrams || fallbackTrip.co2;
   const transfers = trip?.transfers ?? fallbackTrip.transfers;
 
+  // ─── Coordinates from search page ────────────────────────────────────
+  const originLat = searchParams.get("originLat");
+  const originLon = searchParams.get("originLon");
+  const destLat = searchParams.get("destLat");
+  const destLon = searchParams.get("destLon");
+
+  const hasCoords = originLat && originLon && destLat && destLon;
+  const originPos = hasCoords ? { lat: parseFloat(originLat), lon: parseFloat(originLon) } : null;
+  const destPos = hasCoords ? { lat: parseFloat(destLat), lon: parseFloat(destLon) } : null;
+
+  // ─── OSRM Routing for real geometry ─────────────────────────────────
+  const { geometry: routeGeometry, fetchRoute } = useRoute();
+  const [tripPolyline, setTripPolyline] = useState<[number, number][]>([]);
+
+  useEffect(() => {
+    if (originPos && destPos) {
+      fetchRoute(originPos.lat, originPos.lon, destPos.lat, destPos.lon, 'foot')
+        .then((coords) => {
+          if (coords.length > 0) {
+            setTripPolyline(coords);
+          } else {
+            setTripPolyline([
+              [originPos.lat, originPos.lon],
+              [destPos.lat, destPos.lon],
+            ]);
+          }
+        });
+    }
+  }, [originPos, destPos, fetchRoute]);
+
+  // Build map markers from real coordinates
+  const mapMarkers = useMemo(() => {
+    const markers: Array<{ position: [number, number]; label: string; color: string }> = [];
+    if (originPos) {
+      markers.push({ position: [originPos.lat, originPos.lon], label: departure, color: "#2E7D9B" });
+    }
+    if (destPos) {
+      markers.push({ position: [destPos.lat, destPos.lon], label: arrival, color: "#E53935" });
+    }
+    if (markers.length === 0) {
+      markers.push(
+        { position: [48.8606, 2.3456], label: "Châtelet", color: "#2E7D9B" },
+        { position: [48.8925, 2.2375], label: "La Défense", color: "#E53935" },
+      );
+    }
+    return markers;
+  }, [originPos, destPos, departure, arrival]);
+
+  // Map center on origin or default Paris
+  const mapCenter: [number, number] = originPos
+    ? [originPos.lat, originPos.lon]
+    : [48.8766, 2.2946];
+
   // ─── Timer logic ────────────────────────────────────────────────────
   useEffect(() => {
     if (isNavigating && !isPaused) {
@@ -148,17 +202,6 @@ export default function TripDetailPage() {
   // Progress percentage
   const totalDurationSeconds = segments.reduce((acc, s) => acc + s.durationMinutes * 60, 0);
   const progressPercent = totalDurationSeconds > 0 ? Math.min((elapsedSeconds / totalDurationSeconds) * 100, 100) : 0;
-
-  // Build map markers from journey data
-  const mapMarkers = trip
-    ? [
-        { position: [trip.segments[0]?.fromStop ? 48.8566 : 48.8566, 2.3522] as [number, number], label: departure, color: "#2E7D9B" },
-        { position: [48.8925, 2.2375] as [number, number], label: arrival, color: "#E53935" },
-      ]
-    : [
-        { position: [48.8606, 2.3456] as [number, number], label: "Châtelet", color: "#2E7D9B" },
-        { position: [48.8925, 2.2375] as [number, number], label: "La Défense", color: "#E53935" },
-      ];
 
   return (
     <AppShell
@@ -304,14 +347,10 @@ export default function TripDetailPage() {
       {/* Map */}
       <div className="rounded-[var(--card-radius)] h-48 mb-4 border border-[var(--color-border)] overflow-hidden">
         <DynamicMap
-          center={[48.8766, 2.2946]}
+          center={mapCenter}
           zoom={13}
           markers={mapMarkers}
-          polyline={
-            mapMarkers.length >= 2
-              ? [mapMarkers[0].position, mapMarkers[1].position]
-              : undefined
-          }
+          polyline={tripPolyline.length > 0 ? tripPolyline : undefined}
         />
       </div>
 

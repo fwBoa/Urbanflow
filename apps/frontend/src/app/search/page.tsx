@@ -259,7 +259,17 @@ export default function SearchPage() {
       duration: `${journey.durationMinutes} min`,
       co2: journey.co2Ggrams,
     });
-    router.push(`/trip/${index}?data=${encodeURIComponent(JSON.stringify(journey))}`);
+    // Pass origin/dest coordinates for real routing on trip page
+    const query = new URLSearchParams({ data: JSON.stringify(journey) });
+    if (selectedOrigin) {
+      query.set("originLat", String(selectedOrigin.lat));
+      query.set("originLon", String(selectedOrigin.lon));
+    }
+    if (selectedDest) {
+      query.set("destLat", String(selectedDest.lat));
+      query.set("destLon", String(selectedDest.lon));
+    }
+    router.push(`/trip/${index}?${query.toString()}`);
   };
 
   // ─── Rendu d'une suggestion ────────────────────────────────────────

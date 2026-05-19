@@ -360,6 +360,107 @@ export class PrimService implements OnModuleInit {
     }
   }
 
+  // ─── Agrégation par mode de transport ────────────────────────────────
+
+  /**
+   * Récupère le nombre de lignes par mode de transport (métro, RER, tram, bus, Transilien)
+   * Utilise le référentiel des lignes PRIM pour compter les lignes actives.
+   * Les modes sont agrégés depuis transportmode + transportsubmode :
+   *   - metro → Métro
+   *   - rail + local → RER
+   *   - rail + suburbanRailway → Transilien
+   *   - rail + railShuttle → Navettes (CDG VAL, ORLYVAL)
+   *   - rail + regionalRail → TER
+   *   - tram → Tram
+   *   - bus → Bus
+   *   - cableway → Téléphérique
+   */
+  async getTransportModes(): Promise<{
+    modes: Array<{
+      key: string;
+      label: string;
+      emoji: string;
+      color: string;
+      count: number;
+      activeCount: number;
+      lines: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    }>;
+  }> {
+    // Définition des modes attendus avec leurs filtres PRIM
+    const modeQueries: Record<string, { transportmode: string; transportsubmode?: string; label: string; emoji: string; color: string }> = {
+      metro: { transportmode: 'metro', label: 'Métro', emoji: '🚇', color: '#2E7D9B' },
+      rer: { transportmode: 'rail', transportsubmode: 'local', label: 'RER', emoji: '🚉', color: '#FF6B35' },
+      transilien: { transportmode: 'rail', transportsubmode: 'suburbanRailway', label: 'Transilien', emoji: '🚆', color: '#7CB342' },
+      tram: { transportmode: 'tram', label: 'Tram', emoji: '🚊', color: '#9C27B0' },
+      bus: { transportmode: 'bus', label: 'Bus', emoji: '🚌', color: '#FF9800' },
+    };
+
+    const modes: Array<{
+      key: string;
+      label: string;
+      emoji: string;
+      color: string;
+      count: number;
+      activeCount: number;
+      lines: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    }> = [];
+
+    for (const [key, config] of Object.entries(modeQueries)) {
+      try {
+        // Construire le filtre where
+        let where = `transportmode='${config.transportmode}'`;
+        if (config.transportsubmode) {
+          where += ` AND transportsubmode='${config.transportsubmode}'`;
+        }
+
+        const data = await this.callDataApi(
+          '/catalog/datasets/referentiel-des-lignes/records',
+          {
+            where,
+            select: 'id_line,name_line,shortname_line,transportmode,transportsubmode,status,colourweb_hexa',
+            limit: '100',
+          },
+        );
+
+        const results = data?.results || [];
+        const totalCount = data?.total_count || results.length;
+        const activeLines = results.filter((l: any) => l.status === 'active');
+        const topLines = activeLines
+          .slice(0, 8)
+          .map((l: any) => ({
+            id: l.id_line,
+            name: l.name_line,
+            shortName: l.shortname_line,
+            color: l.colourweb_hexa || '999999',
+            status: l.status,
+          }));
+
+        modes.push({
+          key,
+          label: config.label,
+          emoji: config.emoji,
+          color: config.color,
+          count: totalCount,
+          activeCount: activeLines.length,
+          lines: topLines,
+        });
+      } catch (error) {
+        this.logger.warn(`Failed to fetch mode ${key}: ${error.message}`);
+        modes.push({
+          key,
+          label: config.label,
+          emoji: config.emoji,
+          color: config.color,
+          count: 0,
+          activeCount: 0,
+          lines: [],
+        });
+      }
+    }
+
+    return { modes };
+  }
+
   // ─── Santé du service ────────────────────────────────────────────────
 
   /**

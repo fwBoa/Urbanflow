@@ -16,6 +16,7 @@ import { OsrmService } from './osrm.service';
  *
  * Routes disponibles :
  * - GET /api/transport/health          → Vérification de la connexion PRIM
+ * - GET /api/transport/modes           → Agrégation des lignes par mode de transport
  * - GET /api/transport/lines           → Référentiel des lignes
  * - GET /api/transport/stops            → Référentiel des arrêts
  * - GET /api/transport/stop-lines      → Arrêts et lignes associées
@@ -37,6 +38,13 @@ export class TransportController {
   @Get('health')
   async healthCheck() {
     return this.primService.healthCheck();
+  }
+
+  // ─── Modes de transport (F1) ──────────────────────────────────────────
+
+  @Get('modes')
+  async getTransportModes() {
+    return this.primService.getTransportModes();
   }
 
   // ─── Référentiel des lignes (F1) ──────────────────────────────────────

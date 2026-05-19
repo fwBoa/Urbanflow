@@ -141,6 +141,21 @@ class ApiService {
     return this.fetch(`/api/transport/stop-lines?limit=${limit}&offset=${offset}`);
   }
 
+  // ─── Transport Modes ────────────────────────────────────────────────
+  async getTransportModes(): Promise<{
+    modes: Array<{
+      key: string;
+      label: string;
+      emoji: string;
+      color: string;
+      count: number;
+      activeCount: number;
+      lines: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    }>;
+  }> {
+    return this.fetch('/api/transport/modes');
+  }
+
   // ─── Traffic ───────────────────────────────────────────────────────
   async getTrafficMessages(limit = 10) {
     return this.fetch(`/api/transport/traffic?limit=${limit}`);

@@ -4,6 +4,48 @@ import { useState, useEffect, useCallback } from "react";
 import { apiService } from "@/services/api";
 import type { PrimLine, PrimStop, PrimVelibStation, JourneyResult, GeocodeResult, ReverseGeocodeResult } from "@/services/api";
 
+// ─── Transport Modes ────────────────────────────────────────────────
+export interface TransportModeLine {
+  id: string;
+  name: string;
+  shortName: string;
+  color: string;
+  status: string;
+}
+
+export interface TransportMode {
+  key: string;
+  label: string;
+  emoji: string;
+  color: string;
+  count: number;
+  activeCount: number;
+  lines: TransportModeLine[];
+}
+
+export function useTransportModes() {
+  const [modes, setModes] = useState<TransportMode[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiService
+      .getTransportModes()
+      .then((data) => {
+        setModes(data.modes || []);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setModes([]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { modes, loading, error };
+}
+
 // ─── Lines ────────────────────────────────────────────────────────
 export function useLines(limit = 6) {
   const [lines, setLines] = useState<PrimLine[]>([]);

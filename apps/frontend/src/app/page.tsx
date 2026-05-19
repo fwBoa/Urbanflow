@@ -2,22 +2,35 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Bike, Navigation, Clock, ChevronRight } from "lucide-react";
+import { MapPin, Bike, Navigation, Clock, ChevronRight, CheckCircle } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import SearchBar from "@/components/SearchBar";
 import TransportCard from "@/components/TransportCard";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
-import { useLines, useVelibStations } from "@/hooks/useTransport";
+import { useLines, useVelibStations, useTransportModes } from "@/hooks/useTransport";
+import type { TransportMode } from "@/hooks/useTransport";
 
-const transportModes = [
-  { key: "metro", label: "Métro", emoji: "🚇", color: "var(--color-metro)", subtitle: "16 lignes" },
-  { key: "bus", label: "Bus", emoji: "🚌", color: "var(--color-bus)", subtitle: "350+ lignes" },
-  { key: "velo", label: "Vélib'", emoji: "🚲", color: "var(--color-velo)", subtitle: "1 400 stations" },
-  { key: "rer", label: "RER", emoji: "🚉", color: "var(--color-rer)", subtitle: "5 lignes" },
-  { key: "tram", label: "Tram", emoji: "🚊", color: "var(--color-tram)", subtitle: "12 lignes" },
-  { key: "trottinette", label: "Trottinette", emoji: "🛴", color: "var(--color-trottinette)", subtitle: "En libre-service" },
+// Fallback modes when API is loading or unavailable
+const fallbackModes: TransportMode[] = [
+  { key: "metro", label: "Métro", emoji: "🚇", color: "#2E7D9B", count: 16, activeCount: 16, lines: [] },
+  { key: "bus", label: "Bus", emoji: "🚌", color: "#FF9800", count: 350, activeCount: 350, lines: [] },
+  { key: "velo", label: "Vélib'", emoji: "🚲", color: "#7CB342", count: 1400, activeCount: 1400, lines: [] },
+  { key: "rer", label: "RER", emoji: "🚉", color: "#FF6B35", count: 5, activeCount: 5, lines: [] },
+  { key: "tram", label: "Tram", emoji: "🚊", color: "#9C27B0", count: 12, activeCount: 12, lines: [] },
+  { key: "transilien", label: "Transilien", emoji: "🚆", color: "#7CB342", count: 9, activeCount: 9, lines: [] },
 ];
+
+// Vélib' is not a PRIM line mode, so we add it manually
+const velibMode: TransportMode = {
+  key: "velib",
+  label: "Vélib'",
+  emoji: "🚲",
+  color: "#7CB342",
+  count: 1400,
+  activeCount: 1400,
+  lines: [],
+};
 
 const recentTrips = [
   { from: "Maison", to: "Gare du Nord", duration: "28 min", co2: 45, mode: "Métro" },
@@ -30,6 +43,23 @@ export default function HomePage() {
   const [searchValue, setSearchValue] = useState("");
   const { lines, loading: linesLoading } = useLines(6);
   const { stations: velibStations } = useVelibStations(50);
+  const { modes: apiModes, loading: modesLoading } = useTransportModes();
+
+  // Build display modes: API modes + Vélib' (not in PRIM lines data)
+  // Order: Métro, RER, Tram, Bus, Vélib', Transilien
+  const displayModes: TransportMode[] = modesLoading
+    ? fallbackModes
+    : (() => {
+        const ordered: TransportMode[] = [];
+        const modeMap = Object.fromEntries(apiModes.map(m => [m.key, m]));
+        // Insert in desired order
+        for (const key of ['metro', 'rer', 'tram', 'bus']) {
+          if (modeMap[key]) ordered.push(modeMap[key]);
+        }
+        ordered.push(velibMode);
+        if (modeMap['transilien']) ordered.push(modeMap['transilien']);
+        return ordered;
+      })();
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -80,13 +110,15 @@ export default function HomePage() {
           Modes de transport
         </h2>
         <div className="grid grid-cols-3 gap-3 mb-6">
-          {transportModes.map((mode) => (
+          {displayModes.map((mode) => (
             <TransportCard
               key={mode.key}
               icon={mode.emoji}
               label={mode.label}
               color={mode.color}
-              subtitle={mode.subtitle}
+              subtitle={mode.key === "velib" ? `${mode.count.toLocaleString("fr-FR")} stations` : mode.key === "bus" ? `${mode.count.toLocaleString("fr-FR")} lignes` : `${mode.activeCount} lignes`}
+              statusBadge={mode.key !== "velib" && !modesLoading ? "normal" : undefined}
+              topLines={mode.lines.slice(0, 4)}
               onClick={() => router.push(`/search?mode=${mode.key}`)}
             />
           ))}
@@ -121,6 +153,10 @@ export default function HomePage() {
                     {line.transportmode === "bus" ? "Bus" : line.transportmode === "metro" ? "Métro" : line.transportmode}
                     {line.operatorname && ` · ${line.operatorname}`}
                   </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <CheckCircle size={14} className="text-[var(--color-eco-green)]" />
+                  <span className="text-[11px] text-[var(--color-eco-green)]">Normal</span>
                 </div>
                 <ChevronRight size={16} className="text-[var(--color-text-tertiary)] shrink-0" />
               </div>
