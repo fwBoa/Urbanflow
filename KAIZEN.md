@@ -2,6 +2,13 @@
 
 Méthode : Observer → Analyser → Agir → Vérifier → Standardiser
 
+## Principe DRY — Don't Repeat Yourself
+- **Backend** : Factoriser les appels `callDataApi` avec un builder de query params générique. Créer des constantes pour les endpoints PRIM (`REFERENTIEL_LIGNES`, `ARRETS`, `VELIB_STATIONS`, etc.).
+- **Frontend hooks** : Extraire un hook générique `useApiData<T>(fetchFn, deps)` qui encapsule `useState/useEffect/error/loading`. Chaque hook métier devient un one-liner.
+- **Frontend API** : Les méthodes `fetch` de `api.ts` suivent toutes le même pattern → un helper `fetchTyped<T>(endpoint)` suffit.
+- **Frontend UI** : Extraire les patterns de cartes répétés en composants réutilisables (`StationCard`, `InfoBadge`). Centraliser les styles communs dans des classes Tailwind ou un design tokens.
+- **À appliquer** : Avant chaque nouvelle feature, vérifier si un pattern existe déjà. Si oui, le réutiliser ou le refactorer.
+
 ## Bloc 1 — Geocoding autocomplete fusionné
 - **Problème** : L'autocomplete ne proposait que les arrêts PRIM. Les utilisateurs voulaient aussi chercher par adresse.
 - **Origine** : L'API PRIM ne fournit pas de géocodage d'adresses. Il fallait une source complémentaire.
