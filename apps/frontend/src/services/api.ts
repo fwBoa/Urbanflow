@@ -156,6 +156,16 @@ class ApiService {
     return this.fetch('/api/transport/modes');
   }
 
+  // ─── Lines by Mode ─────────────────────────────────────────────────
+  async getLinesByMode(): Promise<{
+    metro: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    rer: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    tram: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    transilien: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+  }> {
+    return this.fetch('/api/transport/lines-by-mode');
+  }
+
   // ─── Traffic ───────────────────────────────────────────────────────
   async getTrafficMessages(limit = 10) {
     return this.fetch(`/api/transport/traffic?limit=${limit}`);

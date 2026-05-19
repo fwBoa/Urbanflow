@@ -46,7 +46,46 @@ export function useTransportModes() {
   return { modes, loading, error };
 }
 
-// ─── Lines ────────────────────────────────────────────────────────
+// ─── Lines by Mode ──────────────────────────────────────────────────
+export interface LineByMode {
+  id: string;
+  name: string;
+  shortName: string;
+  color: string;
+  status: string;
+}
+
+export interface LinesByMode {
+  metro: LineByMode[];
+  rer: LineByMode[];
+  tram: LineByMode[];
+  transilien: LineByMode[];
+}
+
+export function useLinesByMode() {
+  const [linesByMode, setLinesByMode] = useState<LinesByMode>({ metro: [], rer: [], tram: [], transilien: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    apiService
+      .getLinesByMode()
+      .then((data) => {
+        setLinesByMode(data);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLinesByMode({ metro: [], rer: [], tram: [], transilien: [] });
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  return { linesByMode, loading, error };
+}
+
+// ─── Lines ────────────────────────────────────────────────────────────────
 export function useLines(limit = 6) {
   const [lines, setLines] = useState<PrimLine[]>([]);
   const [loading, setLoading] = useState(true);

@@ -50,3 +50,13 @@ Méthode : Observer → Analyser → Agir → Vérifier → Standardiser
   - Ordre d'affichage : Métro → RER → Tram → Bus → Vélib' → Transilien.
   - Fallback sur données statiques si l'API est indisponible.
 - **Vérification** : Cartes affichent les compteurs réels (Métro 16, RER 5, Tram 15, Bus 2 062, Vélib' 1 400 stations, Transilien 9). Clic sur Métro affiche les lignes 2, 13, 1, 14 avec leurs couleurs. Badge ✅ Normal visible.
+
+## Bloc 9 — Lignes en temps réel par mode
+- **Problème** : La section "Lignes en temps réel" affichait 4 bus aléatoires sans pertinence, avec un statut "Normal" codé en dur. Aucun filtrage par mode de transport.
+- **Origine** : Le hook `useLines(6)` retournait les 6 premières lignes du référentiel (toutes des bus), sans distinction de mode ni statut réel.
+- **Solution** :
+  - Backend : nouvel endpoint `GET /api/transport/lines-by-mode` qui retourne les lignes groupées par mode (Métro, RER, Tram, Transilien), triées par `shortname_line`, avec couleur et statut.
+  - Frontend : hook `useLinesByMode()` pour fetch les données. Section "Lignes en temps réel" remplacée par des onglets (Métro, RER, Tram, Transilien) avec compteur par mode.
+  - Chaque ligne affiche son badge coloré (ex: 1 jaune, A rouge, T1 bleu), un ✅ vert pour "active" ou un ⚠️ orange pour "prochainement active" (ex: ligne 18, T1a, T1b).
+  - Les onglets sont cliquables et changent dynamiquement l'affichage des lignes.
+- **Vérification** : Onglet Métro affiche 17 lignes (1-14 + 7B, 3B, 18). Ligne 18 en "prochainement active" avec badge orange. Onglet RER affiche A, B, C, D, E avec leurs couleurs.

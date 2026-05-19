@@ -203,6 +203,68 @@ export class PrimService implements OnModuleInit {
   // ─── Vélib' temps réel (F1) ──────────────────────────────────────────
 
   /**
+   * Récupère les lignes clés groupées par mode de transport.
+   * Retourne les lignes de Métro, RER, Tram et Transilien
+   * avec leur nom court, couleur et statut.
+   */
+  async getLinesByMode(): Promise<{
+    metro: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    rer: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    tram: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    transilien: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+  }> {
+    const select = 'id_line,name_line,shortname_line,transportmode,transportsubmode,status,colourweb_hexa';
+
+    const [metroData, rerData, tramData, transilienData] = await Promise.all([
+      // Métro
+      this.callDataApi('/catalog/datasets/referentiel-des-lignes/records', {
+        where: "transportmode='metro'",
+        select,
+        limit: '20',
+        order_by: 'shortname_line',
+      }),
+      // RER (rail + local)
+      this.callDataApi('/catalog/datasets/referentiel-des-lignes/records', {
+        where: "transportmode='rail' AND transportsubmode='local'",
+        select,
+        limit: '10',
+        order_by: 'shortname_line',
+      }),
+      // Tram
+      this.callDataApi('/catalog/datasets/referentiel-des-lignes/records', {
+        where: "transportmode='tram'",
+        select,
+        limit: '20',
+        order_by: 'shortname_line',
+      }),
+      // Transilien (rail + suburbanRailway)
+      this.callDataApi('/catalog/datasets/referentiel-des-lignes/records', {
+        where: "transportmode='rail' AND transportsubmode='suburbanRailway'",
+        select,
+        limit: '20',
+        order_by: 'shortname_line',
+      }),
+    ]);
+
+    const mapLine = (l: any) => ({
+      id: l.id_line,
+      name: l.name_line,
+      shortName: l.shortname_line,
+      color: l.colourweb_hexa || '999999',
+      status: l.status,
+    });
+
+    return {
+      metro: (metroData?.results || []).map(mapLine),
+      rer: (rerData?.results || []).map(mapLine),
+      tram: (tramData?.results || []).map(mapLine),
+      transilien: (transilienData?.results || []).map(mapLine),
+    };
+  }
+
+  // ─── Vélib' temps réel (F1) ──────────────────────────────────────────
+
+  /**
    * Disponibilités des stations Vélib' en temps réel
    * Dataset: jcdecaux-bike-stations-data
    */

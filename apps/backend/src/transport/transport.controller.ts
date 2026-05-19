@@ -47,6 +47,13 @@ export class TransportController {
     return this.primService.getTransportModes();
   }
 
+  // ─── Lignes par mode (F1) ────────────────────────────────────────────
+
+  @Get('lines-by-mode')
+  async getLinesByMode() {
+    return this.primService.getLinesByMode();
+  }
+
   // ─── Référentiel des lignes (F1) ──────────────────────────────────────
 
   @Get('lines')

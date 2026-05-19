@@ -2,14 +2,104 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Bike, Navigation, Clock, ChevronRight, CheckCircle } from "lucide-react";
+import { MapPin, Bike, Navigation, Clock, ChevronRight, CheckCircle, AlertCircle } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import SearchBar from "@/components/SearchBar";
 import TransportCard from "@/components/TransportCard";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
-import { useLines, useVelibStations, useTransportModes } from "@/hooks/useTransport";
-import type { TransportMode } from "@/hooks/useTransport";
+import { useVelibStations, useTransportModes, useLinesByMode } from "@/hooks/useTransport";
+import type { TransportMode, LineByMode, LinesByMode } from "@/hooks/useTransport";
+
+// ─── Lines by Mode Section ────────────────────────────────────────────
+const MODE_TABS = [
+  { key: "metro" as const, label: "Métro", emoji: "🚇" },
+  { key: "rer" as const, label: "RER", emoji: "🚉" },
+  { key: "tram" as const, label: "Tram", emoji: "🚊" },
+  { key: "transilien" as const, label: "Transilien", emoji: "🚆" },
+];
+
+function LinesByModeSection({ linesByMode, loading }: { linesByMode: LinesByMode; loading: boolean }) {
+  const [activeTab, setActiveTab] = useState<keyof LinesByMode>("metro");
+
+  if (loading) {
+    return (
+      <div className="mb-6">
+        <div className="flex gap-2 mb-3">
+          {MODE_TABS.map((tab) => (
+            <span key={tab.key} className="px-3 py-1.5 rounded-full bg-[var(--color-border)] text-[12px] text-[var(--color-text-tertiary)]">
+              {tab.emoji} {tab.label}
+            </span>
+          ))}
+        </div>
+        <div className="text-sm text-[var(--color-text-tertiary)] py-4 text-center">
+          Chargement des lignes...
+        </div>
+      </div>
+    );
+  }
+
+  const lines = linesByMode[activeTab] || [];
+
+  return (
+    <div className="mb-6">
+      {/* Mode tabs */}
+      <div className="flex gap-2 mb-3 overflow-x-auto">
+        {MODE_TABS.map((tab) => {
+          const count = (linesByMode[tab.key] || []).length;
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-3 py-1.5 rounded-full text-[12px] font-medium whitespace-nowrap transition-colors ${
+                isActive
+                  ? "bg-[var(--color-primary)] text-white"
+                  : "bg-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-primary)]/10"
+              }`}
+            >
+              {tab.emoji} {tab.label} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Lines grid */}
+      {lines.length === 0 ? (
+        <div className="text-sm text-[var(--color-text-tertiary)] py-4 text-center">
+          Aucune ligne disponible
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {lines.map((line) => (
+            <LineBadge key={line.id} line={line} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LineBadge({ line }: { line: LineByMode }) {
+  const isActive = line.status === "active";
+  const isUpcoming = line.status === "prochainement active";
+
+  return (
+    <div
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] hover:shadow-sm transition-shadow cursor-default"
+      title={`${line.shortName} — ${line.status}`}
+    >
+      <span
+        className="inline-flex items-center justify-center min-w-[28px] h-[22px] px-1 rounded text-[11px] font-bold text-white"
+        style={{ backgroundColor: `#${line.color}` }}
+      >
+        {line.shortName}
+      </span>
+      {isActive && <CheckCircle size={12} className="text-[var(--color-eco-green)]" />}
+      {isUpcoming && <AlertCircle size={12} className="text-[var(--color-mobility-orange)]" />}
+    </div>
+  );
+}
 
 // Fallback modes when API is loading or unavailable
 const fallbackModes: TransportMode[] = [
@@ -41,9 +131,9 @@ const recentTrips = [
 export default function HomePage() {
   const router = useRouter();
   const [searchValue, setSearchValue] = useState("");
-  const { lines, loading: linesLoading } = useLines(6);
   const { stations: velibStations } = useVelibStations(50);
   const { modes: apiModes, loading: modesLoading } = useTransportModes();
+  const { linesByMode, loading: linesByModeLoading } = useLinesByMode();
 
   // Build display modes: API modes + Vélib' (not in PRIM lines data)
   // Order: Métro, RER, Tram, Bus, Vélib', Transilien
@@ -128,45 +218,7 @@ export default function HomePage() {
         <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-3">
           Lignes en temps réel
         </h2>
-        <div className="space-y-2 mb-6">
-          {linesLoading ? (
-            <div className="text-sm text-[var(--color-text-tertiary)] py-4 text-center">
-              Chargement des lignes...
-            </div>
-          ) : lines.length > 0 ? (
-            lines.slice(0, 4).map((line) => (
-              <div
-                key={line.id_line}
-                className="flex items-center gap-3 bg-white rounded-[var(--card-radius)] p-3 border border-[var(--color-border)]"
-              >
-                <span
-                  className="inline-flex items-center justify-center w-10 h-10 rounded-lg text-white text-sm font-bold shrink-0"
-                  style={{ backgroundColor: `#${line.colourweb_hexa}` }}
-                >
-                  {line.shortname_line}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-                    {line.networkname}
-                  </p>
-                  <p className="text-[11px] text-[var(--color-text-tertiary)]">
-                    {line.transportmode === "bus" ? "Bus" : line.transportmode === "metro" ? "Métro" : line.transportmode}
-                    {line.operatorname && ` · ${line.operatorname}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <CheckCircle size={14} className="text-[var(--color-eco-green)]" />
-                  <span className="text-[11px] text-[var(--color-eco-green)]">Normal</span>
-                </div>
-                <ChevronRight size={16} className="text-[var(--color-text-tertiary)] shrink-0" />
-              </div>
-            ))
-          ) : (
-            <div className="text-sm text-[var(--color-text-tertiary)] py-4 text-center">
-              Aucune ligne disponible
-            </div>
-          )}
-        </div>
+        <LinesByModeSection linesByMode={linesByMode} loading={linesByModeLoading} />
 
         {/* Map */}
         <div className="rounded-[var(--card-radius)] h-44 mb-6 border border-[var(--color-border)] overflow-hidden">
