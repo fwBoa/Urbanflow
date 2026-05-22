@@ -1,14 +1,17 @@
 import {
   Controller,
   Get,
+  Post,
   Query,
   ParseIntPipe,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
 import { PrimService } from './prim.service';
+import { GtfsParserService } from './gtfs-parser.service';
 import { JourneyService, JourneyQuery } from './journey.service';
 import { OsrmService } from './osrm.service';
+import { GtfsRtService } from './gtfs-rt.service';
 
 /**
  * Contrôleur Transport — Expose les données PRIM (Île-de-France Mobilités)
@@ -30,8 +33,10 @@ import { OsrmService } from './osrm.service';
 export class TransportController {
   constructor(
     private readonly primService: PrimService,
+    private readonly gtfsParser: GtfsParserService,
     private readonly journeyService: JourneyService,
     private readonly osrmService: OsrmService,
+    private readonly gtfsRtService: GtfsRtService,
   ) {}
 
   // ─── Santé ────────────────────────────────────────────────────────────
@@ -188,6 +193,28 @@ export class TransportController {
     };
   }
 
+  @Get('gtfs-status')
+  async getGtfsStatus() {
+    return {
+      loaded: this.gtfsParser.isLoaded(),
+      lastLoadTime: this.gtfsParser.getLastLoadTime(),
+      stats: this.gtfsParser.isLoaded() ? this.gtfsParser.getStats() : null,
+    };
+  }
+
+  @Post('gtfs-reload')
+  async reloadGtfs() {
+    try {
+      await this.gtfsParser.downloadAndLoad();
+      return { success: true, message: 'GTFS data reloaded', loaded: this.gtfsParser.isLoaded() };
+    } catch (error) {
+      throw new HttpException(
+        `Failed to reload GTFS: ${error instanceof Error ? error.message : error}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   // ─── Geocoding — Recherche d'adresses (F2, F3) ────────────────────────
 
   @Get('geocode')
@@ -218,6 +245,25 @@ export class TransportController {
       );
     }
     return this.primService.reverseGeocode(parseFloat(lat), parseFloat(lon));
+  }
+
+  // ─── GTFS-RT temps réel (F3) ────────────────────────────────────────
+
+  @Get('realtime-alerts')
+  async getRealtimeAlerts() {
+    return this.gtfsRtService.getAlerts();
+  }
+
+  @Get('realtime-vehicles')
+  async getRealtimeVehicles(
+    @Query('lineId') lineId?: string,
+  ) {
+    return this.gtfsRtService.getVehiclePositions(lineId);
+  }
+
+  @Get('realtime-status')
+  async getRealtimeStatus() {
+    return this.gtfsRtService.getStatus();
   }
 
   // ─── Calcul d'itinéraire (F2) ────────────────────────────────────────

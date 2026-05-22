@@ -6,9 +6,12 @@ export default function ServiceWorkerRegistration() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
-    // Only register SW in production
-    if (process.env.NODE_ENV !== "production") return;
+    // Disable SW in development (PWA not implemented yet)
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      return;
+    }
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[SW] Service Worker disabled in development");
       return;
     }
 

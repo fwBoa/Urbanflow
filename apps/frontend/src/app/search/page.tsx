@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Zap, Leaf, Wallet, MapPin, Navigation, Clock, Loader2, Building2, Train, Bus, Bike } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -38,6 +38,14 @@ function getStopIcon(arrtype: string) {
 const DEFAULT_MAP_CENTER: [number, number] = [48.8566, 2.3522];
 
 export default function SearchPage() {
+  return (
+    <Suspense fallback={<AppShell title="Recherche"><div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-[var(--color-primary)]" size={32} /></div></AppShell>}>
+      <SearchPageContent />
+    </Suspense>
+  );
+}
+
+function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const modeParam = searchParams.get("mode") || "";
@@ -50,7 +58,6 @@ export default function SearchPage() {
     velib: "Vélib'",
     rer: "RER",
     tram: "Tram",
-    trottinette: "Trottinette",
   };
   const modeTitle = modeParam ? modeLabels[modeParam] || modeParam : "";
   const isVelibMode = modeParam === "velib" || modeParam === "velo";
@@ -60,6 +67,24 @@ export default function SearchPage() {
   const [destination, setDestination] = useState("");
   const [selectedOrigin, setSelectedOrigin] = useState<{ lat: number; lon: number } | null>(null);
   const [selectedDest, setSelectedDest] = useState<{ lat: number; lon: number } | null>(null);
+
+  // ─── Mode de transport sélectionné ──────────────────────────────────
+  const [selectedModes, setSelectedModes] = useState<string[]>([]);
+
+  const transportModes = [
+    { key: "metro", label: "Métro", icon: <Train size={14} /> },
+    { key: "rer", label: "RER", icon: <Train size={14} /> },
+    { key: "bus", label: "Bus", icon: <Bus size={14} /> },
+    { key: "tram", label: "Tram", icon: <Train size={14} /> },
+    { key: "velib", label: "Vélib'", icon: <Bike size={14} /> },
+    { key: "marche", label: "Marche", icon: <MapPin size={14} /> },
+  ];
+
+  const toggleMode = (mode: string) => {
+    setSelectedModes((prev) =>
+      prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode],
+    );
+  };
 
   // ─── Géolocalisation ─────────────────────────────────────────────────
   const { lat: userLat, lon: userLon, accuracy: userAccuracy, loading: geoLoading, error: geoError, watching: isWatching, locate, startWatch, stopWatch } = useGeolocation();
@@ -117,6 +142,8 @@ export default function SearchPage() {
   const { journeys, loading: journeysLoading, error: journeysError } = useJourney(
     selectedOrigin,
     selectedDest,
+    undefined,
+    selectedModes.length > 0 ? selectedModes : undefined,
   );
 
   // ─── Fusionner les suggestions : arrêts en premier, puis adresses ────
@@ -188,7 +215,8 @@ export default function SearchPage() {
     } else {
       setMapPolyline([]);
     }
-  }, [selectedOrigin, selectedDest, mapMarkers, fetchRoute]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrigin, selectedDest]);
 
   // ─── Sélection d'une suggestion (arrêt ou adresse) ──────────────────
   const handleOriginSelect = (item: SuggestionItem) => {
@@ -416,7 +444,7 @@ export default function SearchPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
         {filters.map((f) => (
           <FilterChip
             key={f.key}
@@ -424,6 +452,19 @@ export default function SearchPage() {
             icon={f.icon}
             active={activeFilter === f.key}
             onClick={() => setActiveFilter(f.key)}
+          />
+        ))}
+      </div>
+
+      {/* Transport mode selection */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+        {transportModes.map((m) => (
+          <FilterChip
+            key={m.key}
+            label={m.label}
+            icon={m.icon}
+            active={selectedModes.includes(m.key)}
+            onClick={() => toggleMode(m.key)}
           />
         ))}
       </div>
@@ -470,9 +511,21 @@ export default function SearchPage() {
 
         {!journeysLoading && !journeysError && sortedJourneys.length > 0 && (
           <>
-            <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
-              {sortedJourneys.length} itinéraire{sortedJourneys.length > 1 ? "s" : ""} trouvé{sortedJourneys.length > 1 ? "s" : ""}
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+                {sortedJourneys.length} itinéraire{sortedJourneys.length > 1 ? "s" : ""} trouvé{sortedJourneys.length > 1 ? "s" : ""}
+              </h2>
+              {sortedJourneys.some((t) => t.isFallback) && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium" title="Données temps réel indisponibles — itinéraires estimés">
+                  ⚠️ Estimé
+                </span>
+              )}
+            </div>
+            {sortedJourneys.some((t) => t.isFallback) && (
+              <div className="bg-amber-50 border border-amber-200 rounded-[var(--card-radius)] p-2.5 text-xs text-amber-800 dark:bg-amber-900/20 dark:border-amber-800/30 dark:text-amber-300">
+                <span className="font-semibold">Données GTFS indisponibles.</span> Les itinéraires affichés sont des estimations basées sur la distance. Les horaires et lignes réelles seront disponibles une fois le service PRIM de retour.
+              </div>
+            )}
             {sortedJourneys.map((trip, i) => (
               <TripCard
                 key={i}

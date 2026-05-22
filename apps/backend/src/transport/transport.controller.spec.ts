@@ -4,6 +4,9 @@ import { PrimService } from './prim.service';
 import { CarbonService } from './carbon.service';
 import { JourneyService } from './journey.service';
 import { GtfsParserService } from './gtfs-parser.service';
+import { GtfsRtService } from './gtfs-rt.service';
+import { OsrmService } from './osrm.service';
+import { GbfsService } from './gbfs.service';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 
@@ -20,11 +23,14 @@ describe('TransportController', () => {
         CarbonService,
         JourneyService,
         GtfsParserService,
+        GtfsRtService,
+        OsrmService,
+        GbfsService,
         {
           provide: ConfigService,
           useValue: {
             get: (key: string, defaultValue?: string) => {
-              if (key === 'PRIM_API_URL') return 'https://api-lab.idfm.fr';
+              if (key === 'PRIM_API_URL') return 'https://prim.iledefrance-mobilites.fr';
               if (key === 'PRIM_API_KEY') return 'test-key';
               if (key === 'IDFM_DATA_API_URL')
                 return 'https://data.iledefrance-mobilites.fr/api/explore/v2.1';
@@ -45,6 +51,12 @@ describe('TransportController', () => {
 
   describe('healthCheck', () => {
     it('should return health status', async () => {
+      // Mock primService.healthCheck to avoid actual API call
+      jest.spyOn(primService, 'healthCheck').mockResolvedValue({
+        status: 'ok',
+        source: 'PRIM Île-de-France Mobilités',
+        apiKeyConfigured: true,
+      });
       const result = await controller.healthCheck();
       expect(result).toBeDefined();
       expect(result).toHaveProperty('status');

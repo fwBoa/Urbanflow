@@ -111,6 +111,8 @@ export interface JourneyResult {
   segments: JourneySegment[];
   departureTime: string;
   arrivalTime: string;
+  /** Indique si l'itinéraire est un fallback (données GTFS non disponibles) */
+  isFallback?: boolean;
 }
 
 class ApiService {
@@ -118,6 +120,10 @@ class ApiService {
 
   constructor() {
     this.baseUrl = API_BASE;
+  }
+
+  getBaseUrl(): string {
+    return this.baseUrl;
   }
 
   private async fetch<T>(endpoint: string): Promise<T> {

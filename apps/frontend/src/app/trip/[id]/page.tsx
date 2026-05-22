@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
-import { Clock, MapPin, Footprints, Bike, Train, Bus, ArrowRight, Leaf, Navigation2, Pause, Square, Play } from "lucide-react";
+import { Clock, MapPin, Footprints, Bike, Train, Bus, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, ChevronUp, ChevronDown } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
 import { useRoute } from "@/hooks/useTransport";
+import { useNavigation } from "@/hooks/useNavigation";
 import type { JourneyResult } from "@/services/api";
 
 const modeIcons: Record<string, React.ReactNode> = {
@@ -63,13 +64,6 @@ export default function TripDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // ─── Navigation mode state ──────────────────────────────────────────
-  const [isNavigating, setIsNavigating] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [activeSegment, setActiveSegment] = useState(0);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // Parse journey data from URL
   let trip: JourneyResult | null = null;
   try {
@@ -97,15 +91,17 @@ export default function TripDetailPage() {
   const destLon = searchParams.get("destLon");
 
   const hasCoords = originLat && originLon && destLat && destLon;
-  const originPos = hasCoords ? { lat: parseFloat(originLat), lon: parseFloat(originLon) } : null;
-  const destPos = hasCoords ? { lat: parseFloat(destLat), lon: parseFloat(destLon) } : null;
+  const originPos = hasCoords ? { lat: parseFloat(originLat!), lon: parseFloat(originLon!) } : null;
+  const destPos = hasCoords ? { lat: parseFloat(destLat!), lon: parseFloat(destLon!) } : null;
 
   // ─── OSRM Routing for real geometry ─────────────────────────────────
   const { geometry: routeGeometry, fetchRoute } = useRoute();
   const [tripPolyline, setTripPolyline] = useState<[number, number][]>([]);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    if (originPos && destPos) {
+    if (originPos && destPos && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       fetchRoute(originPos.lat, originPos.lon, destPos.lat, destPos.lon, 'foot')
         .then((coords) => {
           if (coords.length > 0) {
@@ -118,7 +114,33 @@ export default function TripDetailPage() {
           }
         });
     }
-  }, [originPos, destPos, fetchRoute]);
+  }, [originPos, destPos]);
+
+  // ─── Navigation GPS hook ─────────────────────────────────────────────
+  const {
+    isNavigating,
+    isPaused,
+    activeSegment,
+    elapsedSeconds,
+    progress,
+    arrived,
+    offRoute,
+    userPosition,
+    currentSpeed,
+    remainingDistance,
+    remainingTime,
+    instruction,
+    startNavigation,
+    pauseNavigation,
+    resumeNavigation,
+    stopNavigation,
+    accuracy,
+  } = useNavigation(
+    segments,
+    tripPolyline,
+    originPos,
+    destPos,
+  );
 
   // Build map markers from real coordinates
   const mapMarkers = useMemo(() => {
@@ -138,65 +160,24 @@ export default function TripDetailPage() {
     return markers;
   }, [originPos, destPos, departure, arrival]);
 
-  // Map center on origin or default Paris
-  const mapCenter: [number, number] = originPos
-    ? [originPos.lat, originPos.lon]
-    : [48.8766, 2.2946];
-
-  // ─── Timer logic ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (isNavigating && !isPaused) {
-      timerRef.current = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 1);
-      }, 1000);
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isNavigating, isPaused]);
-
-  // ─── Auto-advance segment based on elapsed time ─────────────────────
-  useEffect(() => {
-    if (!isNavigating || isPaused) return;
-    let cumulativeMinutes = 0;
-    for (let i = 0; i < segments.length; i++) {
-      cumulativeMinutes += segments[i].durationMinutes;
-      if (elapsedSeconds < cumulativeMinutes * 60) {
-        setActiveSegment(i);
-        return;
-      }
-    }
-    // All segments done
-    setActiveSegment(segments.length - 1);
-  }, [elapsedSeconds, isNavigating, isPaused, segments]);
-
-  // ─── Start / Stop navigation ────────────────────────────────────────
-  const startNavigation = () => {
-    setIsNavigating(true);
-    setIsPaused(false);
-    setActiveSegment(0);
-    setElapsedSeconds(0);
-  };
-
-  const pauseNavigation = () => setIsPaused(true);
-
-  const resumeNavigation = () => setIsPaused(false);
-
-  const stopNavigation = () => {
-    setIsNavigating(false);
-    setIsPaused(false);
-    setElapsedSeconds(0);
-    setActiveSegment(0);
-    if (timerRef.current) clearInterval(timerRef.current);
-  };
+  // Map center: follow user during navigation, else origin or default Paris
+  const mapCenter: [number, number] = isNavigating && userPosition
+    ? [userPosition.lat, userPosition.lon]
+    : originPos
+      ? [originPos.lat, originPos.lon]
+      : [48.8766, 2.2946];
 
   // Format elapsed time
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // Format distance
+  const formatDistance = (meters: number) => {
+    if (meters < 1000) return `${meters} m`;
+    return `${(meters / 1000).toFixed(1)} km`;
   };
 
   // Progress percentage
@@ -348,9 +329,14 @@ export default function TripDetailPage() {
       <div className="rounded-[var(--card-radius)] h-48 mb-4 border border-[var(--color-border)] overflow-hidden">
         <DynamicMap
           center={mapCenter}
-          zoom={13}
+          zoom={isNavigating ? 16 : 13}
           markers={mapMarkers}
           polyline={tripPolyline.length > 0 ? tripPolyline : undefined}
+          userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined } : undefined}
+          onLocateUser={() => {}}
+          isWatching={isNavigating}
+          onToggleWatch={isNavigating ? stopNavigation : startNavigation}
+          followUser={isNavigating}
         />
       </div>
 
@@ -407,6 +393,60 @@ export default function TripDetailPage() {
               <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">
                 {segments[activeSegment].durationMinutes} min · Étape {activeSegment + 1}/{segments.length}
               </p>
+            </div>
+          )}
+
+          {/* GPS info panel */}
+          {userPosition && (
+            <div className="bg-[var(--color-surface)] rounded-[var(--card-radius)] p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-tertiary)]">Distance restante</span>
+                <span className="font-semibold text-[var(--color-text-primary)]">
+                  {formatDistance(remainingDistance)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[var(--color-text-tertiary)]">ETA</span>
+                <span className="font-semibold text-[var(--color-text-primary)]">
+                  {remainingTime > 0 ? `~${Math.ceil(remainingTime)} min` : "—"}
+                </span>
+              </div>
+              {currentSpeed > 0 && (
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[var(--color-text-tertiary)]">Vitesse</span>
+                  <span className="font-semibold text-[var(--color-text-primary)]">
+                    {currentSpeed.toFixed(1)} km/h
+                  </span>
+                </div>
+              )}
+              {accuracy && (
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[var(--color-text-tertiary)]">Précision GPS</span>
+                  <span className="text-[var(--color-text-tertiary)]">±{Math.round(accuracy)}m</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Off-route warning */}
+          {offRoute && !arrived && (
+            <div className="bg-amber-50 border border-amber-200 rounded-[var(--card-radius)] p-3 flex items-center gap-2">
+              <AlertTriangle size={18} className="text-amber-500 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Hors trajet</p>
+                <p className="text-xs text-amber-600">Vous vous êtes écarté de l&apos;itinéraire</p>
+              </div>
+            </div>
+          )}
+
+          {/* Arrived notification */}
+          {arrived && (
+            <div className="bg-[var(--color-eco-green)]/10 border border-[var(--color-eco-green)]/30 rounded-[var(--card-radius)] p-3 flex items-center gap-2">
+              <CheckCircle2 size={18} className="text-[var(--color-eco-green)] shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-[var(--color-eco-green)]">Vous êtes arrivé !</p>
+                <p className="text-xs text-[var(--color-eco-green)]/70">Destination atteinte</p>
+              </div>
             </div>
           )}
         </div>

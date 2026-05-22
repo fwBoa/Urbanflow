@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
+import { AuthProvider } from "@/contexts/AuthContext";
+import ConsentBanner from "@/components/ConsentBanner";
 import "./globals.css";
 
 const inter = Inter({
@@ -45,9 +47,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans bg-white text-[var(--color-text-primary)]">
-        {children}
+    <html lang="fr" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
+      <body className="min-h-full flex flex-col font-sans bg-white text-[var(--color-text-primary)]" suppressHydrationWarning>
+        <AuthProvider>
+          {children}
+          <ConsentBanner />
+        </AuthProvider>
         <ServiceWorkerRegistration />
       </body>
     </html>

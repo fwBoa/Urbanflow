@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Heart, Clock, MapPin, Trash2, Navigation } from "lucide-react";
+import { Heart, Clock, LogIn } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import {
@@ -14,26 +14,40 @@ import {
   type FavoriteJourney,
   type HistoryJourney,
 } from "@/services/favorites";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function FavoritesPage() {
   const router = useRouter();
+  const { isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<"favorites" | "history">("favorites");
   const [favorites, setFavorites] = useState<FavoriteJourney[]>([]);
   const [history, setHistory] = useState<HistoryJourney[]>([]);
 
-  // Load from localStorage on mount
+  // Redirect to login if not authenticated
   useEffect(() => {
-    setFavorites(getFavorites());
-    setHistory(getHistory());
-  }, []);
+    if (!isAuthenticated) {
+      router.push("/login?redirect=/favorites");
+    }
+  }, [isAuthenticated, router]);
 
-  const handleRemoveFavorite = (id: string) => {
-    const updated = removeFavorite(id);
+  // Load from backend only (no localStorage fallback for anonymous)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    async function loadData() {
+      const [favs, hist] = await Promise.all([getFavorites(), getHistory()]);
+      setFavorites(favs);
+      setHistory(hist);
+    }
+    loadData();
+  }, [isAuthenticated]);
+
+  const handleRemoveFavorite = async (id: string) => {
+    const updated = await removeFavorite(id);
     setFavorites(updated);
   };
 
-  const handleClearHistory = () => {
-    clearHistory();
+  const handleClearHistory = async () => {
+    await clearHistory();
     setHistory([]);
   };
 
@@ -97,7 +111,13 @@ export default function FavoritesPage() {
         </button>
       </div>
 
-      {activeTab === "favorites" ? (
+      {/* Loading state */}
+      {!isAuthenticated ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-8 h-8 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-sm text-[var(--color-text-tertiary)]">Redirection vers la connexion...</p>
+        </div>
+      ) : activeTab === "favorites" ? (
         <div className="space-y-3">
           {favorites.length === 0 ? (
             <div className="text-center py-12">
@@ -158,80 +178,60 @@ export default function FavoritesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {history.length === 0 ? (
-            <div className="text-center py-12">
-              <Clock size={40} className="mx-auto mb-3 text-[var(--color-border)]" />
-              <p className="text-sm text-[var(--color-text-tertiary)] mb-1">
-                Aucun historique
-              </p>
-              <p className="text-xs text-[var(--color-text-tertiary)]">
-                Vos recherches d&apos;itinéraires apparaîtront ici
-              </p>
-              <button
-                onClick={() => router.push("/search")}
-                className="mt-4 px-4 py-2 bg-[var(--color-primary)] text-white rounded-[var(--cta-radius)] text-sm font-medium hover:bg-[var(--color-primary-dark)] transition-colors"
-              >
-                Rechercher un trajet
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex justify-end">
+          <div className="flex justify-end">
+            <button
+              onClick={handleClearHistory}
+              className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors"
+            >
+              Effacer l&apos;historique
+            </button>
+          </div>
+          {history.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white rounded-[var(--card-radius)] p-4 border border-[var(--color-border)] hover:shadow-sm transition-all cursor-pointer"
+              onClick={() => handleReplay(item)}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white"
+                      style={{ backgroundColor: item.modeColor }}
+                    >
+                      {item.mode}
+                    </span>
+                    <CO2Badge grams={item.co2} />
+                  </div>
+                  <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                    {item.from} → {item.to}
+                  </p>
+                  <p className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1 mt-0.5">
+                    <Clock size={11} />
+                    {item.duration} · {formatDate(item.date)}
+                  </p>
+                </div>
                 <button
-                  onClick={handleClearHistory}
-                  className="text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors"
+                  className="text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors p-1"
+                  aria-label="Ajouter aux favoris"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    await addFavorite({
+                      from: item.from,
+                      to: item.to,
+                      mode: item.mode,
+                      modeColor: item.modeColor,
+                      duration: item.duration,
+                      co2: item.co2,
+                    });
+                    setFavorites(await getFavorites());
+                  }}
                 >
-                  Effacer l&apos;historique
+                  <Heart size={18} />
                 </button>
               </div>
-              {history.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white rounded-[var(--card-radius)] p-4 border border-[var(--color-border)] hover:shadow-sm transition-all cursor-pointer"
-                  onClick={() => handleReplay(item)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white"
-                          style={{ backgroundColor: item.modeColor }}
-                        >
-                          {item.mode}
-                        </span>
-                        <CO2Badge grams={item.co2} />
-                      </div>
-                      <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                        {item.from} → {item.to}
-                      </p>
-                      <p className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1 mt-0.5">
-                        <Clock size={11} />
-                        {item.duration} · {formatDate(item.date)}
-                      </p>
-                    </div>
-                    <button
-                      className="text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors p-1"
-                      aria-label="Ajouter aux favoris"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addFavorite({
-                          from: item.from,
-                          to: item.to,
-                          mode: item.mode,
-                          modeColor: item.modeColor,
-                          duration: item.duration,
-                          co2: item.co2,
-                        });
-                        setFavorites(getFavorites());
-                      }}
-                    >
-                      <Heart size={18} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
+            </div>
+          ))}
         </div>
       )}
     </AppShell>

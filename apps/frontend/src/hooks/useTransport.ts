@@ -1,11 +1,45 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { apiService } from "@/services/api";
 import type { PrimLine, PrimStop, PrimVelibStation, NearbyVelibStation, JourneyResult, GeocodeResult, ReverseGeocodeResult } from "@/services/api";
 
 // Re-export types for convenience
 export type { NearbyVelibStation } from "@/services/api";
+
+// ─── Generic API data hook (DRY) ───────────────────────────────────
+/**
+ * Hook générique pour fetch des données API avec loading/error.
+ * Factorise le pattern useState/useEffect/then/catch/finally répété
+ * dans tous les hooks de données.
+ */
+function useApiData<T>(
+  fetchFn: () => Promise<T>,
+  defaultValue: T,
+  deps: React.DependencyList,
+  initialLoading = true,
+) {
+  const [data, setData] = useState<T>(defaultValue);
+  const [loading, setLoading] = useState(initialLoading);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchFn()
+      .then((result) => {
+        setData(result);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setData(defaultValue);
+      })
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+
+  return { data, setData, loading, error };
+}
 
 // ─── Transport Modes ────────────────────────────────────────────────
 export interface TransportModeLine {
@@ -27,25 +61,11 @@ export interface TransportMode {
 }
 
 export function useTransportModes() {
-  const [modes, setModes] = useState<TransportMode[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    apiService
-      .getTransportModes()
-      .then((data) => {
-        setModes(data.modes || []);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setModes([]);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
+  const { data: modes, loading, error } = useApiData<TransportMode[]>(
+    () => apiService.getTransportModes().then((d) => d.modes || []),
+    [],
+    [],
+  );
   return { modes, loading, error };
 }
 
@@ -66,49 +86,21 @@ export interface LinesByMode {
 }
 
 export function useLinesByMode() {
-  const [linesByMode, setLinesByMode] = useState<LinesByMode>({ metro: [], rer: [], tram: [], transilien: [] });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    apiService
-      .getLinesByMode()
-      .then((data) => {
-        setLinesByMode(data);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLinesByMode({ metro: [], rer: [], tram: [], transilien: [] });
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
+  const { data: linesByMode, loading, error } = useApiData<LinesByMode>(
+    () => apiService.getLinesByMode(),
+    { metro: [], rer: [], tram: [], transilien: [] },
+    [],
+  );
   return { linesByMode, loading, error };
 }
 
 // ─── Lines ────────────────────────────────────────────────────────────────
 export function useLines(limit = 6) {
-  const [lines, setLines] = useState<PrimLine[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    apiService
-      .getLines(limit)
-      .then((data) => {
-        setLines(data.results || []);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLines([]);
-      })
-      .finally(() => setLoading(false));
-  }, [limit]);
-
+  const { data: lines, loading, error } = useApiData<PrimLine[]>(
+    () => apiService.getLines(limit).then((d) => d.results || []),
+    [],
+    [limit],
+  );
   return { lines, loading, error };
 }
 
@@ -150,62 +142,38 @@ export function useStopSearch(query: string, limit = 10) {
 
 // ─── Vélib' stations ──────────────────────────────────────────────
 export function useVelibStations(limit = 50) {
-  const [stations, setStations] = useState<PrimVelibStation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    apiService
-      .getVelibStations(limit)
-      .then((data) => {
-        // Filter only OPEN stations in Paris area
-        const openStations = (data.results || []).filter(
-          (s) =>
-            s.status === "OPEN" &&
-            s.position.lat > 48.7 &&
-            s.position.lat < 49.0 &&
-            s.position.lon > 2.1 &&
-            s.position.lon < 2.6
-        );
-        setStations(openStations);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setStations([]);
-      })
-      .finally(() => setLoading(false));
-  }, [limit]);
-
+  const { data: stations, loading, error } = useApiData<PrimVelibStation[]>(
+    () => apiService.getVelibStations(limit).then((d) =>
+      (d.results || []).filter(
+        (s) =>
+          s.status === "OPEN" &&
+          s.position.lat > 48.7 &&
+          s.position.lat < 49.0 &&
+          s.position.lon > 2.1 &&
+          s.position.lon < 2.6
+      )
+    ),
+    [],
+    [limit],
+  );
   return { stations, loading, error };
 }
 
 // ─── Vélib' proches (F4) ──────────────────────────────────────────
 export function useNearbyVelib(lat: number | null, lon: number | null, radiusKm = 2, limit = 10) {
-  const [stations, setStations] = useState<NearbyVelibStation[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { data: stations, loading, error } = useApiData<NearbyVelibStation[]>(
+    () => {
+      if (lat === null || lon === null) return Promise.resolve([]);
+      return apiService.getNearbyVelibStations(lat, lon, radiusKm, limit).then((d) => d.stations || []);
+    },
+    [],
+    [lat, lon, radiusKm, limit],
+    false,
+  );
 
-  useEffect(() => {
-    if (lat === null || lon === null) {
-      setStations([]);
-      return;
-    }
-
-    setLoading(true);
-    apiService
-      .getNearbyVelibStations(lat, lon, radiusKm, limit)
-      .then((data) => {
-        setStations(data.stations || []);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setStations([]);
-      })
-      .finally(() => setLoading(false));
-  }, [lat, lon, radiusKm, limit]);
+  if (lat === null || lon === null) {
+    return { stations: [] as NearbyVelibStation[], loading: false, error: null };
+  }
 
   return { stations, loading, error };
 }
@@ -278,6 +246,7 @@ export function useRoute() {
   const [duration, setDuration] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fetchingRef = useRef(false);
 
   const fetchRoute = useCallback(async (
     originLat: number,
@@ -286,6 +255,8 @@ export function useRoute() {
     destLon: number,
     profile?: 'foot' | 'bike' | 'car',
   ) => {
+    if (fetchingRef.current) return geometry;
+    fetchingRef.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -302,55 +273,30 @@ export function useRoute() {
       return [];
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
-  }, []);
+  }, [geometry]);
 
   return { geometry, distance, duration, loading, error, fetchRoute };
 }
 
 // ─── Traffic messages ──────────────────────────────────────────────
 export function useTrafficMessages(limit = 5) {
-  const [messages, setMessages] = useState<unknown[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    apiService
-      .getTrafficMessages(limit)
-      .then((data) => {
-        const results = (data as Record<string, unknown>).results;
-        setMessages((results as unknown[]) || []);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setMessages([]);
-      })
-      .finally(() => setLoading(false));
-  }, [limit]);
-
+  const { data: messages, loading, error } = useApiData<unknown[]>(
+    () => apiService.getTrafficMessages(limit).then((d) => ((d as Record<string, unknown>).results as unknown[]) || []),
+    [],
+    [limit],
+  );
   return { messages, loading, error };
 }
 
 // ─── Health check ──────────────────────────────────────────────────
 export function useHealthCheck() {
-  const [status, setStatus] = useState<{
-    ok: boolean;
-    source: string;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    apiService
-      .healthCheck()
-      .then((data) => {
-        setStatus({ ok: data.status === "ok", source: data.source });
-      })
-      .catch(() => setStatus({ ok: false, source: "unavailable" }))
-      .finally(() => setLoading(false));
-  }, []);
-
+  const { data: status, loading } = useApiData<{ ok: boolean; source: string } | null>(
+    () => apiService.healthCheck().then((d) => ({ ok: d.status === "ok", source: d.source })),
+    null,
+    [],
+  );
   return { status, loading };
 }
 
@@ -359,36 +305,28 @@ export function useJourney(
   origin: { lat: number; lon: number } | null,
   destination: { lat: number; lon: number } | null,
   departureTime?: string,
+  modes?: string[],
 ) {
-  const [journeys, setJourneys] = useState<JourneyResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!origin || !destination) {
-      setJourneys([]);
-      return;
-    }
-
-    setLoading(true);
-    apiService
-      .searchJourney({
+  const { data: journeys, loading, error } = useApiData<JourneyResult[]>(
+    () => {
+      if (!origin || !destination) return Promise.resolve([]);
+      return apiService.searchJourney({
         originLat: origin.lat,
         originLon: origin.lon,
         destLat: destination.lat,
         destLon: destination.lon,
         departureTime,
-      })
-      .then((data) => {
-        setJourneys(Array.isArray(data) ? data : []);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setJourneys([]);
-      })
-      .finally(() => setLoading(false));
-  }, [origin, destination, departureTime]);
+        modes: modes?.join(","),
+      }).then((d) => Array.isArray(d) ? d : []);
+    },
+    [],
+    [origin, destination, departureTime, modes],
+    false,
+  );
+
+  if (!origin || !destination) {
+    return { journeys: [] as JourneyResult[], loading: false, error: null };
+  }
 
   return { journeys, loading, error };
 }

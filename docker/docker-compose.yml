@@ -30,13 +30,16 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-urbanflow}:${POSTGRES_PASSWORD:-urbanflow_dev}@postgres:5432/${POSTGRES_DB:-urbanflow}
       PORT: 4000
       NODE_ENV: ${NODE_ENV:-development}
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-2h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      PRIM_API_KEY: ${PRIM_API_KEY:-}
+      PRIM_API_URL: ${PRIM_API_URL:-https://api-lab.idfm.fr}
     ports:
       - '4000:4000'
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ../apps/backend/src:/app/src
 
   # ─── Frontend (Next.js) ───
   frontend:
@@ -52,8 +55,23 @@ services:
       - '3000:3000'
     depends_on:
       - backend
+
+  # ─── Nginx (Production reverse proxy) ───
+  nginx:
+    image: nginx:alpine
+    container_name: urbanflow-nginx
+    restart: unless-stopped
+    profiles:
+      - production
+    ports:
+      - '80:80'
+      - '443:443'
     volumes:
-      - ../apps/frontend/src:/app/src
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+      - frontend
 
 volumes:
   postgres_data:

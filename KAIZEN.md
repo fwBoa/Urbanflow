@@ -2,7 +2,72 @@
 
 Méthode : Observer → Analyser → Agir → Vérifier → Standardiser
 
-## Principe DRY — Don't Repeat Yourself
+## Fonctionnalités Obligatoires
+
+### F1 — Inscription/connexion et profils de mobilité personnalisés ✅
+- **Backend (NestJS)** : Module Auth complet avec JWT
+  - `POST /api/auth/register` : Inscription avec email, mot de passe (bcrypt, 12 rounds), displayName optionnel, avatar par défaut 🚇
+  - `POST /api/auth/login` : Connexion avec email/mot de passe, retourne JWT + profil utilisateur
+  - `GET /api/auth/me` : Profil utilisateur authentifié (JWT Bearer token)
+  - `PUT /api/auth/me` : Mise à jour profil (displayName, avatar, preferredMode, accessibilityNeeds)
+  - Entity `User` : id (UUID), email (unique), passwordHash, displayName, preferredMode, accessibilityNeeds, avatar, timestamps
+  - JWT Strategy + AuthGuard pour routes protégées
+  - PostgreSQL via Docker Compose (postgres:16-alpine)
+- **Frontend (Next.js)** :
+  - Pages `/login` et `/register` avec formulaires validés
+  - `AuthContext` + `useAuth()` hook : login, register, logout, refreshProfile, isAuthenticated, user
+  - Service `auth.ts` : register, login, getProfile, updateProfile, logout, token management (localStorage)
+  - Page profil intégrée : avatar/nom/email éditables, badges, mode sombre, stats CO₂
+  - Si connecté : profil synchronisé avec le backend (nom, avatar, mode préféré, accessibilité)
+  - Si non connecté : profil local (localStorage) avec bouton "Se connecter"
+  - Bouton "Se déconnecter" quand authentifié
+  - Badge "Connecté" visible sur le profil
+- **Vérification** : `curl POST /api/auth/register` → JWT + profil, `curl POST /api/auth/login` → JWT + profil, `curl GET /api/auth/me -H "Authorization: Bearer <token>"` → profil, page login → connexion → redirection vers profil avec données backend
+
+### F2 — Planificateur d'itinéraires multimodal avec géolocalisation temps réel 🔄
+- **Existant (~85%)** :
+  - Backend : Journey endpoint, OSRM routing, GTFS parser, carbon calculator, geocoding, Vélib nearby, PRIM API
+  - Frontend : Search page (autocomplete, geolocation, map click), trip detail (segments, CO₂, navigation GPS), hooks (useGeolocation, useNavigation, useJourney, useRoute)
+  - **GTFS auto-load** : `GtfsParserService` implémente `OnModuleInit`, télécharge automatiquement le ZIP GTFS au démarrage (sources multiples : PRIM API + Data portal), cache local 8h, fallback gracieux si indisponible
+  - **Endpoints GTFS** : `GET /api/transport/gtfs-status` (statut du chargement), `POST /api/transport/gtfs-reload` (rechargement manuel)
+  - **Filtrage calendar** : `getActiveServiceIds()` filtre les trips par jour de service (calendar.txt + calendar_dates.txt exceptions)
+  - **Mode filtering** : `filterByModes()` filtre les résultats par modes de transport (metro, rer, bus, tram, velib, marche)
+  - **Vélib routing** : `computeNonTransitJourney()` génère des trajets marche→Vélib→marche avec segments détaillés
+  - **Mode selection UI** : Chips de sélection des modes de transport sur la page recherche (Métro, RER, Bus, Tram, Vélib', Marche)
+  - **Déduplication améliorée** : Les trajets non-transit (marche, vélib) ne sont plus dédupliqués entre eux
+  - Navigation GPS temps réel : suivi position, détection hors trajet, arrivée, progression
+- **Manquant** :
+  - P1 : Algorithme RAPTOR (Phase 2) remplaçant le heuristic nearest-stop
+  - P1 : GTFS-RT temps réel (retards, annulations, positions véhicules)
+  - P2 : Sélecteur date/heure de départ sur la page recherche
+  - P2 : Polylines shapes pour segments transit sur la carte
+  - P2 : Prochains départs par arrêt (endpoint + UI)
+  - P2 : Alertes perturbations dans les résultats d'itinéraire
+
+### F3 — Intégration d'APIs de transport (GTFS, vélos/trottinettes) 🔄
+- **Existant (~85%)** :
+  - PRIM IDFM API : lignes, arrêts, trafic, ascenseurs, GTFS URL
+  - Open Data Paris : Vélib' Métropole (stations temps réel)
+  - OSRM : routing piéton/vélo/voiture
+  - Geocoding : data.gouv.fr + reverse geocoding
+  - GTFS auto-load : téléchargement automatique au démarrage avec fallback gracieux
+  - Vélib routing : trajets marche→Vélib→marche intégrés dans le planificateur
+  - **GBFS Service** : Intégration des flux GBFS (Lime, Dott, Voi) pour trottinettes et vélos partagés
+    - `GET /api/transport/shared-vehicles` : véhicules libres à proximité (trottinettes, vélos électriques)
+    - `GET /api/transport/shared-stations` : stations de partage à proximité
+    - `GET /api/transport/gbfs-status` : statut des flux GBFS (nombre de véhicules par opérateur)
+    - Cache 5 minutes, rafraîchissement automatique via cron
+    - Classification automatique : scooter/ebike/bike selon vehicle_types GBFS
+    - Fallback : détection des trottinettes via rental_uris et vehicle_type_id
+  - **GTFS-RT Service** : Données temps réel (alertes, perturbations)
+    - `GET /api/transport/realtime-alerts` : alertes et perturbations temps réel
+    - `GET /api/transport/realtime-vehicles` : positions des véhicules (placeholder)
+    - `GET /api/transport/realtime-status` : statut du service GTFS-RT
+    - Cache 2 minutes, rafraîchissement automatique via cron
+    - Fallback gracieux si API PRIM indisponible
+- **Manquant** :
+  - P1 : GTFS-RT protobuf parsing complet (positions véhicules, trip updates)
+  - P2 : Cache intelligent des données GTFS (rechargement périodique)
 - **Backend** : Factoriser les appels `callDataApi` avec un builder de query params générique. Créer des constantes pour les endpoints PRIM (`REFERENTIEL_LIGNES`, `ARRETS`, `VELIB_STATIONS`, etc.).
 - **Frontend hooks** : Extraire un hook générique `useApiData<T>(fetchFn, deps)` qui encapsule `useState/useEffect/error/loading`. Chaque hook métier devient un one-liner.
 - **Frontend API** : Les méthodes `fetch` de `api.ts` suivent toutes le même pattern → un helper `fetchTyped<T>(endpoint)` suffit.
@@ -82,3 +147,52 @@ Méthode : Observer → Analyser → Agir → Vérifier → Standardiser
     - Carte centrée sur la position utilisateur avec marqueur bleu
   - Périmètre : Paris intra-muros (75) uniquement, via l'API Open Data Paris.
 - **Vérification** : `curl /api/transport/velib-nearby?lat=48.8566&lon=2.3522&radius=1&limit=5` retourne 5 stations triées par distance (ex: "Place de l'Hôtel de Ville" à 98m, "Arcole - Notre-Dame" à 366m). La page d'accueil affiche les stations proches avec vélos électriques et mécaniques séparés.
+
+## Bloc 11 — Navigation GPS (F5)
+- **Problème** : Le mode navigation existant était un simple chronomètre sans suivi GPS réel. Pas de progression basée sur la position, pas d'ETA dynamique, pas de détection hors trajet.
+- **Origine** : La page trip/[id] avait un mode navigation avec timer et segments actifs basés uniquement sur le temps écoulé, sans aucune donnée de position GPS.
+- **Solution** :
+  - Hook `useNavigation(segments, routePoints, origin, destination)` :
+    - Utilise `useGeolocation` en mode `watchPosition` pour le suivi GPS continu
+    - Calcul haversine de la distance au point le plus proche sur la polyline OSRM
+    - Progression GPS : distance restante, ETA basé sur la vitesse réelle, bearing vers le prochain point
+    - Détection hors trajet : si l'utilisateur s'écarte de > 50m du trajet → alerte "Hors trajet"
+    - Détection arrivée : si l'utilisateur est à < 30m de la destination → notification "Vous êtes arrivé !"
+    - Instruction de direction : segment actif avec icône (depart/straight/left/right/arrive)
+  - Intégration dans trip/[id]/page.tsx :
+    - Remplacement du state local (useState/useRef) par le hook `useNavigation`
+    - Carte centrée sur la position utilisateur pendant la navigation (zoom 16)
+    - Marqueur GPS bleu sur la carte avec cercle de précision
+    - Panneau GPS temps réel : distance restante, ETA, vitesse, précision GPS
+    - Alerte "Hors trajet" (amber) si écart > 50m
+    - Notification "Vous êtes arrivé !" (vert) si distance < 30m à la destination
+    - Bouton "Démarrer le trajet" active le GPS continu (watchPosition)
+    - Bouton "Terminer" arrête le GPS et réinitialise la navigation
+  - Nettoyage : suppression des `useState`/`useRef`/`useEffect` manuels pour le timer et les segments actifs, remplacés par le hook
+- **Vérification** : Cliquer "Démarrer le trajet" active le GPS, affiche le chronomètre, la progression, et le panneau GPS. Hors trajet → alerte amber. Arrivé à destination → notification verte. Carte suit la position en temps réel.
+
+## Bloc 12 — Profil utilisateur (F6)
+- **Problème** : La page profil était statique avec un avatar générique (icône User), un nom fixe "Utilisateur", aucun email, pas de badges, pas de mode sombre fonctionnel, et pas d'équivalent CO₂.
+- **Origine** : Le profil affichait seulement des stats basiques et des toggles sans persistance réelle pour le dark mode.
+- **Solution** :
+  - Service `favorites.ts` enrichi :
+    - Interface `UserProfile` (name, email, avatar) avec `getProfile()` / `saveProfile()` persistés en localStorage
+    - Interface `Badge` (key, label, emoji, description, unlocked) avec `getBadges()` qui calcule les badges dynamiquement (first_trip, eco_warrior, explorer, regular, velib_fan, carbon_neutral)
+    - 6 badges : 🚇 Premier trajet, 🌿 Éco-guerrier (500g CO₂), 🗺️ Explorateur (10 trajets), ⭐ Régulier (25 trajets), 🚲 Vélib' fan (3 favoris), 🌍 Carbone neutre (5kg CO₂)
+  - Hook `useDarkMode()` :
+    - Lit localStorage `urbanflow_darkMode`, applique la classe `.dark` sur `<html>`
+    - Synchronise avec la préférence système `prefers-color-scheme`
+    - Retourne `{ isDark, toggleDarkMode }` pour un contrôle programmatique
+  - Page profil réécrite :
+    - Avatar modifiable : 8 emojis (🚇🚲🚊🚈🚍🚶🌍⚡), cliquer pour ouvrir le picker, sélection persistée
+    - Nom éditable : clic sur ✏️ → champ input, Enter ou ✅ pour sauvegarder
+    - Email éditable : clic sur "Ajouter un email" → champ input, Enter ou ✅ pour sauvegarder
+    - Badges : grille 3 colonnes, emoji si débloqué 🔒 si verrouillé, compteur badges débloqués/total
+    - Équivalent CO₂ : "X km en voiture évités 🚗→🚇" (98g CO₂/km économisé vs voiture)
+    - Mode sombre : toggle fonctionnel via `useDarkMode()`, icône Soleil/Lune, texte "Mode clair"/"Mode sombre"
+    - Stats : trajets, CO₂ évité (format g/kg), favoris
+    - Mode de transport par défaut : Rapide/Éco/Économique
+    - Toggles : Notifications, Accessibilité, Mode sombre
+    - Effacer l'historique : bouton avec confirmation visuelle
+  - Bug CSS corrigé : `globals.css` avait un `::selection` dupliqué dans le bloc `.dark`, causant une erreur PostCSS `Unexpected }` à la ligne 126
+- **Vérification** : Avatar changeable (🚇→🚲), nom éditable ("Dave"), email éditable, 6 badges affichés (🔒 tant que conditions non remplies), mode sombre fonctionnel (toggle change le thème), équivalent CO₂ affiché si > 0, stats persistées en localStorage.

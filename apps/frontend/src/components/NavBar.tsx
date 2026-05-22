@@ -32,7 +32,7 @@ export default function NavBar() {
           <Link
             key={href}
             href={href}
-            className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-colors min-w-[64px] ${
+            className={`flex flex-col items-center gap-1 px-3 py-3 rounded-xl transition-colors min-w-[64px] min-h-[44px] ${
               isActive
                 ? "text-[var(--color-primary)]"
                 : "text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"

@@ -1,0 +1,205 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
+import { Cron, CronExpression } from '@nestjs/schedule';
+
+/**
+ * GTFS-RT (Realtime) Service
+ *
+ * Intègre les données temps réel :
+ * - Alertes et perturbations via API Navitia disruptions
+ * - Positions des véhicules : non disponibles (endpoint obsolète)
+ *
+ * Sources :
+ * - PRIM Navitia API : disruptions (nécessite clé API)
+ * - Fallback : données statiques GTFS si RT indisponible
+ *
+ * Note : Les anciens endpoints /v1/traffic et /v1/gtfs-rt sont obsolètes.
+ * On utilise maintenant l'API Navitia disruptions pour les alertes.
+ */
+
+export interface RealtimeAlert {
+  id: string;
+  headerText: string;
+  descriptionText?: string;
+  severity: 'info' | 'warning' | 'severe' | 'unknown';
+  affectedRoutes: string[];
+  activePeriod: { start: string; end: string }[];
+  cause?: string;
+  effect?: string;
+}
+
+export interface RealtimeVehiclePosition {
+  tripId: string;
+  routeId: string;
+  routeShortName?: string;
+  latitude: number;
+  longitude: number;
+  bearing?: number;
+  speed?: number;
+  timestamp: string;
+  stopId?: string;
+  status: 'INCOMING_AT' | 'STOPPED_AT' | 'IN_TRANSIT_TO' | 'unknown';
+}
+
+@Injectable()
+export class GtfsRtService {
+  private readonly logger = new Logger(GtfsRtService.name);
+  private readonly primApiKey: string;
+  private readonly primApiUrl: string;
+
+  /** Cache des alertes temps réel */
+  private alertsCache: RealtimeAlert[] = [];
+  private alertsLastRefresh = 0;
+  private readonly ALERTS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+  constructor(private readonly httpService: HttpService) {
+    this.primApiKey = process.env.PRIM_API_KEY || 'ccNiEkDJ8KFvcMT8lnnuGvQWuCdBjsIo';
+    this.primApiUrl = process.env.PRIM_API_URL || 'https://prim.iledefrance-mobilites.fr';
+  }
+
+  /**
+   * Récupère les alertes/perturbations temps réel
+   * Utilise l'API PRIM traffic comme source
+   */
+  async getAlerts(): Promise<RealtimeAlert[]> {
+    const now = Date.now();
+    if (this.alertsCache.length > 0 && now - this.alertsLastRefresh < this.ALERTS_CACHE_TTL_MS) {
+      return this.alertsCache;
+    }
+
+    try {
+      const alerts = await this.fetchPrimAlerts();
+      this.alertsCache = alerts;
+      this.alertsLastRefresh = now;
+      return alerts;
+    } catch (e) {
+      this.logger.warn(`Failed to fetch realtime alerts: ${e.message}`);
+      return this.alertsCache; // Return stale cache
+    }
+  }
+
+  /**
+   * Récupère les positions des véhicules temps réel
+   * L'ancien endpoint GTFS-RT protobuf de PRIM est obsolète.
+   * On retourne un tableau vide — les positions temps réel ne sont plus disponibles.
+   */
+  async getVehiclePositions(lineId?: string): Promise<RealtimeVehiclePosition[]> {
+    this.logger.warn('GTFS-RT vehicle positions unavailable: PRIM endpoint /v1/gtfs-rt is obsolete');
+    return [];
+  }
+
+  /**
+   * Statut du service GTFS-RT
+   */
+  getStatus(): { available: boolean; alertsCount: number; lastRefresh: string; source: string } {
+    return {
+      available: this.alertsCache.length > 0,
+      alertsCount: this.alertsCache.length,
+      lastRefresh: this.alertsLastRefresh ? new Date(this.alertsLastRefresh).toISOString() : 'never',
+      source: 'PRIM IDFM API',
+    };
+  }
+
+  /**
+   * Fetch alerts from PRIM API using Navitia disruptions endpoint
+   * The old /v1/traffic endpoint is obsolete.
+   */
+  private async fetchPrimAlerts(): Promise<RealtimeAlert[]> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.primApiUrl}/marketplace/v2/navitia/disruptions`, {
+          headers: { apikey: this.primApiKey },
+          timeout: 10000,
+        }),
+      );
+
+      const data = response.data;
+      if (!data || !data.disruptions) return [];
+
+      // Navitia disruptions format
+      const disruptions = data.disruptions || [];
+
+      return disruptions.slice(0, 50).map((d: any, i: number) => ({
+        id: d.id || `alert-${i}`,
+        headerText: d.messages?.[0]?.text || 'Perturbation',
+        descriptionText: d.messages?.map((m: any) => m.text).join(' — ') || undefined,
+        severity: this.mapSeverity(d.severity?.name || d.status),
+        affectedRoutes: this.extractAffectedRoutes(d),
+        activePeriod: this.extractActivePeriod(d),
+        cause: d.cause || undefined,
+        effect: d.effect || undefined,
+      }));
+    } catch (e) {
+      this.logger.warn(`PRIM Navitia disruptions API unavailable: ${e.message}`);
+      return [];
+    }
+  }
+
+  private mapSeverity(severity: string | undefined): 'info' | 'warning' | 'severe' | 'unknown' {
+    if (!severity) return 'unknown';
+    const s = severity.toLowerCase();
+    if (s.includes('bloqu') || s.includes('critical') || s.includes('severe') || s.includes('grave')) return 'severe';
+    if (s.includes('perturb') || s.includes('warning') || s.includes('important')) return 'warning';
+    if (s.includes('info') || s.includes('normal') || s.includes('info')) return 'info';
+    return 'unknown';
+  }
+
+  private extractAffectedRoutes(d: any): string[] {
+    const routes: string[] = [];
+    if (d.lignes) {
+      for (const l of d.lignes) {
+        if (l.shortName || l.name) routes.push(l.shortName || l.name);
+      }
+    }
+    if (d.lineIds) routes.push(...d.lineIds);
+    if (d.routesAffected) routes.push(...d.routesAffected);
+    return routes;
+  }
+
+  private extractActivePeriod(d: any): { start: string; end: string }[] {
+    const periods: { start: string; end: string }[] = [];
+    if (d.startDate || d.endDate) {
+      periods.push({
+        start: d.startDate || d.debut || new Date().toISOString(),
+        end: d.endDate || d.fin || new Date().toISOString(),
+      });
+    }
+    if (d.applicationPeriods) {
+      for (const p of d.applicationPeriods) {
+        periods.push({
+          start: p.begin || p.start || '',
+          end: p.end || '',
+        });
+      }
+    }
+    return periods.length > 0 ? periods : [{ start: new Date().toISOString(), end: '' }];
+  }
+
+  /**
+   * Map GTFS-RT VehiclePosition status to our enum
+   */
+  private mapVehicleStatus(
+    status: number | undefined,
+  ): 'INCOMING_AT' | 'STOPPED_AT' | 'IN_TRANSIT_TO' | 'unknown' {
+    switch (status) {
+      case 0: // INCOMING_AT
+        return 'INCOMING_AT';
+      case 1: // STOPPED_AT
+        return 'STOPPED_AT';
+      case 2: // IN_TRANSIT_TO
+        return 'IN_TRANSIT_TO';
+      default:
+        return 'unknown';
+    }
+  }
+
+  /**
+   * Cron: refresh alerts every 5 minutes
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async handleCronRefresh() {
+    this.logger.debug('Refreshing GTFS-RT alerts (cron)...');
+    await this.getAlerts().catch(() => {});
+  }
+}

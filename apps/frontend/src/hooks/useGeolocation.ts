@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { hasGeolocConsent } from "@/components/ConsentBanner";
 
 export interface GeolocationState {
   lat: number | null;
@@ -42,6 +43,16 @@ export function useGeolocation(): GeolocationState & {
 
   // ─── Position ponctuelle (getCurrentPosition) ──────────────────────
   const locate = useCallback(() => {
+    // ─── RGPD: Vérifier le consentement géolocalisation avant activation ───
+    if (!hasGeolocConsent()) {
+      setState((s) => ({
+        ...s,
+        error: "Consentement requis pour la géolocalisation. Activez-la dans les paramètres.",
+        permission: "prompt",
+      }));
+      return;
+    }
+
     if (!navigator.geolocation) {
       setState((s) => ({
         ...s,
@@ -85,6 +96,16 @@ export function useGeolocation(): GeolocationState & {
 
   // ─── Suivi continu (watchPosition) ─────────────────────────────────
   const startWatch = useCallback(() => {
+    // ─── RGPD: Vérifier le consentement géolocalisation avant activation ───
+    if (!hasGeolocConsent()) {
+      setState((s) => ({
+        ...s,
+        error: "Consentement requis pour la géolocalisation. Activez-la dans les paramètres.",
+        permission: "prompt",
+      }));
+      return;
+    }
+
     if (!navigator.geolocation) return;
 
     // Arrêter un watch existant
@@ -131,8 +152,11 @@ export function useGeolocation(): GeolocationState & {
     setState((s) => ({ ...s, watching: false }));
   }, []);
 
-  // ─── Auto-locate si permission déjà accordée ──────────────────────
+  // ─── Auto-locate si permission déjà accordée ET consentement RGPD ───
   useEffect(() => {
+    // ─── RGPD: Ne pas auto-localiser sans consentement explicite ───
+    if (!hasGeolocConsent()) return;
+
     if (navigator.permissions) {
       navigator.permissions
         .query({ name: "geolocation" as PermissionName })

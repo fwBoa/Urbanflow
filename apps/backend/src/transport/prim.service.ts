@@ -35,7 +35,7 @@ export class PrimService implements OnModuleInit {
   ) {
     this.primApiUrl = this.configService.get<string>(
       'PRIM_API_URL',
-      'https://api-lab.idfm.fr',
+      'https://prim.iledefrance-mobilites.fr',
     );
     this.primApiKey = this.configService.get<string>('PRIM_API_KEY', '');
     this.dataApiUrl = this.configService.get<string>(
@@ -75,9 +75,10 @@ export class PrimService implements OnModuleInit {
         this.httpService.get(url, config),
       );
       return response.data;
-    } catch (error) {
-      this.logger.error(`PRIM API error: ${error.message}`, error.stack);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(`PRIM API error: ${err.message}`, err.stack);
+      throw err;
     }
   }
 
@@ -96,10 +97,31 @@ export class PrimService implements OnModuleInit {
         this.httpService.get(url, config),
       );
       return response.data;
-    } catch (error) {
-      this.logger.error(`IDFM Data API error: ${error.message}`, error.stack);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(`IDFM Data API error: ${err.message}`, err.stack);
+      throw err;
     }
+  }
+
+  /**
+   * Construit les query params à partir d'un objet partiel
+   * Factorisation du pattern répété select/where/limit/offset
+   */
+  private buildQueryParams(params?: {
+    select?: string;
+    where?: string;
+    limit?: number;
+    offset?: number;
+    order_by?: string;
+  }): Record<string, string> {
+    const queryParams: Record<string, string> = {};
+    if (params?.select) queryParams.select = params.select;
+    if (params?.where) queryParams.where = params.where;
+    if (params?.limit) queryParams.limit = String(params.limit);
+    if (params?.offset) queryParams.offset = String(params.offset);
+    if (params?.order_by) queryParams.order_by = params.order_by;
+    return queryParams;
   }
 
   // ─── Référentiel des lignes (F1) ──────────────────────────────────────
@@ -114,16 +136,9 @@ export class PrimService implements OnModuleInit {
     limit?: number;
     offset?: number;
   }): Promise<any> {
-    const queryParams: Record<string, string> = {};
-
-    if (params?.select) queryParams.select = params.select;
-    if (params?.where) queryParams.where = params.where;
-    if (params?.limit) queryParams.limit = String(params.limit);
-    if (params?.offset) queryParams.offset = String(params.offset);
-
     return this.callDataApi(
       '/catalog/datasets/referentiel-des-lignes/records',
-      queryParams,
+      this.buildQueryParams(params),
     );
   }
 
@@ -139,16 +154,9 @@ export class PrimService implements OnModuleInit {
     limit?: number;
     offset?: number;
   }): Promise<any> {
-    const queryParams: Record<string, string> = {};
-
-    if (params?.select) queryParams.select = params.select;
-    if (params?.where) queryParams.where = params.where;
-    if (params?.limit) queryParams.limit = String(params.limit);
-    if (params?.offset) queryParams.offset = String(params.offset);
-
     return this.callDataApi(
       '/catalog/datasets/arrets/records',
-      queryParams,
+      this.buildQueryParams(params),
     );
   }
 
@@ -162,16 +170,9 @@ export class PrimService implements OnModuleInit {
     limit?: number;
     offset?: number;
   }): Promise<any> {
-    const queryParams: Record<string, string> = {};
-
-    if (params?.select) queryParams.select = params.select;
-    if (params?.where) queryParams.where = params.where;
-    if (params?.limit) queryParams.limit = String(params.limit);
-    if (params?.offset) queryParams.offset = String(params.offset);
-
     return this.callDataApi(
       '/catalog/datasets/arrets-lignes/records',
-      queryParams,
+      this.buildQueryParams(params),
     );
   }
 
@@ -187,16 +188,9 @@ export class PrimService implements OnModuleInit {
     limit?: number;
     offset?: number;
   }): Promise<any> {
-    const queryParams: Record<string, string> = {};
-
-    if (params?.select) queryParams.select = params.select;
-    if (params?.where) queryParams.where = params.where;
-    if (params?.limit) queryParams.limit = String(params.limit);
-    if (params?.offset) queryParams.offset = String(params.offset);
-
     return this.callDataApi(
       '/catalog/datasets/actualites/records',
-      queryParams,
+      this.buildQueryParams(params),
     );
   }
 
@@ -274,16 +268,9 @@ export class PrimService implements OnModuleInit {
     limit?: number;
     offset?: number;
   }): Promise<any> {
-    const queryParams: Record<string, string> = {};
-
-    if (params?.select) queryParams.select = params.select;
-    if (params?.where) queryParams.where = params.where;
-    if (params?.limit) queryParams.limit = String(params.limit);
-    if (params?.offset) queryParams.offset = String(params.offset);
-
     return this.callDataApi(
       '/catalog/datasets/jcdecaux-bike-stations-data/records',
-      queryParams,
+      this.buildQueryParams(params),
     );
   }
 
@@ -372,7 +359,7 @@ export class PrimService implements OnModuleInit {
         };
       });
     } catch (error) {
-      this.logger.warn(`Paris Open Data API error: ${error.message}`);
+      this.logger.warn(`Paris Open Data API error: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     // Trier par distance et limiter
@@ -420,16 +407,9 @@ export class PrimService implements OnModuleInit {
     limit?: number;
     offset?: number;
   }): Promise<any> {
-    const queryParams: Record<string, string> = {};
-
-    if (params?.select) queryParams.select = params.select;
-    if (params?.where) queryParams.where = params.where;
-    if (params?.limit) queryParams.limit = String(params.limit);
-    if (params?.offset) queryParams.offset = String(params.offset);
-
     return this.callDataApi(
       '/catalog/datasets/etat-des-ascenseurs/records',
-      queryParams,
+      this.buildQueryParams(params),
     );
   }
 
@@ -438,17 +418,21 @@ export class PrimService implements OnModuleInit {
   /**
    * URL de téléchargement du GTFS statique (offre horaires)
    * Nécessite une clé API PRIM
+   * Note: l'ancien endpoint /v1/gtfs/static/download est obsolète.
+   * On utilise maintenant le portail data.iledefrance-mobilites.fr
    */
   getGtfsStaticDownloadUrl(): string {
-    return `${this.primApiUrl}/gtfs/v1/idfm-gtfs-static.zip`;
+    return 'https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/offre-horaires-tc-gtfs-idfm/exports/zip';
   }
 
   /**
    * URL du flux GTFS-RT (temps réel)
    * Nécessite une clé API PRIM
+   * Note: l'ancien endpoint /v1/gtfs-rt est obsolète.
+   * On utilise maintenant l'API Navitia disruptions comme fallback
    */
   getGtfsRtFeedUrl(): string {
-    return `${this.primApiUrl}/gtfs-rt/v1`;
+    return `${this.primApiUrl}/marketplace/v2/navitia/disruptions`;
   }
 
   // ─── Geocoding — Recherche d'adresses (data.gouv.fr) ────────────────
@@ -475,14 +459,20 @@ export class PrimService implements OnModuleInit {
     try {
       // 1) Essai avec type=housenumber (adresse précise)
       let response = await firstValueFrom(
-        this.httpService.get(url, { params: { ...baseParams, type: 'housenumber' } }),
+        this.httpService.get(url, {
+          params: { ...baseParams, type: 'housenumber' },
+          timeout: 5000, // 5s timeout
+        }),
       );
       let features = response.data?.features || [];
 
       // 2) Si aucun résultat, réessayer sans filtre de type (rues, lieux)
       if (features.length === 0) {
         response = await firstValueFrom(
-          this.httpService.get(url, { params: baseParams }),
+          this.httpService.get(url, {
+            params: baseParams,
+            timeout: 5000,
+          }),
         );
         features = response.data?.features || [];
       }
@@ -498,9 +488,11 @@ export class PrimService implements OnModuleInit {
         geometry: f.geometry || {},
       }));
       return { total_count: results.length, results };
-    } catch (error) {
-      this.logger.error(`Geocoding API error: ${error.message}`, error.stack);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.warn(`Geocoding API error (${err.message}) — returning empty results`);
+      // Return empty results instead of throwing — geocoding is non-critical
+      return { total_count: 0, results: [] };
     }
   }
 
@@ -536,8 +528,9 @@ export class PrimService implements OnModuleInit {
         housenumber: f.properties?.housenumber || '',
         street: f.properties?.street || '',
       };
-    } catch (error) {
-      this.logger.error(`Reverse geocoding API error: ${error.message}`, error.stack);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(`Reverse geocoding API error: ${err.message}`, err.stack);
       // Fallback : retourner les coordonnées brutes
       return { label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`, type: 'coordinates', city: '', postcode: '' };
     }
@@ -628,7 +621,7 @@ export class PrimService implements OnModuleInit {
           lines: topLines,
         });
       } catch (error) {
-        this.logger.warn(`Failed to fetch mode ${key}: ${error.message}`);
+        this.logger.warn(`Failed to fetch mode ${key}: ${error instanceof Error ? error.message : String(error)}`);
         modes.push({
           key,
           label: config.label,

@@ -17,18 +17,23 @@ export default function SearchBar({
 }: SearchBarProps) {
   return (
     <div className="relative">
+      <label htmlFor="search-input" className="sr-only">
+        Rechercher un itinéraire
+      </label>
       <Search
         size={18}
         className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
+        aria-hidden="true"
       />
       <input
+        id="search-input"
         type="text"
         value={value}
         onChange={(e) => onChange?.(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && onSubmit?.()}
         placeholder={placeholder}
         className="w-full h-[52px] pl-12 pr-4 rounded-[var(--cta-radius)] bg-[var(--color-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-border-focus)] focus:ring-2 focus:ring-[var(--color-primary)]/20 transition-all"
-        aria-label={placeholder}
+        aria-label="Rechercher un itinéraire"
       />
     </div>
   );

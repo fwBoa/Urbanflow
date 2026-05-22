@@ -1,7 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as AdmZip from 'adm-zip';
+import { ConfigService } from '@nestjs/config';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 
 // Workaround: adm-zip default export needs .default in ESM/TS contexts
 const AdmZipClass = (AdmZip as any).default || AdmZip;
@@ -141,14 +144,125 @@ export interface GtfsIndex {
  * 4. Expose les données via des méthodes de recherche
  */
 @Injectable()
-export class GtfsParserService {
+export class GtfsParserService implements OnModuleInit {
   private readonly logger = new Logger(GtfsParserService.name);
   private readonly dataDir: string;
   private index: GtfsIndex | null = null;
   private lastLoadTime: Date | null = null;
+  private loading = false;
 
-  constructor() {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly httpService: HttpService,
+  ) {
     this.dataDir = path.join(process.cwd(), 'data', 'gtfs');
+  }
+
+  /**
+   * Auto-load GTFS data at startup
+   * Downloads the PRIM GTFS ZIP if not cached, then parses it
+   */
+  async onModuleInit() {
+    this.logger.log('GtfsParserService initializing — attempting GTFS auto-load...');
+    try {
+      await this.downloadAndLoad();
+    } catch (error) {
+      this.logger.warn(`GTFS auto-load failed: ${error instanceof Error ? error.message : error}. Journey planning will use fallback data.`);
+      // Don't crash — fallback journey data will be used
+    }
+  }
+
+  /**
+   * Download GTFS ZIP from PRIM and load it
+   */
+  async downloadAndLoad(): Promise<void> {
+    if (this.loading) {
+      this.logger.log('GTFS download already in progress, skipping...');
+      return;
+    }
+    this.loading = true;
+
+    try {
+      const apiKey = this.configService.get<string>('PRIM_API_KEY') || 'ccNiEkDJ8KFvcMT8lnnuGvQWuCdBjsIo';
+
+      // Try multiple GTFS sources in order
+      const gtfsSources: Array<{ name: string; url: string; headers: Record<string, string> }> = [
+        // Data portal (IDFM) — URL actuelle fonctionnelle
+        {
+          name: 'Data portal (IDFM)',
+          url: 'https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/offre-horaires-tc-gtfs-idfm/exports/zip',
+          headers: {},
+        },
+        // PRIM API (direct) — endpoint obsolète, gardé en fallback
+        {
+          name: 'PRIM API (direct - obsolete)',
+          url: 'https://prim.iledefrance-mobilites.fr/v1/gtfs/static/download',
+          headers: { apikey: apiKey },
+        },
+      ];
+
+      // Ensure data directory exists
+      const zipDir = path.join(this.dataDir, 'downloads');
+      if (!fs.existsSync(zipDir)) {
+        fs.mkdirSync(zipDir, { recursive: true });
+      }
+
+      const zipPath = path.join(zipDir, 'idfm-gtfs-static.zip');
+
+      // Check if we have a recent cache (less than 8 hours old)
+      if (fs.existsSync(zipPath)) {
+        const stats = fs.statSync(zipPath);
+        const ageMs = Date.now() - stats.mtimeMs;
+        const maxAgeMs = 8 * 60 * 60 * 1000; // 8 hours
+        if (ageMs < maxAgeMs && stats.size > 1000000) {
+          // At least 1MB to be valid
+          this.logger.log(`Using cached GTFS ZIP (${Math.round(ageMs / 60000)} minutes old, ${(stats.size / 1024 / 1024).toFixed(1)} MB)`);
+          await this.loadFromZip(zipPath);
+          return;
+        }
+        this.logger.log(`Cached GTFS ZIP is ${Math.round(ageMs / 3600000)} hours old, re-downloading...`);
+      }
+
+      // Try each source
+      let downloaded = false;
+      for (const source of gtfsSources) {
+        try {
+          this.logger.log(`Trying GTFS source: ${source.name}...`);
+          const response = await firstValueFrom(
+            this.httpService.get(source.url, {
+              responseType: 'arraybuffer',
+              headers: source.headers,
+              timeout: 180000, // 3 minutes timeout (GTFS files can be large)
+              maxRedirects: 5,
+            }),
+          );
+
+          if (response.data && response.data.byteLength > 1000000) {
+            fs.writeFileSync(zipPath, Buffer.from(response.data));
+            const sizeMB = (response.data.byteLength / 1024 / 1024).toFixed(1);
+            this.logger.log(`GTFS ZIP downloaded from ${source.name} (${sizeMB} MB)`);
+            downloaded = true;
+            break;
+          } else {
+            this.logger.warn(`GTFS ZIP from ${source.name} too small (${response.data?.byteLength || 0} bytes), trying next source...`);
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to download from ${source.name}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+
+      if (!downloaded) {
+        throw new Error('All GTFS download sources failed');
+      }
+
+      // Load the data
+      await this.loadFromZip(zipPath);
+    } catch (error) {
+      this.logger.error(`Failed to download GTFS: ${error instanceof Error ? error.message : error}`);
+      throw error;
+    } finally {
+      this.loading = false;
+    }
   }
 
   /**
@@ -428,6 +542,19 @@ export class GtfsParserService {
    */
   getLastLoadTime(): Date | null {
     return this.lastLoadTime;
+  }
+
+  /**
+   * Retourne des statistiques sur les données GTFS chargées
+   */
+  getStats(): { stops: number; routes: number; trips: number; agencies: number } | null {
+    if (!this.index) return null;
+    return {
+      stops: this.index.stopsById.size,
+      routes: this.index.routesById.size,
+      trips: this.index.tripsByRoute.size,
+      agencies: this.index.agenciesById.size,
+    };
   }
 
   /**

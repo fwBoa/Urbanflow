@@ -38,6 +38,9 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Skip chrome-extension:// and other non-http(s) schemes
+  if (!url.protocol.startsWith("http")) return;
+
   // Skip non-GET requests
   if (request.method !== "GET") return;
 
@@ -87,7 +90,7 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-function isCacheable(request: Request): boolean {
+function isCacheable(request) {
   const url = new URL(request.url);
   const ext = url.pathname.split(".").pop() || "";
   const cacheableExtensions = [

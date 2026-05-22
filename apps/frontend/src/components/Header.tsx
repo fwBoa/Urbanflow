@@ -21,7 +21,7 @@ export default function Header({ title, showBack = false, rightAction }: HeaderP
         {showBack && (
           <button
             onClick={() => router.back()}
-            className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/10 transition-colors"
+            className="flex items-center justify-center w-11 h-11 rounded-full hover:bg-white/10 transition-colors"
             aria-label="Retour"
           >
             <ArrowLeft size={22} />

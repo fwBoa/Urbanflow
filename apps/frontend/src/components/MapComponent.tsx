@@ -87,6 +87,20 @@ export default function MapComponent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Recenter map when center prop changes (but not on initial mount)
+  const prevCenterRef = useRef(center);
+  useEffect(() => {
+    if (!map) return;
+    const prev = prevCenterRef.current;
+    const latDiff = Math.abs(center[0] - prev[0]);
+    const lonDiff = Math.abs(center[1] - prev[1]);
+    // Only recenter if significant change (> 0.001° ≈ 100m)
+    if (latDiff > 0.001 || lonDiff > 0.001) {
+      map.panTo(center);
+      prevCenterRef.current = center;
+    }
+  }, [map, center]);
+
   const routeMarkersRef = useRef<L.Marker[]>([]);
   const velibMarkersRef = useRef<L.Marker[]>([]);
 
@@ -133,18 +147,11 @@ export default function MapComponent({
 
     if (showVelib && velibStations.length > 0) {
       velibStations.forEach((station) => {
-        const ratio =
-          station.available_bike_stands > 0
-            ? station.available_bikes / (station.available_bikes + station.available_bike_stands)
-            : 0;
-        const color =
-          ratio > 0.5 ? "var(--color-eco-green)" : ratio > 0.2 ? "var(--color-mobility-orange)" : "var(--color-favorite-red)";
-
         const icon = L.divIcon({
           className: "velib-marker",
           html: `<div style="
             width: 22px; height: 22px; border-radius: 50%;
-            background: ${color}; border: 2px solid white;
+            background: var(--color-primary); border: 2px solid white;
             box-shadow: 0 1px 4px rgba(0,0,0,0.3);
             display: flex; align-items: center; justify-content: center;
             color: white; font-size: 10px; font-weight: 700;
@@ -155,9 +162,7 @@ export default function MapComponent({
 
         const marker = L.marker([station.position.lat, station.position.lon], { icon })
           .addTo(map)
-          .bindPopup(
-            `<strong>${station.name}</strong><br/>🚲 ${station.available_bikes} vélos disponibles<br/>🅿️ ${station.available_bike_stands} places libres`
-          );
+          .bindPopup(`<strong>${station.name}</strong>`);
         velibMarkersRef.current.push(marker);
       });
     }
