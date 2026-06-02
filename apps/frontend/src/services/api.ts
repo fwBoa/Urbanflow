@@ -251,6 +251,18 @@ class ApiService {
     return this.fetch(`/api/transport/route?${query.toString()}`);
   }
 
+  // ─── Nearby stops ─────────────────────────────────────────────────
+  async getNearbyStops(
+    lat: number,
+    lon: number,
+    radiusKm = 0.5,
+    limit = 10,
+  ): Promise<{ stops: Array<{ id: string; name: string; lat: number; lon: number; lines: Array<{ id: string; name: string; color: string }> }> }> {
+    return this.fetch(
+      `/api/transport/nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`
+    );
+  }
+
   // ─── Journey ──────────────────────────────────────────────────────
   async searchJourney(params: {
     originLat: number;

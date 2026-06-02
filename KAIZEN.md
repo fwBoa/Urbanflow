@@ -188,7 +188,7 @@ Méthode : Observer → Analyser → Agir → Vérifier → Standardiser
     - Nom éditable : clic sur ✏️ → champ input, Enter ou ✅ pour sauvegarder
     - Email éditable : clic sur "Ajouter un email" → champ input, Enter ou ✅ pour sauvegarder
     - Badges : grille 3 colonnes, emoji si débloqué 🔒 si verrouillé, compteur badges débloqués/total
-    - Équivalent CO₂ : "X km en voiture évités 🚗→🚇" (98g CO₂/km économisé vs voiture)
+    - Équivalent CO₂ : "X km en voiture évités 🚗→🚇" (170g CO₂/km — facteur ADEME voiture IDF 1 passager)
     - Mode sombre : toggle fonctionnel via `useDarkMode()`, icône Soleil/Lune, texte "Mode clair"/"Mode sombre"
     - Stats : trajets, CO₂ évité (format g/kg), favoris
     - Mode de transport par défaut : Rapide/Éco/Économique
@@ -196,3 +196,50 @@ Méthode : Observer → Analyser → Agir → Vérifier → Standardiser
     - Effacer l'historique : bouton avec confirmation visuelle
   - Bug CSS corrigé : `globals.css` avait un `::selection` dupliqué dans le bloc `.dark`, causant une erreur PostCSS `Unexpected }` à la ligne 126
 - **Vérification** : Avatar changeable (🚇→🚲), nom éditable ("Dave"), email éditable, 6 badges affichés (🔒 tant que conditions non remplies), mode sombre fonctionnel (toggle change le thème), équivalent CO₂ affiché si > 0, stats persistées en localStorage.
+
+## Bloc 13 — GTFS Streaming Parser (fix crash mémoire)
+- **Problème** : Le backend crashait avec `FATAL ERROR: Ineffective mark-compacts near heap limit` lors du parsing de `stop_times.txt` (737 MB, 8.2M lignes). Le fichier entier était lu en mémoire via `fs.readFileSync` puis découpé en un tableau de 8.2M objets (~2 GB), dépassant la limite V8 (~2 GB).
+- **Origine** : `parseFile<T>()` utilisait `fs.readFileSync(filePath, 'utf-8')` qui charge tout en RAM. `shapes.txt` (126 MB de points GPS) était aussi parsé inutilement.
+- **Solution** :
+  - Parser `readline` streaming : `fs.createReadStream` + `readline.createInterface` pour lire ligne par ligne sans jamais stocker le fichier entier
+  - Skip `shapes.txt` : fichier optionnel de 126 MB non nécessaire au routing RAPTOR
+  - Parsing incrémental pour `stop_times.txt` et `transfers.txt` : `parseFileIncremental<T>(filePath, onRecord)` qui appelle un callback par ligne sans tableau intermédiaire
+  - `NODE_OPTIONS: --max-old-space-size=3584` dans `docker-compose.yml`
+- **Vérification** : `docker logs urbanflow-api` affiche `Parsed 8205509 records from stop_times.txt` puis `GTFS data loaded in 83165ms` sans crash.
+
+## Bloc 14 — Optimisation RAPTOR (O(n²) → O(1))
+- **Problème** : Le calcul d'itinéraire timeout après >60s. `getNextDepartures()` faisait une boucle imbriquée catastrophique : pour chaque départ d'un arrêt, elle scannait toutes les 2 011 routes × ~200 trips/route pour trouver le `trip_id`.
+- **Origine** : Recherche `trip_id` via `tripsByRoute` (Map<string, GtfsTrip[]> → `trips.find(t => t.trip_id === st.trip_id)`). Avec 1 000+ départs par arrêt, cela faisait ~400M opérations.
+- **Solution** :
+  - Index `tripsById: Map<string, GtfsTrip>` ajouté dans `GtfsIndex` et alimenté dans `buildIndex()`
+  - `getNextDepartures()` : remplacement de la boucle `for (const [, trips] of index.tripsByRoute)` par `index.tripsById.get(st.trip_id)` — recherche O(1)
+  - `getRoutesForStop()` : même optimisation
+  - `raptorSearch()` : remplacement de `findStopsNearby()` (scan de 54K arrêts × N rounds) par `transfers.txt` pré-calculé dans le GTFS — O(1) lookup
+- **Vérification** : `curl /api/transport/journey?originLat=48.8566&originLon=2.3522&destLat=48.8738&destLon=2.2950` retourne un itinéraire en <5s au lieu de timeout.
+
+## Bloc 15 — Geocoding Paris + Recherche GTFS
+- **Problème** : La recherche d'adresses retournait des résultats hors Paris (ex: "Gare du Nord" à Saint-Aubert 59188). L'utilisateur cliquait sur la mauvaise suggestion et l'itinéraire partait dans le Nord de la France.
+- **Origine** : L'API `api-adresse.data.gouv.fr` cherche dans toute la France. Aucun filtre géographique ni privilège pour Paris.
+- **Solution** :
+  - Endpoint `GET /api/transport/gtfs-stops/search?q=...` : recherche floue dans les 54K arrêts GTFS locaux (O(n) sur `stop_name`)
+  - Endpoint `/api/transport/geocode` enrichi : fusionne les résultats GTFS parisiens (score 0.95) + data.gouv.fr filtré sur `postcode.startsWith('75') || city === 'Paris'`
+  - Deux passes : `city=Paris` d'abord, puis fallback sans filtre mais rejet des résultats hors Paris
+- **Vérification** : `curl /api/transport/geocode?q=Gare+du+Nord` retourne "Gare du Nord" (Paris 48.88, 2.35) en premier, pas Saint-Aubert.
+
+## Bloc 16 — Arrêts proches par position GPS
+- **Problème** : Aucun moyen de découvrir les transports disponibles autour de sa position. L'utilisateur devait connaître le nom exact de l'arrêt.
+- **Origine** : Le frontend n'appelait aucun endpoint de proximité. La recherche était purement textuelle.
+- **Solution** :
+  - Endpoint `GET /api/transport/nearby?lat=...&lon=...&radius=...&limit=...` : utilise `findStopsNearby()` + `getRoutesForStop()` pour enrichir chaque arrêt avec ses lignes
+  - Hook `useNearbyStops(lat, lon, radiusKm, limit)` dans `useTransport.ts`
+  - UI "🚉 Autour de vous" dans `search/page.tsx` : pills horizontales scrollables, cliquables → remplissage auto du champ départ
+- **Vérification** : Appui sur GPS dans la page Recherche → section "Autour de vous" avec arrêts et lignes (ex: Hôtel de Ville, Métro 1, Bus 96).
+
+## Bloc 17 — Persistance Docker GTFS + Heap
+- **Problème** : Chaque `docker compose up --build` perdait le ZIP GTFS téléchargé (106 MB) → re-téléchargement obligatoire (~10-30s). Le parsing redémarrait à zéro.
+- **Origine** : Le dossier `/app/data/gtfs` dans le conteneur était éphémère (couche writable non persistée).
+- **Solution** :
+  - Volume Docker `gtfs_data:/app/data/gtfs` dans `docker-compose.yml`
+  - Le ZIP est conservé entre les rebuilds → `Using cached GTFS ZIP` au lieu de `Downloading...`
+  - Heap Node.js passé à 3.5 GB (`--max-old-space-size=3584`) pour éviter les OOM pendant `buildIndex` avec 8M stop_times
+- **Vérification** : Deux rebuilds successifs → le second affiche "Using cached GTFS ZIP" et démarre en ~80s au lieu de 5 min.

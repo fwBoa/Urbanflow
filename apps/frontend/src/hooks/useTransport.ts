@@ -300,6 +300,33 @@ export function useHealthCheck() {
   return { status, loading };
 }
 
+// ─── Nearby stops ──────────────────────────────────────────────────
+export interface NearbyStop {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  lines: Array<{ id: string; name: string; color: string }>;
+}
+
+export function useNearbyStops(lat: number | null, lon: number | null, radiusKm = 0.5, limit = 10) {
+  const { data: result, loading, error } = useApiData<{ stops: NearbyStop[] }>(
+    () => {
+      if (lat === null || lon === null) return Promise.resolve({ stops: [] });
+      return apiService.getNearbyStops(lat, lon, radiusKm, limit);
+    },
+    { stops: [] },
+    [lat, lon, radiusKm, limit],
+    false,
+  );
+
+  if (lat === null || lon === null) {
+    return { stops: [] as NearbyStop[], loading: false, error: null };
+  }
+
+  return { stops: result?.stops || [], loading, error };
+}
+
 // ─── Journey search ────────────────────────────────────────────────
 export function useJourney(
   origin: { lat: number; lon: number } | null,

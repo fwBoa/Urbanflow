@@ -166,6 +166,48 @@ export class TransportController {
     );
   }
 
+  // ─── Arrêts de transport proches (F4) ────────────────────────────────
+
+  @Get('nearby')
+  async getNearbyStops(
+    @Query('lat') lat?: string,
+    @Query('lon') lon?: string,
+    @Query('radius') radius?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!lat || !lon) {
+      throw new HttpException(
+        'Query parameters "lat" and "lon" are required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const radiusKm = radius ? parseFloat(radius) : 0.5;
+    const maxResults = limit ? parseInt(limit, 10) : 10;
+
+    const nearby = this.gtfsParser.findStopsNearby(
+      parseFloat(lat),
+      parseFloat(lon),
+      radiusKm,
+    ).slice(0, maxResults);
+
+    const enriched = nearby.map((stop) => {
+      const routes = this.gtfsParser.getRoutesForStop(stop.stop_id);
+      return {
+        id: stop.stop_id,
+        name: stop.stop_name,
+        lat: stop.stop_lat,
+        lon: stop.stop_lon,
+        lines: routes.map((r) => ({
+          id: r.route_id,
+          name: r.route_short_name || r.route_long_name,
+          color: r.route_color ? `#${r.route_color}` : '999999',
+        })),
+      };
+    });
+
+    return { stops: enriched };
+  }
+
   // ─── Ascenseurs / Accessibilité (F1, C7) ──────────────────────────────
 
   @Get('elevators')
@@ -215,7 +257,34 @@ export class TransportController {
     }
   }
 
-  // ─── Geocoding — Recherche d'adresses (F2, F3) ────────────────────────
+  // ─── Recherche d'arrêts GTFS par nom ──────────────────────────────────
+
+  @Get('gtfs-stops/search')
+  async searchGtfsStops(
+    @Query('q') query?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!query) {
+      throw new HttpException(
+        'Query parameter "q" is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const stops = this.gtfsParser.searchStopsByName(query, limit ? parseInt(limit, 10) : 10);
+    return {
+      total_count: stops.length,
+      results: stops.map((s) => ({
+        id: s.stop_id,
+        name: s.stop_name,
+        lat: s.stop_lat,
+        lon: s.stop_lon,
+        type: s.location_type === 1 ? 'station' : 'stop',
+        platform: s.platform_code,
+      })),
+    };
+  }
+
+  // ─── Geocoding — Recherche d'adresses + arrêts GTFS (F2, F3) ─────────
 
   @Get('geocode')
   async geocode(
@@ -228,7 +297,27 @@ export class TransportController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    return this.primService.geocode(query, limit ? parseInt(limit, 10) : 5);
+    const geoResults = await this.primService.geocode(query, limit ? parseInt(limit, 10) : 5);
+
+    // Enrichir avec les arrêts GTFS locaux (gares, stations de métro…)
+    const gtfsStops = this.gtfsParser.searchStopsByName(query, limit ? parseInt(limit, 10) : 5);
+    const gtfsResults = gtfsStops.map((s) => ({
+      label: s.stop_name,
+      score: 0.95,
+      type: 'gtfs_stop',
+      city: 'Paris',
+      postcode: '75000',
+      context: '75, Paris, Île-de-France',
+      geometry: {
+        type: 'Point',
+        coordinates: [s.stop_lon, s.stop_lat],
+      },
+      gtfsStopId: s.stop_id,
+    }));
+
+    // Fusionner : arrêts GTFS en premier (plus pertinents pour les transports)
+    const allResults = [...gtfsResults, ...geoResults.results];
+    return { total_count: allResults.length, results: allResults.slice(0, limit ? parseInt(limit, 10) : 5) };
   }
 
   // ─── Reverse Geocoding — Coordonnées → adresse (F6) ──────────────────

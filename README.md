@@ -26,17 +26,21 @@ urbanflow/
 │   │   │   │   ├── trip/[id]/page.tsx  # Détail itinéraire + mode navigation + détails enrichis (direction, quai, attente)
 │   │   │   │   ├── favorites/page.tsx  # Favoris & historique
 │   │   │   │   └── profile/page.tsx    # Profil utilisateur
-│   │   │   ├── components/            # 10 composants réutilisables
+│   │   │   ├── components/            # 13 composants réutilisables
 │   │   │   │   ├── NavBar.tsx          # Navigation basse
 │   │   │   │   ├── Header.tsx          # En-tête
 │   │   │   │   ├── AppShell.tsx        # Layout wrapper
-│   │   │   │   ├── TransportCard.tsx   # Carte mode transport
+│   │   │   │   ├── TransportCard.tsx   # Carte mode transport (⚠️ inutilisé — voir cleanup)
 │   │   │   │   ├── CO2Badge.tsx        # Badge émissions CO2
 │   │   │   │   ├── TripCard.tsx        # Carte résultat trajet
 │   │   │   │   ├── SearchBar.tsx        # Champ de recherche
 │   │   │   │   ├── FilterChip.tsx      # Chips de filtre
 │   │   │   │   ├── MapComponent.tsx    # Carte Leaflet interactive
-│   │   │   │   └── DynamicMap.tsx      # Wrapper next/dynamic (SSR off)
+│   │   │   │   ├── DynamicMap.tsx      # Wrapper next/dynamic (SSR off)
+│   │   │   │   ├── VelibStationCard.tsx # Carte station Vélib'
+│   │   │   │   ├── NotificationBell.tsx  # Cloche notifications
+│   │   │   │   ├── ServiceWorkerRegistration.tsx # Enregistrement SW PWA
+│   │   │   │   └── ConsentBanner.tsx   # Bannière consentement RGPD
 │   │   │   ├── hooks/
 │   │   │   │   ├── useTransport.ts     # Hooks React (useLines, useStopSearch, useGeocode, useReverseGeocode, useJourney, etc.)
 │   │   │   │   ├── useLocalStorage.ts  # Hook localStorage typé
@@ -48,10 +52,13 @@ urbanflow/
 │   └── backend/           # NestJS (port 4000)
 │       └── src/transport/ # Module Transport PRIM
 │           ├── prim.service.ts        # Appels API PRIM + geocoding + reverse-geocoding data.gouv.fr
-│           ├── gtfs-parser.service.ts  # Parsing GTFS statiques
-│           ├── journey.service.ts      # Calcul d'itinéraires
+│           ├── gtfs-parser.service.ts  # Parsing GTFS statiques (streaming, index optimisé)
+│           ├── journey.service.ts      # Calcul d'itinéraires (RAPTOR + fallback)
+│           ├── gtfs-rt.service.ts      # GTFS-RT temps réel (alertes, perturbations)
+│           ├── gbfs.service.ts         # GBFS trottinettes/vélos partagés
+│           ├── osrm.service.ts         # Routing OSRM (polyline réelle)
 │           ├── carbon.service.ts       # Empreinte CO2 (ADEME)
-│           ├── transport.controller.ts # Endpoints REST (journey enrichi, reverse-geocode)
+│           ├── transport.controller.ts # Endpoints REST (20+ routes)
 │           └── transport.module.ts      # Module NestJS
 ├── packages/
 │   └── shared/            # Types et constantes partagés (GTFS/PRIM)
@@ -68,16 +75,27 @@ urbanflow/
 | Endpoint | Description |
 |---|---|
 | `GET /api/transport/health` | Vérification connexion PRIM |
+| `GET /api/transport/modes` | Modes de transport avec compteurs dynamiques |
 | `GET /api/transport/lines` | Référentiel des lignes |
-| `GET /api/transport/stops` | Référentiel des arrêts |
+| `GET /api/transport/lines-by-mode` | Lignes groupées par mode (Métro, RER, Tram…) |
+| `GET /api/transport/stops` | Référentiel des arrêts PRIM (toute l'IDF) |
+| `GET /api/transport/gtfs-stops/search?q=...&limit=N` | Recherche d'arrêts GTFS par nom (Paris uniquement) |
+| `GET /api/transport/nearby?lat=...&lon=...&radius=...&limit=...` | Arrêts proches avec lignes desservies |
 | `GET /api/transport/stop-lines` | Arrêts et lignes associées |
 | `GET /api/transport/traffic` | Perturbations / infos trafic |
 | `GET /api/transport/velib` | Stations Vélib' temps réel |
+| `GET /api/transport/velib-nearby?lat=...&lon=...` | Stations Vélib' proches (Open Data Paris) |
+| `GET /api/transport/shared-vehicles?lat=...&lon=...` | Trottinettes/vélos libres (GBFS) |
 | `GET /api/transport/elevators` | État des ascenseurs |
 | `GET /api/transport/gtfs-url` | URLs de téléchargement GTFS |
-| `GET /api/transport/geocode?q=...&limit=N` | Recherche d'adresses (data.gouv.fr, centré Île-de-France) |
+| `GET /api/transport/gtfs-status` | Statut du chargement GTFS (loaded, stats) |
+| `POST /api/transport/gtfs-reload` | Rechargement manuel du GTFS |
+| `GET /api/transport/geocode?q=...&limit=N` | Recherche d'adresses (Paris uniquement) + arrêts GTFS |
 | `GET /api/transport/reverse-geocode?lat=...&lon=...` | Géocodage inverse — coordonnées → adresse lisible |
-| `GET /api/transport/journey?originLat=...&originLon=...&destLat=...&destLon=...` | Calcul d'itinéraire multimodal (avec détails : direction, quai, attente) |
+| `GET /api/transport/realtime-alerts` | Alertes et perturbations temps réel |
+| `GET /api/transport/realtime-status` | Statut du service GTFS-RT |
+| `GET /api/transport/journey?originLat=...&originLon=...&destLat=...&destLon=...&departureTime=...&modes=...` | Calcul d'itinéraire multimodal (RAPTOR + GTFS réel) |
+| `GET /api/transport/route?originLat=...&originLon=...&destLat=...&destLon=...` | Routing OSRM (polyline réelle) |
 
 ## Démarrage rapide
 
@@ -122,6 +140,29 @@ La base est initialisée automatiquement via `docker/init-db.sql` avec les table
 | Frontend (Next.js) | 3001 |
 | Backend (NestJS) | 4000 |
 | PostgreSQL | 5432 |
+
+## Empreinte carbone
+
+Les calculs CO2 utilisent les **facteurs d'emission ADEME Base Carbone v2024** (`https://base-empreinte.ademe.fr/`).
+
+| Mode | Facteur (gCO2/km/passager) |
+|---|---|
+| Métro | 3.8 |
+| RER / Transilien / Train | 5.2 |
+| Tramway | 3.2 |
+| Bus | 95.0 |
+| Bus électrique | 30.0 |
+| Trolleybus | 25.0 |
+| Vélo mécanique (Vélib') | 0 |
+| Vélo électrique | 5.0 |
+| Marche | 0 |
+| Voiture (1 passager, moyenne IDF) | 170.0 |
+| Covoiturage (2 passagers) | 85.0 |
+| Trottinette électrique | 35.0 |
+| Funiculaire | 10.0 |
+| Navette fluviale | 15.0 |
+
+Formule : `emissionsGco2 = factor * distanceKm`
 
 ## Scripts utiles
 

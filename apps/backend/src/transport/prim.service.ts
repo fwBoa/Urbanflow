@@ -451,34 +451,49 @@ export class PrimService implements OnModuleInit {
     const url = 'https://api-adresse.data.gouv.fr/search';
     const baseParams: Record<string, string> = {
       q: query,
-      limit: String(limit),
+      limit: '20',      // Demander plus pour pouvoir filtrer
       lat: '48.8566',   // Centre Paris
       lon: '2.3522',
     };
 
+    const isParisResult = (f: any) => {
+      const postcode = String(f.properties?.postcode || '');
+      const city = String(f.properties?.city || '').toLowerCase();
+      return postcode.startsWith('75') || city === 'paris';
+    };
+
     try {
-      // 1) Essai avec type=housenumber (adresse précise)
+      // 1) Essai avec city=Paris (privilégie les adresses parisiennes)
       let response = await firstValueFrom(
         this.httpService.get(url, {
-          params: { ...baseParams, type: 'housenumber' },
-          timeout: 5000, // 5s timeout
+          params: { ...baseParams, city: 'Paris' },
+          timeout: 5000,
         }),
       );
       let features = response.data?.features || [];
 
-      // 2) Si aucun résultat, réessayer sans filtre de type (rues, lieux)
-      if (features.length === 0) {
+      // 2) Si pas assez de résultats parisiens, essayer sans filtre city
+      // mais ne garder que les résultats en Île-de-France (postcode 75/92/93/94/77/78/91/95)
+      const parisFeatures = features.filter(isParisResult);
+      if (parisFeatures.length < limit) {
         response = await firstValueFrom(
           this.httpService.get(url, {
             params: baseParams,
             timeout: 5000,
           }),
         );
-        features = response.data?.features || [];
+        const allFeatures = response.data?.features || [];
+        // Fusionner et dédupliquer par id
+        const seen = new Set(parisFeatures.map((f: any) => f.properties?.id));
+        for (const f of allFeatures) {
+          if (!seen.has(f.properties?.id) && isParisResult(f)) {
+            parisFeatures.push(f);
+          }
+        }
       }
 
-      // Normaliser la réponse pour le frontend
-      const results = features.map((f: any) => ({
+      // Normaliser la réponse pour le frontend — ne garder que Paris
+      const results = parisFeatures.slice(0, limit).map((f: any) => ({
         label: f.properties?.label || '',
         score: f.properties?.score || 0,
         type: f.properties?.type || '',

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as readline from 'readline';
 import * as AdmZip from 'adm-zip';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -121,6 +122,7 @@ export interface GtfsIndex {
   stopsById: Map<string, GtfsStop>;
   routesById: Map<string, GtfsRoute>;
   tripsByRoute: Map<string, GtfsTrip[]>;
+  tripsById: Map<string, GtfsTrip>;
   stopTimesByTrip: Map<string, GtfsStopTime[]>;
   stopTimesByStop: Map<string, GtfsStopTime[]>;
   calendarByService: Map<string, GtfsCalendar>;
@@ -187,10 +189,10 @@ export class GtfsParserService implements OnModuleInit {
 
       // Try multiple GTFS sources in order
       const gtfsSources: Array<{ name: string; url: string; headers: Record<string, string> }> = [
-        // Data portal (IDFM) — URL actuelle fonctionnelle
+        // Direct FTP OpenDataSoft — URL fonctionnelle (transport.data.gouv.fr)
         {
-          name: 'Data portal (IDFM)',
-          url: 'https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/offre-horaires-tc-gtfs-idfm/exports/zip',
+          name: 'OpenDataSoft FTP (IDFM)',
+          url: 'https://eu.ftp.opendatasoft.com/stif/GTFS/IDFM-gtfs.zip',
           headers: {},
         },
         // PRIM API (direct) — endpoint obsolète, gardé en fallback
@@ -278,47 +280,73 @@ export class GtfsParserService implements OnModuleInit {
       const extractDir = path.join(this.dataDir, 'extracted');
       zip.extractAllTo(extractDir, true);
 
-      // Parser chaque fichier
-      const agencies = this.parseFile<GtfsAgency>(
+      // Parser chaque fichier (streaming pour gérer les fichiers volumineux)
+      const agencies = await this.parseFile<GtfsAgency>(
         path.join(extractDir, 'agency.txt'),
       );
-      const stops = this.parseFile<GtfsStop>(
+      const stops = await this.parseFile<GtfsStop>(
         path.join(extractDir, 'stops.txt'),
       );
-      const routes = this.parseFile<GtfsRoute>(
+      const routes = await this.parseFile<GtfsRoute>(
         path.join(extractDir, 'routes.txt'),
       );
-      const trips = this.parseFile<GtfsTrip>(
+      const trips = await this.parseFile<GtfsTrip>(
         path.join(extractDir, 'trips.txt'),
       );
-      const stopTimes = this.parseFile<GtfsStopTime>(
-        path.join(extractDir, 'stop_times.txt'),
-      );
-      const calendar = this.parseFile<GtfsCalendar>(
+      const calendar = await this.parseFile<GtfsCalendar>(
         path.join(extractDir, 'calendar.txt'),
       );
-      const calendarDates = this.parseFile<GtfsCalendarDate>(
+      const calendarDates = await this.parseFile<GtfsCalendarDate>(
         path.join(extractDir, 'calendar_dates.txt'),
       );
-      const shapes = this.parseFile<GtfsShape>(
-        path.join(extractDir, 'shapes.txt'),
-      );
-      const transfers = this.parseFile<GtfsTransfer>(
-        path.join(extractDir, 'transfers.txt'),
-      );
+      // shapes.txt est optionnel et très volumineux (126 MB de points GPS).
+      // On le ignore pour éviter l'OOM — non nécessaire pour le routing RAPTOR.
+      const shapes: GtfsShape[] = [];
 
-      // Construire les index
-      this.index = this.buildIndex(
+      // Construire l'index partiel (sans stop_times/transfers pour éviter le pic mémoire)
+      const index = this.buildIndex(
         agencies,
         stops,
         routes,
         trips,
-        stopTimes,
+        [], // stopTimes — alimenté en streaming ci-dessous
         calendar,
         calendarDates,
         shapes,
-        transfers,
+        [], // transfers — alimenté en streaming ci-dessous
       );
+
+      // Parser stop_times.txt en streaming directement dans l'index
+      // (évite un tableau brut de 8.2M objets = ~2 GB de mémoire)
+      await this.parseFileIncremental<GtfsStopTime>(
+        path.join(extractDir, 'stop_times.txt'),
+        (st) => {
+          const tripTimes = index.stopTimesByTrip.get(st.trip_id) || [];
+          tripTimes.push(st);
+          index.stopTimesByTrip.set(st.trip_id, tripTimes);
+
+          const stopTimes2 = index.stopTimesByStop.get(st.stop_id) || [];
+          stopTimes2.push(st);
+          index.stopTimesByStop.set(st.stop_id, stopTimes2);
+        },
+      );
+
+      // Parser transfers.txt en streaming directement dans l'index
+      await this.parseFileIncremental<GtfsTransfer>(
+        path.join(extractDir, 'transfers.txt'),
+        (transfer) => {
+          const stopTransfers = index.transfersByStop.get(transfer.from_stop_id) || [];
+          stopTransfers.push(transfer);
+          index.transfersByStop.set(transfer.from_stop_id, stopTransfers);
+        },
+      );
+
+      // Trier les horaires par séquence
+      for (const [, times] of index.stopTimesByTrip) {
+        times.sort((a, b) => a.stop_sequence - b.stop_sequence);
+      }
+
+      this.index = index;
 
       this.lastLoadTime = new Date();
       const elapsed = Date.now() - startTime;
@@ -334,40 +362,88 @@ export class GtfsParserService implements OnModuleInit {
 
   /**
    * Parse un fichier GTFS texte (CSV) en tableau d'objets typés
+   * Utilise un stream pour gérer les fichiers volumineux (ex: stop_times.txt > 500MB)
    */
-  private parseFile<T>(filePath: string): T[] {
+  private async parseFile<T>(filePath: string): Promise<T[]> {
     if (!fs.existsSync(filePath)) {
       this.logger.warn(`GTFS file not found: ${filePath}`);
       return [];
     }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const lines = content.split('\n').filter((line) => line.trim() !== '');
+    const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
-    if (lines.length === 0) return [];
-
-    // Première ligne = en-têtes
-    const headers = lines[0]
-      .split(',')
-      .map((h) => h.trim().replace(/"/g, ''));
-
+    let headers: string[] = [];
     const records: T[] = [];
+    let lineCount = 0;
 
-    for (let i = 1; i < lines.length; i++) {
-      const values = this.parseCsvLine(lines[i]);
-      if (values.length !== headers.length) continue;
+    for await (const rawLine of rl) {
+      const line = rawLine.trim();
+      if (!line) continue;
 
-      const record: Record<string, any> = {};
-      for (let j = 0; j < headers.length; j++) {
-        const rawValue = values[j]?.trim() ?? '';
-        record[headers[j]] = this.castValue(rawValue, headers[j]);
+      if (lineCount === 0) {
+        headers = line.split(',').map((h) => h.trim().replace(/"/g, ''));
+      } else {
+        const values = this.parseCsvLine(line);
+        if (values.length !== headers.length) continue;
+
+        const record: Record<string, any> = {};
+        for (let j = 0; j < headers.length; j++) {
+          const rawValue = values[j]?.trim() ?? '';
+          record[headers[j]] = this.castValue(rawValue, headers[j]);
+        }
+        records.push(record as T);
       }
-
-      records.push(record as T);
+      lineCount++;
     }
 
     this.logger.debug(`Parsed ${records.length} records from ${path.basename(filePath)}`);
     return records;
+  }
+
+  /**
+   * Parse un fichier GTFS en streaming et appelle un callback pour chaque record.
+   * Ne conserve aucun tableau en mémoire — utilisé pour les fichiers massifs
+   * comme stop_times.txt afin d'éviter les pics de mémoire (OOM).
+   */
+  private async parseFileIncremental<T>(
+    filePath: string,
+    onRecord: (record: T) => void,
+  ): Promise<void> {
+    if (!fs.existsSync(filePath)) {
+      this.logger.warn(`GTFS file not found: ${filePath}`);
+      return;
+    }
+
+    const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+    let headers: string[] = [];
+    let lineCount = 0;
+    let recordCount = 0;
+
+    for await (const rawLine of rl) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      if (lineCount === 0) {
+        headers = line.split(',').map((h) => h.trim().replace(/"/g, ''));
+      } else {
+        const values = this.parseCsvLine(line);
+        if (values.length !== headers.length) continue;
+
+        const record: Record<string, any> = {};
+        for (let j = 0; j < headers.length; j++) {
+          const rawValue = values[j]?.trim() ?? '';
+          record[headers[j]] = this.castValue(rawValue, headers[j]);
+        }
+        onRecord(record as T);
+        recordCount++;
+      }
+      lineCount++;
+    }
+
+    this.logger.debug(`Parsed ${recordCount} records from ${path.basename(filePath)}`);
   }
 
   /**
@@ -438,6 +514,7 @@ export class GtfsParserService implements OnModuleInit {
       stopsById: new Map(),
       routesById: new Map(),
       tripsByRoute: new Map(),
+      tripsById: new Map(),
       stopTimesByTrip: new Map(),
       stopTimesByStop: new Map(),
       calendarByService: new Map(),
@@ -467,6 +544,7 @@ export class GtfsParserService implements OnModuleInit {
       const routeTrips = index.tripsByRoute.get(trip.route_id) || [];
       routeTrips.push(trip);
       index.tripsByRoute.set(trip.route_id, routeTrips);
+      index.tripsById.set(trip.trip_id, trip);
     }
 
     // Horaires par course et par arrêt
@@ -614,16 +692,9 @@ export class GtfsParserService implements OnModuleInit {
     const routeIds = new Set<string>();
 
     for (const tripId of tripIds) {
-      const tripTimes = this.index.stopTimesByTrip.get(tripId);
-      if (tripTimes && tripTimes.length > 0) {
-        // Trouver le trip pour obtenir le route_id
-        for (const [, trips] of this.index.tripsByRoute) {
-          const trip = trips.find((t) => t.trip_id === tripId);
-          if (trip) {
-            routeIds.add(trip.route_id);
-            break;
-          }
-        }
+      const trip = this.index.tripsById.get(tripId);
+      if (trip) {
+        routeIds.add(trip.route_id);
       }
     }
 
@@ -654,15 +725,12 @@ export class GtfsParserService implements OnModuleInit {
     for (const st of stopTimes) {
       const departureSeconds = this.timeToSeconds(st.departure_time);
       if (departureSeconds >= targetSeconds) {
-        // Trouver le trip
-        for (const [, trips] of this.index.tripsByRoute) {
-          const trip = trips.find((t) => t.trip_id === st.trip_id);
-          if (trip) {
-            const route = this.index.routesById.get(trip.route_id);
-            if (route) {
-              results.push({ trip, route, stopTime: st });
-            }
-            break;
+        // Recherche O(1) via tripsById (évite la boucle imbriquée catastrophique)
+        const trip = this.index.tripsById.get(st.trip_id);
+        if (trip) {
+          const route = this.index.routesById.get(trip.route_id);
+          if (route) {
+            results.push({ trip, route, stopTime: st });
           }
         }
       }

@@ -269,7 +269,52 @@
 - ⚠️ Code mort : `memory-auth.service.ts`, `useLocalStorage.ts`
 - ⚠️ Documentation : chemins scripts à corriger, diagrammes à mettre à jour
 
-**Recommandation globale :** Le projet est **cohérent et prêt pour démonstration**. Les corrections P0 et P1 sont nécessaires avant déploiement en production.
+## 12. Nouveautés depuis l'audit (juin 2026)
+
+### 12.1 GTFS Parser — Streaming & Optimisations
+
+| Changement | Fichier | Impact |
+|---|---|---|
+| Parser streaming `readline` | `gtfs-parser.service.ts` | Évite OOM sur `stop_times.txt` (737 MB) |
+| Skip `shapes.txt` | `gtfs-parser.service.ts` | -126 MB de RAM inutile |
+| Parsing incrémental `stop_times`/`transfers` | `gtfs-parser.service.ts` | -2 GB de pic mémoire |
+| Index `tripsById` O(1) | `gtfs-parser.service.ts` | RAPTOR passe de timeout à <5s |
+| `transfers.txt` au lieu de `findStopsNearby` | `journey.service.ts` | RAPTOR rounds O(n²) → O(1) |
+| Heap Docker 3.5 GB | `docker-compose.yml` | Stabilité parsing GTFS IDFM complet |
+| Volume `gtfs_data` persisté | `docker-compose.yml` | Cache ZIP entre rebuilds |
+
+### 12.2 Nouveaux endpoints
+
+| Endpoint | Description | Statut |
+|---|---|---|
+| `GET /api/transport/gtfs-stops/search` | Recherche arrêts GTFS par nom | ✅ |
+| `GET /api/transport/nearby` | Arrêts proches + lignes | ✅ |
+| `GET /api/transport/lines-by-mode` | Lignes groupées par mode | ✅ |
+| `GET /api/transport/modes` | Compteurs dynamiques par mode | ✅ |
+| `GET /api/transport/velib-nearby` | Vélib' Open Data Paris | ✅ |
+| `GET /api/transport/shared-vehicles` | GBFS trottinettes/vélos | ✅ |
+| `GET /api/transport/realtime-alerts` | Alertes GTFS-RT | ✅ |
+
+### 12.3 Geocoding — Filtrage Paris
+
+| Changement | Avant | Après |
+|---|---|---|
+| Résultats | Toute la France (Saint-Aubert 59188) | Paris uniquement (postcode 75xxx) |
+| Source | data.gouv.fr seul | GTFS local (arrêts) + data.gouv.fr filtré |
+| Pertinence | Faible pour les gares | Haute — "Gare du Nord" = Paris 75010 |
+
+### 12.4 Dead code identifié (à nettoyer)
+
+| Fichier | Type | Action |
+|---|---|---|
+| `components/TransportCard.tsx` | Composant inutilisé | ❌ Supprimer |
+| `gtfs-parser.service.ts:getStopById()` | Méthode jamais appelée | ❌ Supprimer |
+| `hooks/useLocalStorage.ts` | Hook orphelin | ❌ Supprimer |
+| `backend/memory-auth.service.ts` | Service non injecté | ❌ Supprimer |
+
+---
+
+**Recommandation globale :** Le projet est **cohérent et prêt pour démonstration**. Les corrections P0 et P1 sont nécessaires avant déploiement en production. Les optimisations RAPTOR/GTFS de juin 2026 ont rendu le calcul d'itinéraire fonctionnel à l'échelle IDFM.
 
 ---
 

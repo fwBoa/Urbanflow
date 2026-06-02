@@ -74,6 +74,14 @@ export interface JourneySegment {
   co2Ggrams: number;
   /** Instructions textuelles */
   instruction: string;
+  /** Direction / terminus */
+  direction?: string;
+  /** Quai / voie */
+  platform?: string;
+  /** Destination affichée sur le véhicule */
+  headsign?: string;
+  /** Temps d'attente estimé en minutes */
+  waitTimeMinutes?: number;
 }
 
 /**
@@ -285,6 +293,7 @@ export class JourneyService {
                     originSeq,
                     st,
                     tripStopTimes,
+                    dep.trip,
                   );
                   if (journey) results.push(journey);
                 }
@@ -294,30 +303,18 @@ export class JourneyService {
         }
       }
 
-      // Foot-path transfers: walk between nearby stops
+      // Foot-path transfers: use pre-computed GTFS transfers (O(1) lookup)
+      // instead of findStopsNearby which scans all 54K stops each time.
       for (const stopId of newMarkedStops) {
-        const stop = index.stopsById.get(stopId);
-        if (!stop) continue;
-
-        const nearbyStops = this.gtfsParser.findStopsNearby(
-          stop.stop_lat,
-          stop.stop_lon,
-          0.3, // 300m walking transfer radius
-        );
-
-        for (const nearby of nearbyStops) {
-          if (nearby.stop_id === stopId) continue;
-          const walkTime = Math.round(
-            (this.haversineKm(stop.stop_lat, stop.stop_lon, nearby.stop_lat, nearby.stop_lon) /
-              this.WALK_SPEED_KMH) *
-              60,
-          );
-          const arrivalViaWalk = (bestArrival.get(stopId) ?? Infinity) + walkTime * 60;
-          const previousBest = bestArrival.get(nearby.stop_id) ?? Infinity;
+        const transfers = index.transfersByStop.get(stopId) || [];
+        for (const transfer of transfers) {
+          const walkTimeSeconds = (transfer.min_transfer_time ?? 120); // default 2 min = 120s
+          const arrivalViaWalk = (bestArrival.get(stopId) ?? Infinity) + walkTimeSeconds;
+          const previousBest = bestArrival.get(transfer.to_stop_id) ?? Infinity;
 
           if (arrivalViaWalk < previousBest) {
-            bestArrival.set(nearby.stop_id, arrivalViaWalk);
-            newMarkedStops.add(nearby.stop_id);
+            bestArrival.set(transfer.to_stop_id, arrivalViaWalk);
+            newMarkedStops.add(transfer.to_stop_id);
           }
         }
       }
@@ -353,6 +350,7 @@ export class JourneyService {
     originSeq: GtfsStopTime,
     destSeq: GtfsStopTime,
     tripStopTimes: GtfsStopTime[],
+    trip: GtfsTrip,
   ): JourneyResult | null {
     const index = this.gtfsParser.getIndex();
     if (!index) return null;
@@ -402,6 +400,10 @@ export class JourneyService {
       transitDistance,
     );
 
+    // Récupérer le quai / platform depuis l'index si disponible
+    const originStopDetails = index.stopsById.get(bestOriginStop.stop_id);
+    const platform = originStopDetails?.platform_code || undefined;
+
     const transitSegment: JourneySegment = {
       type: 'transit',
       mode: modeName,
@@ -416,6 +418,9 @@ export class JourneyService {
       arrivalTime: destSeq.arrival_time,
       co2Ggrams: co2.emissionsGco2,
       instruction: `Prendre ${route.route_short_name || route.route_long_name} de ${bestOriginStop.stop_name} à ${destStop.stop_name}`,
+      direction: trip.trip_headsign || route.route_long_name || undefined,
+      headsign: trip.trip_headsign || undefined,
+      platform,
     };
 
     // Count transfers by tracing cameFrom

@@ -8,7 +8,7 @@ import SearchBar from "@/components/SearchBar";
 import FilterChip from "@/components/FilterChip";
 import TripCard from "@/components/TripCard";
 import DynamicMap from "@/components/DynamicMap";
-import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute } from "@/hooks/useTransport";
+import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute, useNearbyStops } from "@/hooks/useTransport";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { addToHistory } from "@/services/favorites";
 import type { PrimStop, GeocodeResult } from "@/services/api";
@@ -90,6 +90,7 @@ function SearchPageContent() {
   const { lat: userLat, lon: userLon, accuracy: userAccuracy, loading: geoLoading, error: geoError, watching: isWatching, locate, startWatch, stopWatch } = useGeolocation();
   const [followUser, setFollowUser] = useState(false);
   const { reverseGeocode } = useReverseGeocode();
+  const { stops: nearbyStops, loading: nearbyLoading } = useNearbyStops(userLat, userLon, 0.5, 6);
   const { geometry: routeGeometry, fetchRoute } = useRoute();
   const [clickTarget, setClickTarget] = useState<"origin" | "destination" | null>(null);
 
@@ -351,6 +352,44 @@ function SearchPageContent() {
           </button>
         </div>
       )}
+      {/* Arrêts proches — position GPS */}
+      {userLat && userLon && (
+        <div className="mb-3">
+          {nearbyLoading && (
+            <div className="flex items-center gap-2 text-xs text-[var(--color-text-tertiary)]">
+              <Loader2 size={12} className="animate-spin" />
+              Recherche des arrêts proches...
+            </div>
+          )}
+          {!nearbyLoading && nearbyStops.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
+                🚉 Autour de vous
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {nearbyStops.map((stop) => (
+                  <button
+                    key={stop.id}
+                    onClick={() => {
+                      setOrigin(stop.name);
+                      setSelectedOrigin({ lat: stop.lat, lon: stop.lon });
+                    }}
+                    className="shrink-0 flex flex-col items-start px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary)] transition-colors text-left"
+                  >
+                    <span className="text-xs font-medium text-[var(--color-text-primary)] truncate max-w-[140px]">
+                      {stop.name}
+                    </span>
+                    <span className="text-[10px] text-[var(--color-text-tertiary)]">
+                      {stop.lines.slice(0, 2).map((l) => l.name).join(" · ")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Search inputs */}
       <div className="space-y-3 mb-4">
         {/* Origin */}

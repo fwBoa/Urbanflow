@@ -35,8 +35,11 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       PRIM_API_KEY: ${PRIM_API_KEY:-}
       PRIM_API_URL: ${PRIM_API_URL:-https://api-lab.idfm.fr}
+      NODE_OPTIONS: --max-old-space-size=3584
     ports:
       - '4000:4000'
+    volumes:
+      - gtfs_data:/app/data/gtfs
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,3 +78,4 @@ services:
 
 volumes:
   postgres_data:
+  gtfs_data:
