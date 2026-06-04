@@ -2,13 +2,13 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Zap, Leaf, Wallet, MapPin, Navigation, Clock, Loader2, Building2, Train, Bus, Bike } from "lucide-react";
+import { Zap, Leaf, MapPin, Navigation, Clock, Loader2, Building2, Train, Bus, Bike, AlertTriangle, X, ChevronRight } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import SearchBar from "@/components/SearchBar";
 import FilterChip from "@/components/FilterChip";
 import TripCard from "@/components/TripCard";
 import DynamicMap from "@/components/DynamicMap";
-import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute, useNearbyStops } from "@/hooks/useTransport";
+import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute, useNearbyStops, useStopTimes } from "@/hooks/useTransport";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { addToHistory } from "@/services/favorites";
 import type { PrimStop, GeocodeResult } from "@/services/api";
@@ -21,7 +21,6 @@ type SuggestionItem =
 const filters = [
   { key: "fast", label: "Rapide", icon: <Zap size={14} /> },
   { key: "eco", label: "Éco", icon: <Leaf size={14} /> },
-  { key: "cheap", label: "Économique", icon: <Wallet size={14} /> },
 ];
 
 // Mode de transport icône selon le type d'arrêt
@@ -94,6 +93,36 @@ function SearchPageContent() {
   const { geometry: routeGeometry, fetchRoute } = useRoute();
   const [clickTarget, setClickTarget] = useState<"origin" | "destination" | null>(null);
 
+  // Erreur si la position GPS est hors de la zone couverte
+  const [positionError, setPositionError] = useState<string | null>(null);
+
+  // ─── Drawer prochains départs ────────────────────────────────────────
+  const [selectedNearbyStop, setSelectedNearbyStop] = useState<{
+    id: string;
+    name: string;
+    lat: number;
+    lon: number;
+    lines: Array<{ id: string; name: string; color: string }>;
+  } | null>(null);
+  const { departures: stopDepartures, loading: stopTimesLoading } = useStopTimes(
+    selectedNearbyStop?.id ?? null,
+    5,
+  );
+
+  // Distance haversine (km) entre deux points GPS
+  const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
   // Toggle suivi GPS continu
   const toggleWatch = useCallback(() => {
     if (isWatching) {
@@ -105,9 +134,17 @@ function SearchPageContent() {
     }
   }, [isWatching, startWatch, stopWatch]);
 
-  // Utiliser ma position comme origine
+  // Utiliser ma position comme origine — bloqué si hors zone (>>15 km de Paris)
   const useMyPosition = () => {
+    setPositionError(null);
     if (userLat && userLon) {
+      const dist = haversineKm(userLat, userLon, 48.8566, 2.3522);
+      if (dist > 15) {
+        setPositionError(
+          `Votre position est à ${Math.round(dist)} km de Paris. UrbanFlow couvre uniquement Paris et sa proche banlieue (≤ 15 km).`,
+        );
+        return;
+      }
       setOrigin("Ma position");
       setSelectedOrigin({ lat: userLat, lon: userLon });
     } else {
@@ -116,9 +153,18 @@ function SearchPageContent() {
   };
 
   // ─── Clic sur la carte → reverse geocoding ──────────────────────────
+  const [mapClickError, setMapClickError] = useState<string | null>(null);
+
   const handleMapClick = useCallback(async (lat: number, lng: number) => {
+    setMapClickError(null);
     const result = await reverseGeocode(lat, lng);
     const label = result?.label || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+    // Bloquer la sélection si hors de Paris (sauf si c'est un arrêt GTFS connu)
+    if (result && !result.isParis) {
+      setMapClickError("Hors de Paris — sélectionnez une adresse à Paris");
+      return;
+    }
 
     // Si pas d'origine → définir comme départ, sinon comme destination
     if (!selectedOrigin) {
@@ -252,8 +298,6 @@ function SearchPageContent() {
         return sorted.sort((a, b) => a.durationMinutes - b.durationMinutes);
       case "eco":
         return sorted.sort((a, b) => a.co2Ggrams - b.co2Ggrams);
-      case "cheap":
-        return sorted.sort((a, b) => a.co2Ggrams - b.co2Ggrams);
       default:
         return sorted;
     }
@@ -352,6 +396,14 @@ function SearchPageContent() {
           </button>
         </div>
       )}
+      {/* Message d'erreur carte hors Paris */}
+      {mapClickError && (
+        <div className="mb-3 px-3 py-2 rounded-lg bg-[var(--color-mobility-orange)]/10 border border-[var(--color-mobility-orange)] text-xs text-[var(--color-mobility-orange)] flex items-center gap-2">
+          <AlertTriangle size={14} />
+          {mapClickError}
+        </div>
+      )}
+
       {/* Arrêts proches — position GPS */}
       {userLat && userLon && (
         <div className="mb-3">
@@ -370,10 +422,7 @@ function SearchPageContent() {
                 {nearbyStops.map((stop) => (
                   <button
                     key={stop.id}
-                    onClick={() => {
-                      setOrigin(stop.name);
-                      setSelectedOrigin({ lat: stop.lat, lon: stop.lon });
-                    }}
+                    onClick={() => setSelectedNearbyStop(stop)}
                     className="shrink-0 flex flex-col items-start px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary)] transition-colors text-left"
                   >
                     <span className="text-xs font-medium text-[var(--color-text-primary)] truncate max-w-[140px]">
@@ -413,6 +462,13 @@ function SearchPageContent() {
                 <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
               </svg>
             </button>
+            {/* Message d'erreur si position hors zone */}
+            {positionError && (
+              <div className="col-span-full mt-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                {positionError}
+              </div>
+            )}
             {selectedOrigin && (
               <button
                 onClick={clearOrigin}
@@ -424,20 +480,28 @@ function SearchPageContent() {
             )}
           </div>
           {/* Origin suggestions — fusionné arrêts + adresses */}
-          {originSuggestions.length > 0 && !selectedOrigin && (
+          {origin && !selectedOrigin && (
             <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-[var(--color-border)] max-h-52 overflow-y-auto">
-              {originStops.length > 0 && (
-                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
-                  🚉 Arrêts
+              {originSuggestions.length > 0 ? (
+                <>
+                  {originStops.length > 0 && (
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
+                      🚉 Arrêts
+                    </div>
+                  )}
+                  {originSuggestions.filter(s => s.type === "stop").map((s, i) => renderSuggestion(s, i, handleOriginSelect, "#2E7D9B"))}
+                  {originAddresses.length > 0 && (
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider border-t border-[var(--color-border)]">
+                      📍 Adresses
+                    </div>
+                  )}
+                  {originSuggestions.filter(s => s.type === "address").map((s, i) => renderSuggestion(s, i, handleOriginSelect, "#2E7D9B"))}
+                </>
+              ) : (
+                <div className="px-3 py-3 text-xs text-[var(--color-text-tertiary)] text-center">
+                  Aucun résultat à Paris. UrbanFlow couvre uniquement Paris et ses arrêts de transport.
                 </div>
               )}
-              {originSuggestions.filter(s => s.type === "stop").map((s, i) => renderSuggestion(s, i, handleOriginSelect, "#2E7D9B"))}
-              {originAddresses.length > 0 && (
-                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider border-t border-[var(--color-border)]">
-                  📍 Adresses
-                </div>
-              )}
-              {originSuggestions.filter(s => s.type === "address").map((s, i) => renderSuggestion(s, i, handleOriginSelect, "#2E7D9B"))}
             </div>
           )}
         </div>
@@ -463,20 +527,28 @@ function SearchPageContent() {
             )}
           </div>
           {/* Destination suggestions — fusionné arrêts + adresses */}
-          {destSuggestions.length > 0 && !selectedDest && (
+          {destination && !selectedDest && (
             <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-[var(--color-border)] max-h-52 overflow-y-auto">
-              {destStops.length > 0 && (
-                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
-                  🚉 Arrêts
+              {destSuggestions.length > 0 ? (
+                <>
+                  {destStops.length > 0 && (
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
+                      🚉 Arrêts
+                    </div>
+                  )}
+                  {destSuggestions.filter(s => s.type === "stop").map((s, i) => renderSuggestion(s, i, handleDestSelect, "#FF6B35"))}
+                  {destAddresses.length > 0 && (
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider border-t border-[var(--color-border)]">
+                      📍 Adresses
+                    </div>
+                  )}
+                  {destSuggestions.filter(s => s.type === "address").map((s, i) => renderSuggestion(s, i, handleDestSelect, "#FF6B35"))}
+                </>
+              ) : (
+                <div className="px-3 py-3 text-xs text-[var(--color-text-tertiary)] text-center">
+                  Aucun résultat à Paris. UrbanFlow couvre uniquement Paris et ses arrêts de transport.
                 </div>
               )}
-              {destSuggestions.filter(s => s.type === "stop").map((s, i) => renderSuggestion(s, i, handleDestSelect, "#FF6B35"))}
-              {destAddresses.length > 0 && (
-                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider border-t border-[var(--color-border)]">
-                  📍 Adresses
-                </div>
-              )}
-              {destSuggestions.filter(s => s.type === "address").map((s, i) => renderSuggestion(s, i, handleDestSelect, "#FF6B35"))}
             </div>
           )}
         </div>
@@ -548,6 +620,16 @@ function SearchPageContent() {
           </div>
         )}
 
+        {!journeysLoading && !journeysError && sortedJourneys.length === 0 && selectedOrigin && selectedDest && (
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--card-radius)] p-4 text-sm text-[var(--color-text-secondary)] text-center">
+            <MapPin size={20} className="mx-auto mb-2 text-[var(--color-text-tertiary)]" />
+            <p className="font-medium">Aucun itinéraire trouvé</p>
+            <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
+              Vérifiez que votre départ et votre arrivée sont à Paris ou en proche banlieue.
+            </p>
+          </div>
+        )}
+
         {!journeysLoading && !journeysError && sortedJourneys.length > 0 && (
           <>
             <div className="flex items-center justify-between">
@@ -575,6 +657,8 @@ function SearchPageContent() {
                 co2={trip.co2Ggrams}
                 mode={getModeLabel(trip)}
                 modeColor={getModeColor(trip)}
+                hasAlert={!!trip.alerts && trip.alerts.length > 0}
+                alertCount={trip.alerts?.length}
                 onClick={() => handleTripClick(trip, i)}
               />
             ))}
@@ -588,6 +672,102 @@ function SearchPageContent() {
           </div>
         )}
       </div>
+
+      {/* ─── Drawer prochains départs ────────────────────────────────── */}
+      {selectedNearbyStop && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/40 z-40"
+            onClick={() => setSelectedNearbyStop(null)}
+          />
+          {/* Sheet */}
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[var(--card-radius)] shadow-2xl border-t border-[var(--color-border)] max-h-[70vh] overflow-y-auto">
+            <div className="p-4">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">{selectedNearbyStop.name}</p>
+                  <p className="text-[11px] text-[var(--color-text-tertiary)]">
+                    Prochains départs
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedNearbyStop(null)}
+                  className="w-8 h-8 rounded-full bg-[var(--color-surface)] flex items-center justify-center hover:bg-gray-100"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Action : utiliser comme départ */}
+              <button
+                onClick={() => {
+                  setOrigin(selectedNearbyStop.name);
+                  setSelectedOrigin({ lat: selectedNearbyStop.lat, lon: selectedNearbyStop.lon });
+                  setSelectedNearbyStop(null);
+                }}
+                className="w-full mb-4 h-10 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary-dark)] transition-colors flex items-center justify-center gap-2"
+              >
+                <MapPin size={14} />
+                Définir comme départ
+              </button>
+
+              {/* Liste des départs */}
+              <div className="space-y-2">
+                {stopTimesLoading && (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 size={20} className="animate-spin text-[var(--color-primary)]" />
+                  </div>
+                )}
+                {!stopTimesLoading && stopDepartures.length === 0 && (
+                  <div className="text-center py-4 text-sm text-[var(--color-text-tertiary)]">
+                    Aucun départ prévu prochainement
+                  </div>
+                )}
+                {!stopTimesLoading && stopDepartures.map((dep) => (
+                  <div
+                    key={`${dep.tripId}-${dep.departureTime}`}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]"
+                  >
+                    {/* Badge ligne */}
+                    <span
+                      className="shrink-0 inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-bold text-white min-w-[3rem]"
+                      style={{ backgroundColor: dep.lineColor }}
+                    >
+                      {dep.lineName}
+                    </span>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+                        {dep.headsign}
+                      </p>
+                      {dep.platform && (
+                        <p className="text-[11px] text-[var(--color-text-tertiary)]">
+                          Voie {dep.platform}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-[var(--color-primary)]">
+                        {dep.departureTime.slice(0, 5)}
+                      </p>
+                      <p className="text-[11px] text-[var(--color-text-tertiary)]">
+                        {dep.waitMinutes <= 0
+                          ? "À l'approche"
+                          : dep.waitMinutes === 1
+                            ? "1 min"
+                            : `${dep.waitMinutes} min`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </AppShell>
   );
 }

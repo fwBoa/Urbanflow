@@ -501,6 +501,7 @@ export class PrimService implements OnModuleInit {
         postcode: f.properties?.postcode || '',
         context: f.properties?.context || '',
         geometry: f.geometry || {},
+        isParis: true, // Tous les résultats passent isParisResult
       }));
       return { total_count: results.length, results };
     } catch (error: unknown) {
@@ -529,10 +530,13 @@ export class PrimService implements OnModuleInit {
 
       const features = response.data?.features || [];
       if (features.length === 0) {
-        return { label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`, type: 'coordinates', city: '', postcode: '' };
+        return { label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`, type: 'coordinates', city: '', postcode: '', isParis: false };
       }
 
       const f = features[0];
+      const postcode = String(f.properties?.postcode || '');
+      const city = String(f.properties?.city || '').toLowerCase();
+      const isParis = postcode.startsWith('75') || city === 'paris';
       return {
         label: f.properties?.label || '',
         type: f.properties?.type || '',
@@ -542,12 +546,13 @@ export class PrimService implements OnModuleInit {
         geometry: f.geometry || {},
         housenumber: f.properties?.housenumber || '',
         street: f.properties?.street || '',
+        isParis,
       };
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(`Reverse geocoding API error: ${err.message}`, err.stack);
       // Fallback : retourner les coordonnées brutes
-      return { label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`, type: 'coordinates', city: '', postcode: '' };
+      return { label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`, type: 'coordinates', city: '', postcode: '', isParis: false };
     }
   }
 

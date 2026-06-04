@@ -64,6 +64,18 @@ export interface GeocodeResult {
   postcode: string;
   context: string;
   geometry: { type: string; coordinates: [number, number] }; // [lon, lat]
+  isParis: boolean;
+}
+
+export interface RealtimeAlert {
+  id: string;
+  headerText: string;
+  descriptionText?: string;
+  severity: 'info' | 'warning' | 'severe' | 'unknown';
+  affectedRoutes: string[];
+  activePeriod?: { start: string; end: string }[];
+  cause?: string;
+  effect?: string;
 }
 
 export interface GeocodeResponse {
@@ -80,6 +92,7 @@ export interface ReverseGeocodeResult {
   geometry?: { type: string; coordinates: [number, number] };
   housenumber?: string;
   street?: string;
+  isParis: boolean;
 }
 
 export interface JourneySegment {
@@ -113,6 +126,8 @@ export interface JourneyResult {
   arrivalTime: string;
   /** Indique si l'itinéraire est un fallback (données GTFS non disponibles) */
   isFallback?: boolean;
+  /** Alertes temps réel affectant les lignes de ce trajet */
+  alerts?: RealtimeAlert[];
 }
 
 class ApiService {
@@ -261,6 +276,29 @@ class ApiService {
     return this.fetch(
       `/api/transport/nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`
     );
+  }
+
+  // ─── Realtime alerts ───────────────────────────────────────────────
+  async getRealtimeAlerts(): Promise<RealtimeAlert[]> {
+    return this.fetch('/api/transport/realtime-alerts');
+  }
+
+  // ─── Prochains départs par arrêt ────────────────────────────────────
+  async getStopTimes(stopId: string, limit = 5): Promise<{
+    departures: Array<{
+      tripId: string;
+      routeId: string;
+      lineName: string;
+      lineColor: string;
+      routeType: number;
+      headsign: string;
+      departureTime: string;
+      arrivalTime: string;
+      waitMinutes: number;
+      platform?: string;
+    }>;
+  }> {
+    return this.fetch(`/api/transport/stop-times?stopId=${encodeURIComponent(stopId)}&limit=${limit}`);
   }
 
   // ─── Journey ──────────────────────────────────────────────────────

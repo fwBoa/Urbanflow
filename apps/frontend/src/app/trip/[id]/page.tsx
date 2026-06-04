@@ -20,6 +20,29 @@ const modeIcons: Record<string, React.ReactNode> = {
   velib: <Bike size={18} />,
 };
 
+function getModeLabel(mode?: string): string {
+  if (!mode) return "Transit";
+  const m = mode.toLowerCase();
+  if (m.includes("métro") || m.includes("metro")) return "Métro";
+  if (m.includes("rer")) return "RER";
+  if (m.includes("bus")) return "Bus";
+  if (m.includes("tram")) return "Tram";
+  if (m.includes("transilien") || m.includes("train")) return "Train";
+  if (m.includes("marche") || m.includes("walk")) return "Marche";
+  if (m.includes("vélib") || m.includes("velib")) return "Vélib'";
+  return mode;
+}
+
+function getSegmentIcon(segment: JourneyResult["segments"][0], isDone: boolean) {
+  if (isDone) return <span className="text-xs">✓</span>;
+  if (segment.type === "walking") return <Footprints size={14} />;
+  if (segment.type === "velib") return <Bike size={14} />;
+  const mode = segment.mode?.toLowerCase() || "";
+  if (mode.includes("bus")) return <Bus size={14} />;
+  if (mode.includes("tram")) return <Train size={14} />;
+  return <Train size={14} />; // métro / RER / train par défaut
+}
+
 // Fallback data when no journey data is passed
 const fallbackTrip = {
   departure: "Châtelet",
@@ -93,6 +116,9 @@ export default function TripDetailPage() {
   const hasCoords = originLat && originLon && destLat && destLon;
   const originPos = hasCoords ? { lat: parseFloat(originLat!), lon: parseFloat(originLon!) } : null;
   const destPos = hasCoords ? { lat: parseFloat(destLat!), lon: parseFloat(destLon!) } : null;
+
+  // ─── Alertes temps réel sur ce trajet ────────────────────────────────
+  const alerts = trip?.alerts || [];
 
   // ─── OSRM Routing for real geometry ─────────────────────────────────
   const { geometry: routeGeometry, fetchRoute } = useRoute();
@@ -234,6 +260,38 @@ export default function TripDetailPage() {
         </div>
       </div>
 
+      {/* Alertes temps réel */}
+      {alerts.length > 0 && (
+        <div className="mb-4 space-y-2">
+          <h2 className="text-sm font-semibold text-amber-700 flex items-center gap-1.5">
+            <AlertTriangle size={16} />
+            Perturbation{alerts.length > 1 ? "s" : ""} en cours
+          </h2>
+          {alerts.map((alert) => (
+            <div
+              key={alert.id}
+              className={`rounded-[var(--card-radius)] p-3 border text-sm ${
+                alert.severity === 'severe'
+                  ? 'bg-red-50 border-red-200 text-red-800'
+                  : alert.severity === 'warning'
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-blue-50 border-blue-200 text-blue-800'
+              }`}
+            >
+              <p className="font-medium">{alert.headerText}</p>
+              {alert.descriptionText && (
+                <p className="text-xs mt-1 opacity-80">{alert.descriptionText}</p>
+              )}
+              {alert.affectedRoutes?.length > 0 && (
+                <p className="text-[11px] mt-1.5 opacity-70">
+                  Lignes concernées : {alert.affectedRoutes.join(', ')}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Timeline */}
       <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-3">
         Détail du trajet
@@ -264,15 +322,7 @@ export default function TripDetailPage() {
                       : isDone ? {} : {}
                   }
                 >
-                  {isDone ? (
-                    <span className="text-xs">✓</span>
-                  ) : segment.type === "walking" ? (
-                    <Footprints size={14} />
-                  ) : segment.type === "velib" ? (
-                    <Bike size={14} />
-                  ) : (
-                    <Train size={14} />
-                  )}
+                  {getSegmentIcon(segment, isDone)}
                 </div>
                 {i < segments.length - 1 && (
                   <div className={`w-0.5 h-12 ${isDone ? "bg-[var(--color-eco-green)]" : "bg-[var(--color-border)]"}`} />
@@ -281,10 +331,24 @@ export default function TripDetailPage() {
 
               {/* Segment content */}
               <div className={`flex-1 pb-4 transition-opacity ${isDone ? "opacity-50" : isActive ? "opacity-100" : "opacity-80"}`}>
-                <p className={`text-sm font-medium ${isActive ? "text-[var(--color-primary)]" : "text-[var(--color-text-primary)]"}`}>
-                  {segment.instruction}
-                  {isActive && <span className="ml-2 text-xs text-[var(--color-primary)] font-normal">← En cours</span>}
-                </p>
+                {/* Badge ligne + instruction */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {segment.type === "transit" && segment.lineName && (
+                    <span
+                      className="shrink-0 inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[11px] font-bold text-white"
+                      style={{ backgroundColor: segment.lineColor || "var(--color-primary)" }}
+                    >
+                      {segment.lineName}
+                    </span>
+                  )}
+                  <p className={`text-sm font-medium ${isActive ? "text-[var(--color-primary)]" : "text-[var(--color-text-primary)]"}`}>
+                    {segment.type === "transit"
+                      ? `${segment.fromStop} → ${segment.toStop}`
+                      : segment.instruction}
+                    {isActive && <span className="ml-2 text-xs text-[var(--color-primary)] font-normal">← En cours</span>}
+                  </p>
+                </div>
+
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <span className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1">
                     <Clock size={11} />
@@ -292,29 +356,44 @@ export default function TripDetailPage() {
                   </span>
                   {segment.type !== "walking" && segment.numStops && (
                     <span className="text-[11px] text-[var(--color-text-tertiary)]">
-                      {segment.numStops} arrêts
+                      {segment.numStops} arrêt{segment.numStops > 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {segment.departureTime && segment.arrivalTime && (
+                    <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                      {segment.departureTime.slice(0, 5)} → {segment.arrivalTime.slice(0, 5)}
                     </span>
                   )}
                 </div>
-                {/* ─── Détails enrichis (direction, quai, attente) ──────────── */}
-                {segment.type === "transit" && (segment.direction || segment.platform || segment.waitTimeMinutes) && (
-                  <div className="mt-2 bg-[var(--color-surface)] rounded-lg p-2 space-y-1">
+                {/* ─── Détails enrichis (direction, quai, attente, mode) ─── */}
+                {segment.type === "transit" && (segment.direction || segment.platform || segment.waitTimeMinutes || segment.mode) && (
+                  <div className="mt-2 bg-[var(--color-surface)] rounded-lg p-2.5 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)]">
+                      <span className="font-medium text-[var(--color-text-primary)]">{getModeLabel(segment.mode)}</span>
+                      {segment.lineName && <span className="text-[var(--color-text-tertiary)]">· {segment.lineName}</span>}
+                    </div>
                     {segment.direction && (
                       <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
                         <Navigation2 size={10} className="text-[var(--color-primary)]" />
                         Direction : <span className="font-medium">{segment.direction}</span>
                       </p>
                     )}
-                    {segment.platform && (
+                    {segment.headsign && segment.headsign !== segment.direction && (
                       <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
                         <MapPin size={10} className="text-[var(--color-mobility-orange)]" />
+                        Terminus affiché : <span className="font-medium">{segment.headsign}</span>
+                      </p>
+                    )}
+                    {segment.platform && (
+                      <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
+                        <span className="inline-block w-4 h-4 rounded-full bg-[var(--color-mobility-orange)]/10 text-[var(--color-mobility-orange)] flex items-center justify-center text-[9px] font-bold">P</span>
                         {segment.platform}
                       </p>
                     )}
                     {segment.waitTimeMinutes && (
                       <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
                         <Clock size={10} className="text-[var(--color-eco-green)]" />
-                        Attente estimée : <span className="font-medium">{segment.waitTimeMinutes} min</span>
+                        Attente : <span className="font-medium">{segment.waitTimeMinutes} min</span>
                       </p>
                     )}
                   </div>

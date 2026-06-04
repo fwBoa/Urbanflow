@@ -9,9 +9,9 @@ import {
 } from '@nestjs/common';
 import { PrimService } from './prim.service';
 import { GtfsParserService } from './gtfs-parser.service';
-import { JourneyService, JourneyQuery } from './journey.service';
+import { JourneyService, JourneyQuery, JourneyResult } from './journey.service';
 import { OsrmService } from './osrm.service';
-import { GtfsRtService } from './gtfs-rt.service';
+import { GtfsRtService, RealtimeAlert } from './gtfs-rt.service';
 
 /**
  * Contrôleur Transport — Expose les données PRIM (Île-de-France Mobilités)
@@ -257,6 +257,27 @@ export class TransportController {
     }
   }
 
+  // ─── Prochains départs pour un arrêt GTFS ───────────────────────────
+
+  @Get('stop-times')
+  async getStopTimes(
+    @Query('stopId') stopId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!stopId) {
+      throw new HttpException(
+        'Query parameter "stopId" is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const departures = this.gtfsParser.getStopDepartures(
+      stopId,
+      new Date(),
+      limit ? parseInt(limit, 10) : 5,
+    );
+    return { departures };
+  }
+
   // ─── Recherche d'arrêts GTFS par nom ──────────────────────────────────
 
   @Get('gtfs-stops/search')
@@ -390,15 +411,56 @@ export class TransportController {
 
     const journeys = await this.journeyService.findJourney(query);
 
+    // Enrich journeys with realtime alerts affecting their lines
+    const alerts = await this.gtfsRtService.getAlerts();
+    const enrichedJourneys = journeys.map((j) => ({
+      ...j,
+      alerts: this.matchAlertsForJourney(j, alerts),
+    }));
+
     // If GTFS data not loaded, return a fallback mock journey
-    if (journeys.length === 0) {
+    if (enrichedJourneys.length === 0) {
       return this.computeFallbackJourney(query);
     }
 
-    return journeys;
+    return enrichedJourneys;
   }
 
   // ─── Routing réel OSRM — Géométrie suivant les rues ──────────────────
+
+  /**
+   * Match realtime alerts against a journey's transit lines.
+   * Returns alerts whose affectedRoutes overlap with the journey's line names.
+   */
+  private matchAlertsForJourney(
+    journey: JourneyResult,
+    alerts: RealtimeAlert[],
+  ): RealtimeAlert[] {
+    const lineNames = journey.segments
+      .filter((s) => s.type === 'transit')
+      .map((s) => s.lineName)
+      .filter(Boolean) as string[];
+
+    if (lineNames.length === 0 || alerts.length === 0) return [];
+
+    const normalize = (s: string) =>
+      s
+        .toUpperCase()
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/[\-_]/g, ' ');
+
+    return alerts.filter((alert) =>
+      alert.affectedRoutes.some((route) => {
+        const nr = normalize(route);
+        return lineNames.some((line) => {
+          const nl = normalize(line);
+          // bidirectional substring match
+          return nl.includes(nr) || nr.includes(nl);
+        });
+      }),
+    );
+  }
 
   @Get('route')
   async getRoute(

@@ -11,6 +11,8 @@ import DynamicMap from "@/components/DynamicMap";
 import { NearbyVelibSection } from "@/components/VelibStationCard";
 import { useVelibStations, useLinesByMode, useNearbyVelib } from "@/hooks/useTransport";
 import type { LineByMode, LinesByMode } from "@/hooks/useTransport";
+import { getHistory } from "@/services/favorites";
+import type { HistoryJourney } from "@/services/favorites";
 
 // ─── Lines by Mode Section ────────────────────────────────────────────
 const MODE_TABS = [
@@ -104,17 +106,20 @@ function LineBadge({ line }: { line: LineByMode }) {
   );
 }
 
-const recentTrips = [
-  { from: "Maison", to: "Gare du Nord", duration: "28 min", co2: 45, mode: "Métro" },
-  { from: "Boulot", to: "République", duration: "15 min", co2: 0, mode: "Vélo" },
-  { from: "Châtelet", to: "La Défense", duration: "22 min", co2: 32, mode: "RER A" },
-];
-
 export default function HomePage() {
   const router = useRouter();
   const [searchValue, setSearchValue] = useState("");
+  const [recentTrips, setRecentTrips] = useState<HistoryJourney[]>([]);
   const { stations: velibStations } = useVelibStations(50);
   const { linesByMode, loading: linesByModeLoading } = useLinesByMode();
+
+  // ─── Load recent trips from history ────────────────────────────────
+  useEffect(() => {
+    getHistory().then((history) => {
+      // Take the 3 most recent
+      setRecentTrips(history.slice(0, 3));
+    });
+  }, []);
 
   // ─── Geolocation for nearby Vélib' (F4) ────────────────────────────
   const [userPosition, setUserPosition] = useState<{ lat: number; lon: number } | null>(null);
@@ -243,27 +248,41 @@ export default function HomePage() {
           Trajets récents
         </h2>
         <div className="space-y-2">
-          {recentTrips.map((trip, i) => (
-            <button
-              key={i}
-              onClick={() => router.push(`/search?mode=${trip.mode.toLowerCase().replace("'", "").replace(" ", "")}`)}
-              className="w-full flex items-center gap-3 bg-white rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-sm transition-all text-left"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                  {trip.from} → {trip.to}
-                </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1">
-                    <Clock size={11} />
-                    {trip.duration}
-                  </span>
-                  <CO2Badge grams={trip.co2} />
+          {recentTrips.length === 0 ? (
+            <p className="text-sm text-[var(--color-text-tertiary)] py-2">
+              Aucun trajet récent. Lancez une recherche pour voir vos trajets ici.
+            </p>
+          ) : (
+            recentTrips.map((trip, i) => (
+              <button
+                key={trip.id || i}
+                onClick={() => router.push(`/search?mode=${trip.mode.toLowerCase().replace("'", "").replace(/\s+/g, "")}`)}
+                className="w-full flex items-center gap-3 bg-white rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-sm transition-all text-left"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                    {trip.from} → {trip.to}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1">
+                      <Clock size={11} />
+                      {trip.duration}
+                    </span>
+                    {trip.modeColor && (
+                      <span
+                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold text-white"
+                        style={{ backgroundColor: trip.modeColor }}
+                      >
+                        {trip.mode}
+                      </span>
+                    )}
+                    <CO2Badge grams={trip.co2} />
+                  </div>
                 </div>
-              </div>
-              <ChevronRight size={16} className="text-[var(--color-text-tertiary)] shrink-0" />
-            </button>
-          ))}
+                <ChevronRight size={16} className="text-[var(--color-text-tertiary)] shrink-0" />
+              </button>
+            ))
+          )}
         </div>
       </main>
 

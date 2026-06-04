@@ -31,6 +31,14 @@ export type TransportMode =
   | 'velib'
   | 'marche';
 
+export interface JourneyAlert {
+  id: string;
+  headerText: string;
+  descriptionText?: string;
+  severity: 'info' | 'warning' | 'severe' | 'unknown';
+  affectedRoutes: string[];
+}
+
 export interface JourneyResult {
   /** Durée totale en minutes */
   durationMinutes: number;
@@ -48,6 +56,8 @@ export interface JourneyResult {
   arrivalTime: string;
   /** Indique si l'itinéraire est un fallback (données GTFS non disponibles) */
   isFallback?: boolean;
+  /** Alertes temps réel affectant les lignes de ce trajet */
+  alerts?: JourneyAlert[];
 }
 
 export interface JourneySegment {
@@ -132,6 +142,14 @@ export class JourneyService {
     const departureTime = query.departureTime
       ? new Date(query.departureTime)
       : new Date();
+
+    // Vérifier que l'origine et la destination sont dans la région parisienne
+    const originDistFromParis = this.haversineKm(query.origin.lat, query.origin.lon, 48.8566, 2.3522);
+    const destDistFromParis = this.haversineKm(query.destination.lat, query.destination.lon, 48.8566, 2.3522);
+    if (originDistFromParis > 30 || destDistFromParis > 30) {
+      this.logger.warn(`Journey request outside Paris region: origin=${originDistFromParis.toFixed(1)}km, dest=${destDistFromParis.toFixed(1)}km from Paris center`);
+      return []; // Hors scope — aucun itinéraire disponible
+    }
 
     // Determine active service IDs for the departure day
     const activeServiceIds = this.getActiveServiceIds(departureTime);

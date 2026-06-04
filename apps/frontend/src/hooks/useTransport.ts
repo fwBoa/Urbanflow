@@ -6,6 +6,7 @@ import type { PrimLine, PrimStop, PrimVelibStation, NearbyVelibStation, JourneyR
 
 // Re-export types for convenience
 export type { NearbyVelibStation } from "@/services/api";
+import type { RealtimeAlert } from "@/services/api";
 
 // ─── Generic API data hook (DRY) ───────────────────────────────────
 /**
@@ -288,6 +289,48 @@ export function useTrafficMessages(limit = 5) {
     [limit],
   );
   return { messages, loading, error };
+}
+
+// ─── Realtime alerts ───────────────────────────────────────────────
+export function useRealtimeAlerts() {
+  const { data: alerts, loading, error } = useApiData<RealtimeAlert[]>(
+    () => apiService.getRealtimeAlerts(),
+    [],
+    [],
+  );
+  return { alerts: alerts || [], loading, error };
+}
+
+export interface StopDeparture {
+  tripId: string;
+  routeId: string;
+  lineName: string;
+  lineColor: string;
+  routeType: number;
+  headsign: string;
+  departureTime: string;
+  arrivalTime: string;
+  waitMinutes: number;
+  platform?: string;
+}
+
+// ─── Prochains départs par arrêt ────────────────────────────────────
+export function useStopTimes(stopId: string | null, limit = 5) {
+  const { data: result, loading, error } = useApiData<{ departures: StopDeparture[] }>(
+    () => {
+      if (!stopId) return Promise.resolve({ departures: [] });
+      return apiService.getStopTimes(stopId, limit);
+    },
+    { departures: [] },
+    [stopId, limit],
+    false,
+  );
+
+  if (!stopId) {
+    return { departures: [] as StopDeparture[], loading: false, error: null };
+  }
+
+  return { departures: result?.departures || [], loading, error };
 }
 
 // ─── Health check ──────────────────────────────────────────────────

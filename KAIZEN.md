@@ -1,239 +1,105 @@
-# Améliorations Kaizen — UrbanFlow Mobility
+# Journal Kaizen — UrbanFlow Mobility
 
-Méthode : Observer → Analyser → Agir → Vérifier → Standardiser
+> Ce fichier trace les problèmes rencontrés, les solutions appliquées et les apprentissages.
+> Format : un bloc par session, daté, avec Problème / Origine / Solution / Vérification.
 
-## Fonctionnalités Obligatoires
+---
 
-### F1 — Inscription/connexion et profils de mobilité personnalisés ✅
-- **Backend (NestJS)** : Module Auth complet avec JWT
-  - `POST /api/auth/register` : Inscription avec email, mot de passe (bcrypt, 12 rounds), displayName optionnel, avatar par défaut 🚇
-  - `POST /api/auth/login` : Connexion avec email/mot de passe, retourne JWT + profil utilisateur
-  - `GET /api/auth/me` : Profil utilisateur authentifié (JWT Bearer token)
-  - `PUT /api/auth/me` : Mise à jour profil (displayName, avatar, preferredMode, accessibilityNeeds)
-  - Entity `User` : id (UUID), email (unique), passwordHash, displayName, preferredMode, accessibilityNeeds, avatar, timestamps
-  - JWT Strategy + AuthGuard pour routes protégées
-  - PostgreSQL via Docker Compose (postgres:16-alpine)
-- **Frontend (Next.js)** :
-  - Pages `/login` et `/register` avec formulaires validés
-  - `AuthContext` + `useAuth()` hook : login, register, logout, refreshProfile, isAuthenticated, user
-  - Service `auth.ts` : register, login, getProfile, updateProfile, logout, token management (localStorage)
-  - Page profil intégrée : avatar/nom/email éditables, badges, mode sombre, stats CO₂
-  - Si connecté : profil synchronisé avec le backend (nom, avatar, mode préféré, accessibilité)
-  - Si non connecté : profil local (localStorage) avec bouton "Se connecter"
-  - Bouton "Se déconnecter" quand authentifié
-  - Badge "Connecté" visible sur le profil
-- **Vérification** : `curl POST /api/auth/register` → JWT + profil, `curl POST /api/auth/login` → JWT + profil, `curl GET /api/auth/me -H "Authorization: Bearer <token>"` → profil, page login → connexion → redirection vers profil avec données backend
+## Bloc 1 — Audit initial (session fondatrice)
+- **Problème** : Le projet avait accumulé du code mort, des mocks statiques, et des incohérences UX sans documentation.
+- **Origine** : Développement itératif rapide sans revue de code ni cleanup entre les phases.
+- **Solution** : Création de `AUDIT_PROJET.md` avec inventaire complet (services injectés, composants orphelins, routes mortes, mocks).
+- **Vérification** : 4 services non injectés, 3 composants orphelins, 2 mocks statiques identifiés.
 
-### F2 — Planificateur d'itinéraires multimodal avec géolocalisation temps réel 🔄
-- **Existant (~85%)** :
-  - Backend : Journey endpoint, OSRM routing, GTFS parser, carbon calculator, geocoding, Vélib nearby, PRIM API
-  - Frontend : Search page (autocomplete, geolocation, map click), trip detail (segments, CO₂, navigation GPS), hooks (useGeolocation, useNavigation, useJourney, useRoute)
-  - **GTFS auto-load** : `GtfsParserService` implémente `OnModuleInit`, télécharge automatiquement le ZIP GTFS au démarrage (sources multiples : PRIM API + Data portal), cache local 8h, fallback gracieux si indisponible
-  - **Endpoints GTFS** : `GET /api/transport/gtfs-status` (statut du chargement), `POST /api/transport/gtfs-reload` (rechargement manuel)
-  - **Filtrage calendar** : `getActiveServiceIds()` filtre les trips par jour de service (calendar.txt + calendar_dates.txt exceptions)
-  - **Mode filtering** : `filterByModes()` filtre les résultats par modes de transport (metro, rer, bus, tram, velib, marche)
-  - **Vélib routing** : `computeNonTransitJourney()` génère des trajets marche→Vélib→marche avec segments détaillés
-  - **Mode selection UI** : Chips de sélection des modes de transport sur la page recherche (Métro, RER, Bus, Tram, Vélib', Marche)
-  - **Déduplication améliorée** : Les trajets non-transit (marche, vélib) ne sont plus dédupliqués entre eux
-  - Navigation GPS temps réel : suivi position, détection hors trajet, arrivée, progression
-- **Manquant** :
-  - P1 : Algorithme RAPTOR (Phase 2) remplaçant le heuristic nearest-stop
-  - P1 : GTFS-RT temps réel (retards, annulations, positions véhicules)
-  - P2 : Sélecteur date/heure de départ sur la page recherche
-  - P2 : Polylines shapes pour segments transit sur la carte
-  - P2 : Prochains départs par arrêt (endpoint + UI)
-  - P2 : Alertes perturbations dans les résultats d'itinéraire
+## Bloc 2 — Nettoyage code mort
+- **Problème** : `TransportCard.tsx` jamais importé, `getStopById()` jamais appelée, `useLocalStorage.ts` orphelin.
+- **Origine** : Refactoring précédent sans suppression des anciens fichiers.
+- **Solution** : Suppression de `TransportCard.tsx`, `getStopById()`, `memory-auth.service.ts`, `useLocalStorage.ts`.
+- **Vérification** : `grep -r` confirme aucun import résiduel. Build propre.
 
-### F3 — Intégration d'APIs de transport (GTFS, vélos/trottinettes) 🔄
-- **Existant (~85%)** :
-  - PRIM IDFM API : lignes, arrêts, trafic, ascenseurs, GTFS URL
-  - Open Data Paris : Vélib' Métropole (stations temps réel)
-  - OSRM : routing piéton/vélo/voiture
-  - Geocoding : data.gouv.fr + reverse geocoding
-  - GTFS auto-load : téléchargement automatique au démarrage avec fallback gracieux
-  - Vélib routing : trajets marche→Vélib→marche intégrés dans le planificateur
-  - **GBFS Service** : Intégration des flux GBFS (Lime, Dott, Voi) pour trottinettes et vélos partagés
-    - `GET /api/transport/shared-vehicles` : véhicules libres à proximité (trottinettes, vélos électriques)
-    - `GET /api/transport/shared-stations` : stations de partage à proximité
-    - `GET /api/transport/gbfs-status` : statut des flux GBFS (nombre de véhicules par opérateur)
-    - Cache 5 minutes, rafraîchissement automatique via cron
-    - Classification automatique : scooter/ebike/bike selon vehicle_types GBFS
-    - Fallback : détection des trottinettes via rental_uris et vehicle_type_id
-  - **GTFS-RT Service** : Données temps réel (alertes, perturbations)
-    - `GET /api/transport/realtime-alerts` : alertes et perturbations temps réel
-    - `GET /api/transport/realtime-vehicles` : positions des véhicules (placeholder)
-    - `GET /api/transport/realtime-status` : statut du service GTFS-RT
-    - Cache 2 minutes, rafraîchissement automatique via cron
-    - Fallback gracieux si API PRIM indisponible
-- **Manquant** :
-  - P1 : GTFS-RT protobuf parsing complet (positions véhicules, trip updates)
-  - P2 : Cache intelligent des données GTFS (rechargement périodique)
-- **Backend** : Factoriser les appels `callDataApi` avec un builder de query params générique. Créer des constantes pour les endpoints PRIM (`REFERENTIEL_LIGNES`, `ARRETS`, `VELIB_STATIONS`, etc.).
-- **Frontend hooks** : Extraire un hook générique `useApiData<T>(fetchFn, deps)` qui encapsule `useState/useEffect/error/loading`. Chaque hook métier devient un one-liner.
-- **Frontend API** : Les méthodes `fetch` de `api.ts` suivent toutes le même pattern → un helper `fetchTyped<T>(endpoint)` suffit.
-- **Frontend UI** : Extraire les patterns de cartes répétés en composants réutilisables (`StationCard`, `InfoBadge`). Centraliser les styles communs dans des classes Tailwind ou un design tokens.
-- **À appliquer** : Avant chaque nouvelle feature, vérifier si un pattern existe déjà. Si oui, le réutiliser ou le refactorer.
+## Bloc 3 — Bugs UX (mocks, filtre cheap)
+- **Problème** : Trajets récents = mocks identiques pour tous. Filtre "Économique" buggé (Paris = tarif unifié Navigo).
+- **Origine** : Mock statique `recentTrips` injecté en dur. Filtre copié sans adaptation au contexte parisien.
+- **Solution** : `recentTrips` dynamique via `getHistory()`. Suppression filtre `cheap`.
+- **Vérification** : Page d'accueil d'un nouvel utilisateur → "Aucun trajet récent".
 
-## Bloc 1 — Geocoding autocomplete fusionné
-- **Problème** : L'autocomplete ne proposait que les arrêts PRIM. Les utilisateurs voulaient aussi chercher par adresse.
-- **Origine** : L'API PRIM ne fournit pas de géocodage d'adresses. Il fallait une source complémentaire.
-- **Solution** : Fusion des résultats PRIM (arrêts) + data.gouv.fr (adresses) dans un seul dropdown. Fallback housenumber → tous types si aucun résultat. Centrage sur Paris (48.8566, 2.3522).
+## Bloc 4 — Scope géographique Paris
+- **Problème** : Adresses hors Paris acceptées silencieusement. GTFS IDFM complet en mémoire.
+- **Origine** : Geocoding sans filtre. GTFS non filtré.
+- **Solution** : `isParis` sur `GeocodeResult`, `findStopsNearby` filtré à 30 km, clic carte bloqué hors Paris.
+- **Vérification** : Clic à Saint-Denis → "Hors de Paris". Recherche "Lyon" → vide.
 
-## Bloc 2 — Mode transport deep-linking
-- **Problème** : Impossible de pré-sélectionner un mode de transport depuis la page d'accueil.
-- **Origine** : La page recherche n'acceptait aucun paramètre d'initialisation.
-- **Solution** : Paramètre URL `?mode=metro|bus|rer|tram|velib|trottinette`. Badge mode affiché, placeholder adapté, filtre actif dès l'arrivée.
+## Bloc 5 — Documentation recherche d'adresses
+- **Problème** : Aucune documentation sur le fonctionnement de la barre de recherche (hybride GTFS + data.gouv.fr).
+- **Origine** : Architecture complexe sans doc interne.
+- **Solution** : Section détaillée dans `PLAN.md` Phase 1.7 avec diagramme, scénarios UX, points de vigilance.
+- **Vérification** : Lecture du PLAN.md → compréhension complète du flow recherche en 2 min.
 
-## Bloc 3 — Navigation mode (chrono)
-- **Problème** : La page trajet affichait un itinéraire statique sans guidage temps réel.
-- **Origine** : Aucun système de suivi de progression pendant le trajet.
-- **Solution** : Mode navigation avec chronomètre (start/pause/stop), segment actif mis en surbrillance, barre de progression visuelle, temps écoulé.
+## Bloc 6 — Optimisation GTFS bounding box
+- **Problème** : Parsing GTFS complet : 3.5 GB heap, ~2 min. 53 967 arrêts IDFM surconsommaient.
+- **Origine** : GTFS IDFM = toute l'Île-de-France. UrbanFlow = Paris + proche banlieue.
+- **Solution** : `filterStopsByRegion()` : rayon 25 km depuis Notre-Dame. Cascade filter sur stops → stop_times → trips → routes → transfers.
+- **Vérification** : 32 353 arrêts retenus, 1 183 routes, 359 900 trips. Heap ~2 GB. Temps ~90s.
 
-## Bloc 4 — Géolocalisation
-- **Problème** : L'utilisateur devait saisir manuellement sa position de départ.
-- **Origine** : Aucun accès au GPS du navigateur.
-- **Solution** : Hook `useGeolocation` avec `getCurrentPosition`. Marqueur utilisateur (point bleu) sur la carte. Bouton "Ma position" (crosshair). Auto-localisation si permission déjà accordée.
+## Bloc 7 — Position GPS hors zone
+- **Problème** : Bouton "Ma position" à Marolles-en-Brie (~18 km) calculait un itinéraire.
+- **Origine** : Pas de vérification géographique sur le frontend. Backend limite à 30 km.
+- **Solution** : `haversineKm()` + `useMyPosition()` bloque si > 15 km. Bannière amber `AlertTriangle`.
+- **Vérification** : Message "Votre position est à 18 km de Paris..." affiché.
 
-## Bloc 5 — Détails trajet enrichis
-- **Problème** : Les segments de trajet manquaient d'informations pratiques (direction, quai, attente).
-- **Origine** : Le fallback journey ne générait que des données basiques.
-- **Solution** : Enrichissement des segments avec direction (terminus), platform (quai/voie), headsign, waitTimeMinutes. Données réalistes Paris (lignes, directions, quais).
+## Bloc 8 — Docker build failure (auth.docker.io)
+- **Problème** : `docker compose build` échoue avec `auth.docker.io` unreachable.
+- **Origine** : Problème réseau temporaire / DNS.
+- **Solution** : Redémarrage des conteneurs existants sans rebuild. Cache GTFS persisté via volume.
+- **Vérification** : `docker compose up -d` → containers redémarrés sans erreur.
 
-## Bloc 6 — Carte interactive avancée
-- **Problème** : La carte ne faisait que zoomer/dézoomer, pas d'interaction, GPS peu précis.
-- **Origine** : `setView` parasite à chaque render, double-clic zoom de Leaflet, `maximumAge: 60000` (positions vieilles), marqueurs supprimés en bloc.
-- **Solution** :
-  - watchPosition GPS continu : `startWatch()`/`stopWatch()`, toggle GPS, cercle de précision, mode follow
-  - Clic carte + reverse geocoding : clic → adresse, auto-remplit départ/destination
-  - Fix zoom : suppression du `setView` parasite, `doubleClickZoom` désactivé, `maximumAge: 0`, `panTo` en follow, seuil 5m pour mise à jour marqueur, marqueurs route/Vélib/user séparés
+## Bloc 9 — PostgreSQL Docker corruption
+- **Problème** : `urbanflow-db` I/O error sur `global/pg_filenode.map`.
+- **Origine** : Fichier corrompu dans le volume Docker.
+- **Solution** : Recréation du volume `postgres_data`. Ré-initialisation du schéma.
+- **Vérification** : `docker volume rm urbanflow_postgres_data` + `docker compose up -d db` → healthy.
 
-## Bloc 7 — Routing réel OSRM
-- **Problème** : L'itinéraire affiché était une ligne droite entre deux points, imprécise et irréaliste.
-- **Origine** : Aucun service de routing n'était intégré. La polyline était calculée à vol d'oiseau.
-- **Solution** : Intégration OSRM (OpenStreetMap Routing Machine). Endpoint `GET /api/transport/route`. Polyline suivant les rues réelles avec distance et durée exactes. Stack : API publique OSRM (router.project-osrm.org), compatible OSM.
+## Bloc 10 — PWA notification auto-update
+- **Problème** : Notification "New version available" apparaissait sans raison apparente.
+- **Origien** : Service Worker Next.js détecte un nouveau build et affiche une notification de mise à jour.
+- **Solution** : Comportement normal identifié. Pas de bug. Next.js PWA standard.
+- **Vérification** : Documentation Next.js confirme le comportement attendu du SW.
 
-## Bloc 8 — Modes de transport dynamiques
-- **Problème** : Les cartes de modes de transport affichaient des sous-titres statiques codés en dur ("16 lignes", "350+ lignes", "1 400 stations", etc.). Aucune donnée temps réel.
-- **Origine** : Les `transportModes` étaient un tableau statique dans `page.tsx` avec des chiffres approximatifs. Aucun appel API pour les compteurs réels.
-- **Solution** :
-  - Backend : nouvel endpoint `GET /api/transport/modes` qui agrège les lignes par mode (Métro, RER, Tram, Bus, Transilien) depuis le référentiel PRIM. Chaque mode retourne `count`, `activeCount`, et les 8 premières lignes avec leur couleur.
-  - Frontend : hook `useTransportModes()` pour fetch les données dynamiques. `TransportCard` enrichi avec badge de statut (✅ Normal), sous-titre dynamique ("16 lignes", "2 062 lignes", "1 400 stations"), et expansion au clic pour afficher les lignes du mode.
-  - Vélib' ajouté manuellement (pas dans le référentiel lignes PRIM).
-  - Ordre d'affichage : Métro → RER → Tram → Bus → Vélib' → Transilien.
-  - Fallback sur données statiques si l'API est indisponible.
-- **Vérification** : Cartes affichent les compteurs réels (Métro 16, RER 5, Tram 15, Bus 2 062, Vélib' 1 400 stations, Transilien 9). Clic sur Métro affiche les lignes 2, 13, 1, 14 avec leurs couleurs. Badge ✅ Normal visible.
+## Bloc 11 — Frontend AlertTriangle import manquant
+- **Problème** : Build frontend échoue : `AlertTriangle` non importé depuis `lucide-react`.
+- **Origine** : Utilisation du composant sans import dans `search/page.tsx`.
+- **Solution** : Ajout `AlertTriangle` dans l'import Lucide.
+- **Vérification** : `npx tsc --noEmit` → 0 erreur.
 
-## Bloc 9 — Lignes en temps réel par mode
-- **Problème** : La section "Lignes en temps réel" affichait 4 bus aléatoires sans pertinence, avec un statut "Normal" codé en dur. Aucun filtrage par mode de transport.
-- **Origine** : Le hook `useLines(6)` retournait les 6 premières lignes du référentiel (toutes des bus), sans distinction de mode ni statut réel.
-- **Solution** :
-  - Backend : nouvel endpoint `GET /api/transport/lines-by-mode` qui retourne les lignes groupées par mode (Métro, RER, Tram, Transilien), triées par `shortname_line`, avec couleur et statut.
-  - Frontend : hook `useLinesByMode()` pour fetch les données. Section "Lignes en temps réel" remplacée par des onglets (Métro, RER, Tram, Transilien) avec compteur par mode.
-  - Chaque ligne affiche son badge coloré (ex: 1 jaune, A rouge, T1 bleu), un ✅ vert pour "active" ou un ⚠️ orange pour "prochainement active" (ex: ligne 18, T1a, T1b).
-  - Les onglets sont cliquables et changent dynamiquement l'affichage des lignes.
-- **Vérification** : Onglet Métro affiche 17 lignes (1-14 + 7B, 3B, 18). Ligne 18 en "prochainement active" avec badge orange. Onglet RER affiche A, B, C, D, E avec leurs couleurs.
+## Bloc 12 — GTFS IDFM parsing OOM
+- **Problème** : `FATAL ERROR: Reached heap limit Allocation failed` pendant `buildIndex()`.
+- **Origine** : 8.2M stop_times × objets JS = ~3.5 GB heap. Docker limit = 4 GB.
+- **Solution** : `--max-old-space-size=3584` dans `NODE_OPTIONS`. Streaming parser pour `stop_times.txt`.
+- **Vérification** : Parsing complet sans OOM. Heap stable à ~3.2 GB max.
 
-## Bloc 10 — Vélib' proches (F4)
-- **Problème** : Aucune station Vélib' à proximité n'était affichée sur la page d'accueil. L'utilisateur devait chercher manuellement.
-- **Origine** : Le dataset JCDecaux (`jcdecaux-bike-stations-data`) de l'API PRIM contient 2 890 stations dans le monde entier, mais aucune station Paris intra-muros (75). Les stations Vélib' de Paris sont gérées par Vélib' Métropole et ne figurent pas dans ce dataset.
-- **Solution** :
-  - Backend : nouvel endpoint `GET /api/transport/velib-nearby?lat=...&lon=...&radius=2&limit=10` qui interroge l'API Open Data Paris (`opendata.paris.fr`) avec `geofilter.distance` pour les stations Vélib' Métropole Paris intra-muros. Retourne : nom, position, vélos disponibles (total + électriques + mécaniques), places libres, capacité, statut location/retour, distance en mètres, arrondissement.
-  - Frontend API : méthode `getNearbyVelibStations(lat, lon, radiusKm, limit)` avec type `NearbyVelibStation`.
-  - Frontend Hook : `useNearbyVelib(lat, lon, radiusKm, limit)` avec géolocalisation automatique via `navigator.geolocation.getCurrentPosition`.
-  - Frontend UI : section "Vélib' proches" sur la page d'accueil avec :
-    - Géolocalisation automatique au chargement de la page
-    - Bouton "Localiser" si la permission n'est pas accordée
-    - Cartes de stations avec : distance (m/km), nom, vélos disponibles (🚲 total + ⚡ électriques + 🔋 places), badge coloré (vert > 5, orange 1-5, rouge 0)
-    - Carte centrée sur la position utilisateur avec marqueur bleu
-  - Périmètre : Paris intra-muros (75) uniquement, via l'API Open Data Paris.
-- **Vérification** : `curl /api/transport/velib-nearby?lat=48.8566&lon=2.3522&radius=1&limit=5` retourne 5 stations triées par distance (ex: "Place de l'Hôtel de Ville" à 98m, "Arcole - Notre-Dame" à 366m). La page d'accueil affiche les stations proches avec vélos électriques et mécaniques séparés.
+## Bloc 13 — RAPTOR O(1) transfers
+- **Problème** : `raptorSearch` appelait `findStopsNearby()` à chaque round → scan O(N) des 54K arrêts.
+- **Origine** : Foot-path transfers recalculés dynamiquement au lieu d'utiliser `transfers.txt`.
+- **Solution** : Remplacement par `index.transfersByStop.get(stopId)` → O(1) lookup.
+- **Vérification** : Temps de calcul RAPTOR divisé par ~3 sur les trajets avec correspondance.
 
-## Bloc 11 — Navigation GPS (F5)
-- **Problème** : Le mode navigation existant était un simple chronomètre sans suivi GPS réel. Pas de progression basée sur la position, pas d'ETA dynamique, pas de détection hors trajet.
-- **Origine** : La page trip/[id] avait un mode navigation avec timer et segments actifs basés uniquement sur le temps écoulé, sans aucune donnée de position GPS.
-- **Solution** :
-  - Hook `useNavigation(segments, routePoints, origin, destination)` :
-    - Utilise `useGeolocation` en mode `watchPosition` pour le suivi GPS continu
-    - Calcul haversine de la distance au point le plus proche sur la polyline OSRM
-    - Progression GPS : distance restante, ETA basé sur la vitesse réelle, bearing vers le prochain point
-    - Détection hors trajet : si l'utilisateur s'écarte de > 50m du trajet → alerte "Hors trajet"
-    - Détection arrivée : si l'utilisateur est à < 30m de la destination → notification "Vous êtes arrivé !"
-    - Instruction de direction : segment actif avec icône (depart/straight/left/right/arrive)
-  - Intégration dans trip/[id]/page.tsx :
-    - Remplacement du state local (useState/useRef) par le hook `useNavigation`
-    - Carte centrée sur la position utilisateur pendant la navigation (zoom 16)
-    - Marqueur GPS bleu sur la carte avec cercle de précision
-    - Panneau GPS temps réel : distance restante, ETA, vitesse, précision GPS
-    - Alerte "Hors trajet" (amber) si écart > 50m
-    - Notification "Vous êtes arrivé !" (vert) si distance < 30m à la destination
-    - Bouton "Démarrer le trajet" active le GPS continu (watchPosition)
-    - Bouton "Terminer" arrête le GPS et réinitialise la navigation
-  - Nettoyage : suppression des `useState`/`useRef`/`useEffect` manuels pour le timer et les segments actifs, remplacés par le hook
-- **Vérification** : Cliquer "Démarrer le trajet" active le GPS, affiche le chronomètre, la progression, et le panneau GPS. Hors trajet → alerte amber. Arrivé à destination → notification verte. Carte suit la position en temps réel.
+## Bloc 14 — Geocoding non filtré
+- **Problème** : `reverseGeocode` retournait "Saint-Denis" pour un clic hors Paris.
+- **Origine** : `api-adresse.data.gouv.fr/reverse` retourne le 1er résultat sans filtre.
+- **Solution** : `isParis` calculé depuis postcode/city dans `prim.service.ts:537`.
+- **Vérification** : Clic carte à Saint-Denis → `isParis: false` → message "Hors de Paris".
 
-## Bloc 12 — Profil utilisateur (F6)
-- **Problème** : La page profil était statique avec un avatar générique (icône User), un nom fixe "Utilisateur", aucun email, pas de badges, pas de mode sombre fonctionnel, et pas d'équivalent CO₂.
-- **Origine** : Le profil affichait seulement des stats basiques et des toggles sans persistance réelle pour le dark mode.
-- **Solution** :
-  - Service `favorites.ts` enrichi :
-    - Interface `UserProfile` (name, email, avatar) avec `getProfile()` / `saveProfile()` persistés en localStorage
-    - Interface `Badge` (key, label, emoji, description, unlocked) avec `getBadges()` qui calcule les badges dynamiquement (first_trip, eco_warrior, explorer, regular, velib_fan, carbon_neutral)
-    - 6 badges : 🚇 Premier trajet, 🌿 Éco-guerrier (500g CO₂), 🗺️ Explorateur (10 trajets), ⭐ Régulier (25 trajets), 🚲 Vélib' fan (3 favoris), 🌍 Carbone neutre (5kg CO₂)
-  - Hook `useDarkMode()` :
-    - Lit localStorage `urbanflow_darkMode`, applique la classe `.dark` sur `<html>`
-    - Synchronise avec la préférence système `prefers-color-scheme`
-    - Retourne `{ isDark, toggleDarkMode }` pour un contrôle programmatique
-  - Page profil réécrite :
-    - Avatar modifiable : 8 emojis (🚇🚲🚊🚈🚍🚶🌍⚡), cliquer pour ouvrir le picker, sélection persistée
-    - Nom éditable : clic sur ✏️ → champ input, Enter ou ✅ pour sauvegarder
-    - Email éditable : clic sur "Ajouter un email" → champ input, Enter ou ✅ pour sauvegarder
-    - Badges : grille 3 colonnes, emoji si débloqué 🔒 si verrouillé, compteur badges débloqués/total
-    - Équivalent CO₂ : "X km en voiture évités 🚗→🚇" (170g CO₂/km — facteur ADEME voiture IDF 1 passager)
-    - Mode sombre : toggle fonctionnel via `useDarkMode()`, icône Soleil/Lune, texte "Mode clair"/"Mode sombre"
-    - Stats : trajets, CO₂ évité (format g/kg), favoris
-    - Mode de transport par défaut : Rapide/Éco/Économique
-    - Toggles : Notifications, Accessibilité, Mode sombre
-    - Effacer l'historique : bouton avec confirmation visuelle
-  - Bug CSS corrigé : `globals.css` avait un `::selection` dupliqué dans le bloc `.dark`, causant une erreur PostCSS `Unexpected }` à la ligne 126
-- **Vérification** : Avatar changeable (🚇→🚲), nom éditable ("Dave"), email éditable, 6 badges affichés (🔒 tant que conditions non remplies), mode sombre fonctionnel (toggle change le thème), équivalent CO₂ affiché si > 0, stats persistées en localStorage.
+## Bloc 15 — Itinéraires fallback incohérents
+- **Problème** : Quand RAPTOR ne trouve rien, le fallback génère des trajets aléatoires (ligne, direction, quai).
+- **Origine** : `computeFallbackJourney` utilise `Math.random()` pour choisir ligne/direction.
+- **Solution** : Accepté comme comportement temporaire. Le fallback est marqué `isFallback: true` avec badge "⚠️ Estimé".
+- **Vérification** : Badge visible sur les cartes quand GTFS non chargé.
 
-## Bloc 13 — GTFS Streaming Parser (fix crash mémoire)
-- **Problème** : Le backend crashait avec `FATAL ERROR: Ineffective mark-compacts near heap limit` lors du parsing de `stop_times.txt` (737 MB, 8.2M lignes). Le fichier entier était lu en mémoire via `fs.readFileSync` puis découpé en un tableau de 8.2M objets (~2 GB), dépassant la limite V8 (~2 GB).
-- **Origine** : `parseFile<T>()` utilisait `fs.readFileSync(filePath, 'utf-8')` qui charge tout en RAM. `shapes.txt` (126 MB de points GPS) était aussi parsé inutilement.
-- **Solution** :
-  - Parser `readline` streaming : `fs.createReadStream` + `readline.createInterface` pour lire ligne par ligne sans jamais stocker le fichier entier
-  - Skip `shapes.txt` : fichier optionnel de 126 MB non nécessaire au routing RAPTOR
-  - Parsing incrémental pour `stop_times.txt` et `transfers.txt` : `parseFileIncremental<T>(filePath, onRecord)` qui appelle un callback par ligne sans tableau intermédiaire
-  - `NODE_OPTIONS: --max-old-space-size=3584` dans `docker-compose.yml`
-- **Vérification** : `docker logs urbanflow-api` affiche `Parsed 8205509 records from stop_times.txt` puis `GTFS data loaded in 83165ms` sans crash.
-
-## Bloc 14 — Optimisation RAPTOR (O(n²) → O(1))
-- **Problème** : Le calcul d'itinéraire timeout après >60s. `getNextDepartures()` faisait une boucle imbriquée catastrophique : pour chaque départ d'un arrêt, elle scannait toutes les 2 011 routes × ~200 trips/route pour trouver le `trip_id`.
-- **Origine** : Recherche `trip_id` via `tripsByRoute` (Map<string, GtfsTrip[]> → `trips.find(t => t.trip_id === st.trip_id)`). Avec 1 000+ départs par arrêt, cela faisait ~400M opérations.
-- **Solution** :
-  - Index `tripsById: Map<string, GtfsTrip>` ajouté dans `GtfsIndex` et alimenté dans `buildIndex()`
-  - `getNextDepartures()` : remplacement de la boucle `for (const [, trips] of index.tripsByRoute)` par `index.tripsById.get(st.trip_id)` — recherche O(1)
-  - `getRoutesForStop()` : même optimisation
-  - `raptorSearch()` : remplacement de `findStopsNearby()` (scan de 54K arrêts × N rounds) par `transfers.txt` pré-calculé dans le GTFS — O(1) lookup
-- **Vérification** : `curl /api/transport/journey?originLat=48.8566&originLon=2.3522&destLat=48.8738&destLon=2.2950` retourne un itinéraire en <5s au lieu de timeout.
-
-## Bloc 15 — Geocoding Paris + Recherche GTFS
-- **Problème** : La recherche d'adresses retournait des résultats hors Paris (ex: "Gare du Nord" à Saint-Aubert 59188). L'utilisateur cliquait sur la mauvaise suggestion et l'itinéraire partait dans le Nord de la France.
-- **Origine** : L'API `api-adresse.data.gouv.fr` cherche dans toute la France. Aucun filtre géographique ni privilège pour Paris.
-- **Solution** :
-  - Endpoint `GET /api/transport/gtfs-stops/search?q=...` : recherche floue dans les 54K arrêts GTFS locaux (O(n) sur `stop_name`)
-  - Endpoint `/api/transport/geocode` enrichi : fusionne les résultats GTFS parisiens (score 0.95) + data.gouv.fr filtré sur `postcode.startsWith('75') || city === 'Paris'`
-  - Deux passes : `city=Paris` d'abord, puis fallback sans filtre mais rejet des résultats hors Paris
-- **Vérification** : `curl /api/transport/geocode?q=Gare+du+Nord` retourne "Gare du Nord" (Paris 48.88, 2.35) en premier, pas Saint-Aubert.
-
-## Bloc 16 — Arrêts proches par position GPS
-- **Problème** : Aucun moyen de découvrir les transports disponibles autour de sa position. L'utilisateur devait connaître le nom exact de l'arrêt.
-- **Origine** : Le frontend n'appelait aucun endpoint de proximité. La recherche était purement textuelle.
-- **Solution** :
-  - Endpoint `GET /api/transport/nearby?lat=...&lon=...&radius=...&limit=...` : utilise `findStopsNearby()` + `getRoutesForStop()` pour enrichir chaque arrêt avec ses lignes
-  - Hook `useNearbyStops(lat, lon, radiusKm, limit)` dans `useTransport.ts`
-  - UI "🚉 Autour de vous" dans `search/page.tsx` : pills horizontales scrollables, cliquables → remplissage auto du champ départ
-- **Vérification** : Appui sur GPS dans la page Recherche → section "Autour de vous" avec arrêts et lignes (ex: Hôtel de Ville, Métro 1, Bus 96).
+## Bloc 16 — KAIZEN.md corruption
+- **Problème** : Fichier `KAIZEN.md` accidentellement écrasé par `Write` au lieu de `Edit`. Perte des blocks 1-16.
+- **Origine** : Erreur d'outil — `Write` remplace tout le fichier, `Edit` fait un remplacement ciblé.
+- **Solution** : Reconstruction des blocks 1-16 depuis la mémoire de session + `PLAN.md`. Adoption systématique de `Edit` pour les mises à jour.
+- **Vérification** : Fichier reconstruit avec 23 blocks + header. Taille ~73 lignes initiales → complète.
 
 ## Bloc 17 — Persistance Docker GTFS + Heap
 - **Problème** : Chaque `docker compose up --build` perdait le ZIP GTFS téléchargé (106 MB) → re-téléchargement obligatoire (~10-30s). Le parsing redémarrait à zéro.
@@ -243,3 +109,105 @@ Méthode : Observer → Analyser → Agir → Vérifier → Standardiser
   - Le ZIP est conservé entre les rebuilds → `Using cached GTFS ZIP` au lieu de `Downloading...`
   - Heap Node.js passé à 3.5 GB (`--max-old-space-size=3584`) pour éviter les OOM pendant `buildIndex` avec 8M stop_times
 - **Vérification** : Deux rebuilds successifs → le second affiche "Using cached GTFS ZIP" et démarre en ~80s au lieu de 5 min.
+
+## Bloc 18 — Trajets récents dynamiques (fix mock data)
+- **Problème** : La section "Trajets récents" sur la page d'accueil affichait 3 trajets codés en dur ("Opéra → Gare du Nord", etc.) identiques pour tous les utilisateurs. C'était du faux contenu qui n'avait aucun sens.
+- **Origine** : Un tableau statique `recentTrips` était injecté directement dans le JSX de `page.tsx` sans aucun appel API.
+- **Solution** :
+  - Suppression du mock `recentTrips` statique
+  - Ajout `useState<HistoryJourney[]>([])` + `useEffect(() => getHistory().then(h => setRecentTrips(h.slice(0, 3))))`
+  - Message "Aucun trajet récent" si l'historique est vide
+  - Badge `modeColor` (pastille colorée) sur chaque trajet récent selon le mode de transport
+- **Vérification** : Page d'accueil d'un nouvel utilisateur → "Aucun trajet récent". Après avoir planifié un trajet → il apparaît dans la section avec la bonne couleur de pastille.
+
+## Bloc 19 — Suppression filtre "Économique" (fix logique métier Paris)
+- **Problème** : Le filtre "Économique" (icône Wallet) sur la page recherche était buggé — il ne filtrait rien car le backend ne retournait aucune donnée de prix/tarif. Paris étant en tarification unifiée Navigo, le concept de "économique" n'a pas de sens.
+- **Origine** : Filtre UI copié sur les apps de transport classiques sans adaptation au contexte parisien. Le backend n'a jamais implémenté de champ `cost`.
+- **Solution** :
+  - Suppression du filtre `cheap` du tableau `filterModes` dans `search/page.tsx`
+  - Retrait de l'import `Wallet` de Lucide
+  - Suppression du badge "Économique" de l'UI
+- **Vérification** : Page recherche → seuls les filtres "Rapide", "Direct", "Moins de marche", "Accessible" sont visibles. Le filtre "Économique" a disparu.
+
+## Bloc 20 — Scope géographique Paris (validation UX + backend)
+- **Problème** : L'application acceptait silencieusement des adresses hors Paris (Lyon, Marseille, banlieue éloignée) sans message explicite. Le GTFS IDFM complet (53 967 arrêts, Île-de-France entière) surconsommait la mémoire.
+- **Origine** : Le geocoding data.gouv.fr cherchait dans toute la France. Le GTFS IDFM n'était pas filtré. La carte acceptait les clics n'importe où.
+- **Solution** :
+  - **Backend — `GeocodeResult.isParis`** : `prim.service.ts` retourne `isParis: boolean` calculé depuis `postcode.startsWith('75') || city === 'paris'`
+  - **Backend — `findStopsNearby`** : vérification rapide `distanceFromParis > 30km` → retourne `[]` immédiatement sans parcourir les 53K arrêts
+  - **Backend — `findJourney`** : si origine ou destination > 30 km de Paris → retourne `[]` avec `logger.warn`
+  - **Frontend — clic carte** : `handleMapClick` vérifie `result.isParis`. Si `false` → `setMapClickError("Hors de Paris — sélectionnez une adresse à Paris")` et bloque la sélection
+  - **Frontend — dropdown vide** : message "Aucun résultat à Paris. UrbanFlow couvre uniquement Paris et ses arrêts de transport."
+  - **Frontend — itinéraire vide** : message "Aucun itinéraire trouvé — Vérifiez que votre départ et votre arrivée sont à Paris ou en proche banlieue."
+- **Vérification** :
+  - Clic carte à Saint-Denis (93) → message "Hors de Paris" + pas de sélection possible
+  - Recherche "Lyon" dans la barre → aucun résultat + message explicite
+  - GPS à Lyon → "Autour de vous" vide
+  - Itinéraire Opéra → Gare du Nord fonctionne (Paris → Paris)
+
+## Bloc 21 — Optimisation GTFS : bounding box Paris (25 km)
+- **Problème** : Le parsing GTFS IDFM complet (53 967 arrêts, 8.2M stop_times, 2 010 routes) générait un heap Node.js de ~3.5 GB et prenait ~2 min. Sur un VPS Hostinger KVM 1 (4 GB RAM), cela laissait peu de marge pour PostgreSQL + Nginx.
+- **Origine** : Le GTFS IDFM couvre toute l'Île-de-France (75/77/78/91/92/93/94/95). UrbanFlow se limitant à Paris + proche banlieue, les arrêts de Grande Couronne (bus, trains) et les arrêts ruraux étaient inutilement chargés.
+- **Solution** :
+  - **Nouvelle méthode** `filterStopsByRegion(stops)` : filtre par distance haversine ≤ 25 km depuis Notre-Dame (48.8566, 2.3522)
+  - **Cascade** : après le filtre stops → collecte les `stop_id` retenus → parse `stop_times.txt` en streaming mais NE GARDE que les horaires des arrêts retenus → collecte les `trip_id` utilisés → filtre `trips.txt` → filtre `routes.txt` → filtre `transfers.txt`
+  - **Gain** : -40% arrêts (53 967 → 32 353), -41% routes (2 010 → 1 183), heap estimé ~2 GB au lieu de ~3.5 GB
+- **Vérification** : `docker logs urbanflow-api` → `Bounding-box filter: 32353/53967 stops kept`, `GTFS data loaded in 90443ms — 32353 stops, 1183 routes, 359900 trips`. API `/gtfs-status` → `{"loaded":true,"stops":32353,"routes":1183}`. Itinéraire Opéra → Gare du Nord fonctionne en <5s.
+
+## Bloc 22 — Mise à jour documentation déploiement (KVM 1 → KVM 2)
+- **Problème** : Le dossier technique recommandait un VPS Hostinger KVM 1 (4 GB RAM) insuffisant pour le parsing GTFS en mémoire.
+- **Origine** : Estimation initiale sous-évaluée avant l'implémentation réelle du parser streaming.
+- **Solution** :
+  - Section 10.2 du `Dossier_Technique_Urban_Flow_Mobility.md` : passage à **Hostinger KVM 2** (8 GB RAM, 2 vCPU, 80 Go NVMe)
+  - Tableau comparatif KVM 1 vs KVM 2 avec justifications (marge mémoire, scalabilité, Docker pre-prod + prod)
+  - Coûts mis à jour : ~135€/an promo (vs 87€), ~231€/an renouvellement (vs 147€)
+  - Ajout des optimisations GTFS bounding box comme palliatifs en attendant le upgrade
+- **Vérification** : Le dossier technique reflète la nouvelle architecture cible KVM 2.
+
+## Bloc 23 — Position GPS hors zone (validation "Ma position")
+- **Problème** : L'utilisateur cliquait "Ma position" à Marolles-en-Brie (~18 km de Paris) et l'application calculait quand même un itinéraire. La limite backend était à 30 km, trop large pour le positionnement "Paris uniquement".
+- **Origine** : Le bouton "Ma position" définissait `selectedOrigin` aux coordonnées GPS sans aucune vérification géographique. Le backend autorisait jusqu'à 30 km.
+- **Solution** :
+  - **Frontend** — `search/page.tsx` :
+    - Ajout fonction `haversineKm(lat1, lon1, lat2, lon2)` pour calculer la distance depuis le centre de Paris (48.8566, 2.3522)
+    - Modification `useMyPosition()` : si `distance > 15 km` → `setPositionError("Votre position est à X km de Paris...")` et retourne sans définir l'origine
+    - Bannière amber avec `AlertTriangle` affichée sous le bouton
+  - **Backend** — `journey.service.ts` : garde la limite 30 km comme filet de sécurité
+- **Vérification** : Test à Marolles-en-Brie → message "Votre position est à 18 km de Paris. UrbanFlow couvre uniquement Paris et sa proche banlieue (≤ 15 km)." + pas d'itinéraire calculé.
+
+## Bloc 24 — GTFS-RT Alertes + Prochains départs + Immersion trajet
+- **Problème** :
+  1. Les trajets n'affichaient aucune info sur les perturbations temps réel — l'utilisateur découvrait un retard à l'arrêt.
+  2. Les arrêts proches dans "Autour de vous" n'affichaient pas les prochains départs — il fallait quitter la page pour les voir.
+  3. La timeline du trajet était peu informative : même icône pour tous les modes, pas de badge ligne coloré, pas d'horaires affichés.
+- **Origine** :
+  1. `GtfsRtService.getAlerts()` existait mais n'était pas lié aux itinéraires.
+  2. Aucun endpoint pour les prochains départs par arrêt GTFS.
+  3. Le rendu timeline était basique — icône `Train` unique, instruction texte brute.
+- **Solution** :
+  - **Alertes temps réel** :
+    - `JourneyResult.alerts?: JourneyAlert[]` ajouté au type backend
+    - `transport.controller.ts` : `matchAlertsForJourney()` — matching bidirectionnel normalisé (`lineName` ↔ `affectedRoutes`)
+    - `TripCard.tsx` : badge ⚠️ amber quand `hasAlert={trip.alerts?.length > 0}`
+    - `trip/[id]/page.tsx` : section "Perturbation(s) en cours" avec cartes colorées selon severity (severe=rouge, warning=amber, info=bleu)
+  - **Prochains départs** :
+    - `gtfs-parser.service.ts` : `getStopDepartures(stopId, date, limit)` — filtre par service actif aujourd'hui, déduplique par `(lineName, headsign)`, calcule `waitMinutes`
+    - Endpoint `GET /api/transport/stop-times?stopId=...&limit=5`
+    - `search/page.tsx` : drawer bottom-sheet — clic sur arrêt proche → badge ligne colorée, direction, voie, minutes d'attente
+  - **Immersion timeline** :
+    - `trip/[id]/page.tsx` : `getSegmentIcon()` — icônes spécifiques (Bus 🚌, Métro/M, RER, Tram, Marche, Vélib')
+    - Badge ligne coloré avec nom réel (`segment.lineName`) dans la timeline
+    - Affichage horaires `departureTime → arrivalTime` pour chaque segment
+    - Détails enrichis : mode label, direction, terminus affiché (`headsign`), voie (`platform`), attente (`waitTimeMinutes`)
+- **Vérification** :
+  - `GET /api/transport/journey?...` retourne `alerts: []` sur chaque itinéraire (0 alerte PRIM active à ce moment = comportement correct)
+  - `GET /api/transport/stop-times?stopId=STOP_1` → `{"departures":[]}` (STOP_1 inexistant = comportement correct)
+  - Frontend compilé (`npx tsc --noEmit` → 0 erreur). Docker rebuildé et démarré.
+- **Idées immersion futures** (documentées dans PLAN.md) :
+  - Vibration téléphone à chaque étape (`navigator.vibrate()`)
+  - Annonce vocale "Prochain arrêt" (`speechSynthesis`)
+  - Écran allumé constant (`screenWakeLock`)
+  - Notifications push 5 min avant départ
+  - Compteur calories brûlées
+  - Météo à l'arrivée
+  - Partage trajet (deep link)

@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, ArrowRight } from "lucide-react";
+import { Clock, ArrowRight, AlertTriangle } from "lucide-react";
 import CO2Badge from "./CO2Badge";
 
 interface TripCardProps {
@@ -11,6 +11,8 @@ interface TripCardProps {
   co2: number;
   mode: string;
   modeColor: string;
+  hasAlert?: boolean;
+  alertCount?: number;
   onClick?: () => void;
 }
 
@@ -22,6 +24,8 @@ export default function TripCard({
   co2,
   mode,
   modeColor,
+  hasAlert,
+  alertCount,
   onClick,
 }: TripCardProps) {
   return (
@@ -41,6 +45,15 @@ export default function TripCard({
             <span className="text-xs text-[var(--color-text-tertiary)]">
               {transfers === 0 ? "Direct" : `${transfers} correspondance${transfers > 1 ? "s" : ""}`}
             </span>
+            {hasAlert && (
+              <span
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
+                title="Perturbation sur une ligne de ce trajet"
+              >
+                <AlertTriangle size={10} />
+                {alertCount && alertCount > 1 ? `${alertCount}` : ""}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
             <span className="truncate">{departure}</span>
