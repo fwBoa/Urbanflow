@@ -20,7 +20,7 @@ async function bootstrap() {
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           fontSrc: ["'self'", "https://fonts.gstatic.com"],
           imgSrc: ["'self'", "data:", "https://*.tile.openstreetmap.org", "https://*.openstreetmap.org"],
-          connectSrc: ["'self'", "http://localhost:3000", "http://localhost:3001", "https://prim.iledefrance-mobilites.fr", "https://router.project-osrm.org", "https://api-adresse.data.gouv.fr", "https://gbfs*.lime.bike", "https://gbfs*.dott.co", "https://gbfs*.voi.com"],
+          connectSrc: ["'self'", "http://localhost:3001", "https://prim.iledefrance-mobilites.fr", "https://router.project-osrm.org", "https://api-adresse.data.gouv.fr", "https://gbfs*.lime.bike", "https://gbfs*.dott.co", "https://gbfs*.voi.com"],
           frameSrc: ["'none'"],
         },
       },
@@ -31,7 +31,7 @@ async function bootstrap() {
   // ─── CORS — configured for dev and production ───
   const allowedOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',')
-    : ['http://localhost:3000', 'http://localhost:3001'];
+    : ['http://localhost:3001'];
 
   app.enableCors({
     origin: allowedOrigins,

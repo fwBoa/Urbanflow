@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Query,
+  Param,
   ParseIntPipe,
   HttpException,
   HttpStatus,
@@ -255,6 +256,24 @@ export class TransportController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  // ─── Lazy load d'une shape (trajectoire réelle métro/bus) ────────────
+
+  @Get('shape/:shapeId')
+  async getShape(@Param('shapeId') shapeId?: string) {
+    if (!shapeId) {
+      throw new HttpException('shapeId requis', HttpStatus.BAD_REQUEST);
+    }
+    const points = await this.gtfsParser.getShapeById(shapeId);
+    return {
+      shapeId,
+      points: points.map((p) => ({
+        lat: p.shape_pt_lat,
+        lon: p.shape_pt_lon,
+        seq: p.shape_pt_sequence,
+      })),
+    };
   }
 
   // ─── Prochains départs pour un arrêt GTFS ───────────────────────────

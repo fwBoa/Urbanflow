@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { apiService } from "@/services/api";
+import { getCachedNearbyStops, cacheNearbyStops } from "@/services/offlineDb";
 import type { PrimLine, PrimStop, PrimVelibStation, NearbyVelibStation, JourneyResult, GeocodeResult, ReverseGeocodeResult } from "@/services/api";
 
 // Re-export types for convenience
@@ -353,21 +354,66 @@ export interface NearbyStop {
 }
 
 export function useNearbyStops(lat: number | null, lon: number | null, radiusKm = 0.5, limit = 10) {
-  const { data: result, loading, error } = useApiData<{ stops: NearbyStop[] }>(
+  const [stops, setStops] = useState<NearbyStop[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (lat === null || lon === null) {
+      setStops([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
+    const doFetch = async () => {
+      try {
+        // 1. Try cache first for instant offline display
+        const cached = await getCachedNearbyStops(lat, lon, radiusKm, limit);
+        if (cached && !cancelled) {
+          setStops(cached as NearbyStop[]);
+        }
+
+        // 2. Fetch from network
+        const result = await apiService.getNearbyStops(lat, lon, radiusKm, limit);
+        if (!cancelled) {
+          const fresh = result?.stops || [];
+          setStops(fresh);
+          setError(null);
+          await cacheNearbyStops(lat, lon, radiusKm, limit, fresh);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message);
+          // Keep cached data if available — already set above
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    doFetch();
+    return () => { cancelled = true; };
+  }, [lat, lon, radiusKm, limit]);
+
+  return { stops, loading, error };
+}
+
+// ─── Shape lazy load (trajectoire réelle) ──────────────────────────
+export function useShape(shapeId: string | null) {
+  const { data, loading, error } = useApiData<{ shapeId: string; points: Array<{ lat: number; lon: number; seq: number }> }>(
     () => {
-      if (lat === null || lon === null) return Promise.resolve({ stops: [] });
-      return apiService.getNearbyStops(lat, lon, radiusKm, limit);
+      if (!shapeId) return Promise.resolve({ shapeId: '', points: [] });
+      return apiService.getShape(shapeId);
     },
-    { stops: [] },
-    [lat, lon, radiusKm, limit],
+    { shapeId: '', points: [] },
+    [shapeId],
     false,
   );
-
-  if (lat === null || lon === null) {
-    return { stops: [] as NearbyStop[], loading: false, error: null };
-  }
-
-  return { stops: result?.stops || [], loading, error };
+  return { points: data?.points || [], loading, error };
 }
 
 // ─── Journey search ────────────────────────────────────────────────

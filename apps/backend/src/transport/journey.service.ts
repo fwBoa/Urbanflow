@@ -82,6 +82,8 @@ export interface JourneySegment {
   arrivalTime?: string;
   /** Empreinte CO2 du segment */
   co2Ggrams: number;
+  /** Shape ID pour trajectoire réelle (lazy load) */
+  shapeId?: string;
   /** Instructions textuelles */
   instruction: string;
   /** Direction / terminus */
@@ -439,6 +441,7 @@ export class JourneyService {
       direction: trip.trip_headsign || route.route_long_name || undefined,
       headsign: trip.trip_headsign || undefined,
       platform,
+      shapeId: trip.shape_id || undefined,
     };
 
     // Count transfers by tracing cameFrom
@@ -618,6 +621,7 @@ export class JourneyService {
           arrivalTime: destSeq.arrival_time,
           co2Ggrams: co2.emissionsGco2,
           instruction: `Prendre ${dep.route.route_short_name || dep.route.route_long_name} de ${originStop.stop_name} à ${destStop.stop_name}`,
+          shapeId: dep.trip.shape_id || undefined,
         };
 
         const totalDuration =
@@ -817,6 +821,7 @@ export class JourneyService {
       arrivalTime: transferArrival.arrival_time,
       co2Ggrams: co2_1.emissionsGco2,
       instruction: `Prendre ${dep1.route.route_short_name || dep1.route.route_long_name} de ${originStop.stop_name} à ${transferStop.stop_name}`,
+      shapeId: dep1.trip.shape_id || undefined,
     };
 
     const segment2: JourneySegment = {
@@ -833,6 +838,7 @@ export class JourneyService {
       arrivalTime: destSeq.arrival_time,
       co2Ggrams: co2_2.emissionsGco2,
       instruction: `Correspondance — Prendre ${dep2.route.route_short_name || dep2.route.route_long_name} de ${transferStop.stop_name} à ${destStop.stop_name}`,
+      shapeId: dep2.trip.shape_id || undefined,
     };
 
     const totalDuration =

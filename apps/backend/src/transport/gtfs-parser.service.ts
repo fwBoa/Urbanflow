@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
@@ -152,6 +153,7 @@ export class GtfsParserService implements OnModuleInit {
   private index: GtfsIndex | null = null;
   private lastLoadTime: Date | null = null;
   private loading = false;
+  private readonly shapeCache = new Map<string, GtfsShape[]>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -171,6 +173,21 @@ export class GtfsParserService implements OnModuleInit {
     } catch (error) {
       this.logger.warn(`GTFS auto-load failed: ${error instanceof Error ? error.message : error}. Journey planning will use fallback data.`);
       // Don't crash — fallback journey data will be used
+    }
+  }
+
+  /**
+   * Rechargement périodique du GTFS (tous les jours à 3h du matin)
+   * Évite que les données deviennent obsolètes après une mise à jour PRIM.
+   */
+  @Cron('0 3 * * *')
+  async reloadGtfsCron(): Promise<void> {
+    this.logger.log('[Cron] Rechargement nocturne du GTFS...');
+    try {
+      await this.downloadAndLoad();
+      this.logger.log('[Cron] GTFS rechargé avec succès.');
+    } catch (error) {
+      this.logger.error(`[Cron] Échec du rechargement GTFS : ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -670,6 +687,50 @@ export class GtfsParserService implements OnModuleInit {
       trips: this.index.tripsByRoute.size,
       agencies: this.index.agenciesById.size,
     };
+  }
+
+  /**
+   * Lazy-load des points d'une shape depuis shapes.txt sur disque.
+   * Évite de charger 126 MB de shapes en mémoire au démarrage.
+   */
+  async getShapeById(shapeId: string): Promise<GtfsShape[]> {
+    if (this.shapeCache.has(shapeId)) {
+      return this.shapeCache.get(shapeId)!;
+    }
+
+    const shapesPath = path.join(this.dataDir, 'extracted', 'shapes.txt');
+    if (!fs.existsSync(shapesPath)) {
+      return [];
+    }
+
+    const points: GtfsShape[] = [];
+    const rl = readline.createInterface({ input: fs.createReadStream(shapesPath) });
+    let headers: string[] | null = null;
+
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      const cols = line.split(',');
+      if (!headers) {
+        headers = cols;
+        continue;
+      }
+      const get = (name: string) => cols[headers!.indexOf(name)]?.replace(/^"|"$/g, '') || '';
+      if (get('shape_id') !== shapeId) continue;
+      points.push({
+        shape_id: shapeId,
+        shape_pt_lat: parseFloat(get('shape_pt_lat')),
+        shape_pt_lon: parseFloat(get('shape_pt_lon')),
+        shape_pt_sequence: parseInt(get('shape_pt_sequence'), 10),
+        shape_dist_traveled: get('shape_dist_traveled')
+          ? parseFloat(get('shape_dist_traveled'))
+          : undefined,
+      });
+    }
+
+    points.sort((a, b) => a.shape_pt_sequence - b.shape_pt_sequence);
+    this.shapeCache.set(shapeId, points);
+    this.logger.log(`Lazy-loaded shape ${shapeId}: ${points.length} points`);
+    return points;
   }
 
   /**

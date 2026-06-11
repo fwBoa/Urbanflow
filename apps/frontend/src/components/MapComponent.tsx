@@ -36,6 +36,8 @@ export interface MapProps {
   isWatching?: boolean;           // watchPosition actif
   onToggleWatch?: () => void;     // toggle suivi continu
   followUser?: boolean;           // centrer la carte sur l'utilisateur
+  /** Polylines supplémentaires pour trajectoires réelles (shapes GTFS) */
+  shapePolylines?: Array<{ points: [number, number][]; color: string; weight?: number }>;
 }
 
 export default function MapComponent({
@@ -52,6 +54,7 @@ export default function MapComponent({
   isWatching = false,
   onToggleWatch,
   followUser = false,
+  shapePolylines = [],
 }: MapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
@@ -169,6 +172,7 @@ export default function MapComponent({
   }, [map, showVelib, velibStations]);
 
   const polylineRef = useRef<L.Polyline | null>(null);
+  const shapePolylinesRef = useRef<L.Polyline[]>([]);
 
   // Add polyline (route)
   useEffect(() => {
@@ -190,6 +194,24 @@ export default function MapComponent({
     const bounds = L.latLngBounds(polyline);
     map.fitBounds(bounds, { padding: [50, 50] });
   }, [map, polyline]);
+
+  // Add shape polylines (trajectoires réelles GTFS)
+  useEffect(() => {
+    if (!map) return;
+
+    shapePolylinesRef.current.forEach((p) => map.removeLayer(p));
+    shapePolylinesRef.current = [];
+
+    shapePolylines.forEach((sp) => {
+      if (sp.points.length < 2) return;
+      const poly = L.polyline(sp.points, {
+        color: sp.color || "#E53935",
+        weight: sp.weight || 5,
+        opacity: 0.9,
+      }).addTo(map);
+      shapePolylinesRef.current.push(poly);
+    });
+  }, [map, shapePolylines]);
 
   // Handle map clicks
   useEffect(() => {

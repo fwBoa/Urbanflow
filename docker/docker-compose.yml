@@ -32,7 +32,7 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-2h}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
       PRIM_API_KEY: ${PRIM_API_KEY:-}
       PRIM_API_URL: ${PRIM_API_URL:-https://api-lab.idfm.fr}
       NODE_OPTIONS: --max-old-space-size=3584
@@ -55,7 +55,7 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
       NODE_ENV: ${NODE_ENV:-development}
     ports:
-      - '3000:3000'
+      - '3001:3001'
     depends_on:
       - backend
 

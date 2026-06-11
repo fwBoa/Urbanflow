@@ -56,7 +56,9 @@ self.addEventListener("fetch", (event) => {
           if (response.ok) {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
+              if (new URL(request.url).protocol.startsWith("http")) {
+                cache.put(request, responseClone);
+              }
             });
           }
           return response;
@@ -81,7 +83,9 @@ self.addEventListener("fetch", (event) => {
         if (response.ok && isCacheable(request)) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
+            if (new URL(request.url).protocol.startsWith("http")) {
+              cache.put(request, responseClone);
+            }
           });
         }
         return response;

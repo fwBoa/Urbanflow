@@ -112,6 +112,8 @@ export function useNavigation(
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wakeLockRef = useRef<any | null>(null);
+  const lastSpokenRef = useRef<number>(-1);
 
   // ─── Démarrer/Arrêter la navigation ────────────────────────────────
   const startNavigation = useCallback(() => {
@@ -121,6 +123,7 @@ export function useNavigation(
     setElapsedSeconds(0);
     setArrived(false);
     setOffRoute(false);
+    lastSpokenRef.current = -1;
     startWatch(); // Activer le GPS continu
   }, [startWatch]);
 
@@ -134,8 +137,14 @@ export function useNavigation(
     setActiveSegment(0);
     setArrived(false);
     setOffRoute(false);
+    lastSpokenRef.current = -1;
     stopWatch(); // Désactiver le GPS
     if (timerRef.current) clearInterval(timerRef.current);
+    // Release wake lock
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
   }, [stopWatch]);
 
   // ─── Timer ─────────────────────────────────────────────────────────
@@ -151,6 +160,27 @@ export function useNavigation(
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isNavigating, isPaused]);
+
+  // ─── Screen Wake Lock ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!isNavigating) return;
+    const nav = navigator as any;
+    if (nav.wakeLock && typeof nav.wakeLock.request === "function") {
+      nav.wakeLock.request("screen")
+        .then((lock: any) => {
+          wakeLockRef.current = lock;
+        })
+        .catch(() => {
+          // Ignore — wake lock is a nice-to-have
+        });
+    }
+    return () => {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+    };
+  }, [isNavigating]);
 
   // ─── Calcul de la progression GPS ──────────────────────────────────
   const navState = useMemo<NavigationState>(() => {
@@ -230,14 +260,14 @@ export function useNavigation(
       routePoints[nextIdx][0], routePoints[nextIdx][1],
     );
 
-    // Déterminer le segment actif basé sur la progression
+    // ─── Segment actif basé sur la progression GPS ────────────────────
     const totalDuration = segments.reduce((acc, s) => acc + s.durationMinutes, 0);
-    const elapsedMinutes = elapsedSeconds / 60;
+    const progressRatio = totalDuration > 0 ? traveledDistance / totalRouteDistance : 0;
     let segIdx = 0;
-    let cumTime = 0;
+    let cumDuration = 0;
     for (let i = 0; i < segments.length; i++) {
-      cumTime += segments[i].durationMinutes;
-      if (elapsedMinutes < cumTime) {
+      cumDuration += segments[i].durationMinutes;
+      if ((cumDuration / totalDuration) >= progressRatio) {
         segIdx = i;
         break;
       }
@@ -262,7 +292,7 @@ export function useNavigation(
       offRoute: isOffRoute,
       userPosition: userPos,
     };
-  }, [lat, lon, speed, routePoints, origin, destination, segments, elapsedSeconds, activeSegment]);
+  }, [lat, lon, speed, routePoints, origin, destination, segments, activeSegment]);
 
   // ─── Mettre à jour le segment actif et l'état arrivé ──────────────
   useEffect(() => {
@@ -272,6 +302,46 @@ export function useNavigation(
       setOffRoute(navState.offRoute);
     }
   }, [isNavigating, isPaused, navState.activeSegment, navState.arrived, navState.offRoute]);
+
+  // ─── Vibration + Annonce vocale à chaque changement d'étape ────────
+  useEffect(() => {
+    if (!isNavigating || isPaused) return;
+    if (activeSegment !== lastSpokenRef.current && segments[activeSegment]) {
+      lastSpokenRef.current = activeSegment;
+      const seg = segments[activeSegment];
+
+      // Vibration
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate([50, 100, 50]);
+      }
+
+      // Annonce vocale
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        const text = seg.type === "walking"
+          ? `Étape ${activeSegment + 1} : ${seg.instruction}`
+          : `Montez dans le ${seg.mode || "transit"} direction ${seg.direction || seg.toStop || ""}`;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "fr-FR";
+        utterance.rate = 1.1;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+  }, [activeSegment, isNavigating, isPaused, segments]);
+
+  // ─── Annonce arrivée ─────────────────────────────────────────────
+  useEffect(() => {
+    if (arrived && isNavigating) {
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate([200, 100, 200, 100, 400]);
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        const utterance = new SpeechSynthesisUtterance("Vous êtes arrivé à destination.");
+        utterance.lang = "fr-FR";
+        utterance.rate = 1.0;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+  }, [arrived, isNavigating]);
 
   // ─── Instruction de direction ──────────────────────────────────────
   const instruction = useMemo<NavigationInstruction>(() => {

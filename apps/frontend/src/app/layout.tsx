@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
+import PwaInstallBanner from "@/components/PwaInstallBanner";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ConsentBanner from "@/components/ConsentBanner";
 import "./globals.css";
@@ -54,6 +55,7 @@ export default function RootLayout({
           <ConsentBanner />
         </AuthProvider>
         <ServiceWorkerRegistration />
+        <PwaInstallBanner />
       </body>
     </html>
   );

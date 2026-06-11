@@ -114,6 +114,7 @@ export interface JourneySegment {
   platform?: string;         // ex: "Voie 2"
   headsign?: string;         // ex: "Saint-Germain-en-Laye"
   waitTimeMinutes?: number;  // ex: 4
+  shapeId?: string;          // lazy-load trajectoire réelle
 }
 
 export interface JourneyResult {
@@ -299,6 +300,11 @@ class ApiService {
     }>;
   }> {
     return this.fetch(`/api/transport/stop-times?stopId=${encodeURIComponent(stopId)}&limit=${limit}`);
+  }
+
+  // ─── Shape lazy load ───────────────────────────────────────────────
+  async getShape(shapeId: string): Promise<{ shapeId: string; points: Array<{ lat: number; lon: number; seq: number }> }> {
+    return this.fetch(`/api/transport/shape/${encodeURIComponent(shapeId)}`);
   }
 
   // ─── Journey ──────────────────────────────────────────────────────

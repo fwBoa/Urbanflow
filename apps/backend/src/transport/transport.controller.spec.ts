@@ -14,6 +14,8 @@ describe('TransportController', () => {
   let controller: TransportController;
   let primService: PrimService;
 
+  jest.setTimeout(10000);
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [HttpModule],

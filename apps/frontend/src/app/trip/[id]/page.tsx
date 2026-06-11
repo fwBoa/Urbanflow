@@ -9,6 +9,7 @@ import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
 import { useRoute } from "@/hooks/useTransport";
 import { useNavigation } from "@/hooks/useNavigation";
+import { apiService } from "@/services/api";
 import type { JourneyResult } from "@/services/api";
 
 const modeIcons: Record<string, React.ReactNode> = {
@@ -141,6 +142,36 @@ export default function TripDetailPage() {
         });
     }
   }, [originPos, destPos]);
+
+  // ─── Lazy load shapes (trajectoires réelles) ────────────────────────
+  const [shapePolylines, setShapePolylines] = useState<Array<{ points: [number, number][]; color: string }>>([]);
+
+  useEffect(() => {
+    if (!trip) return;
+    const transitSegments = segments.filter((s) => s.type === 'transit' && s.shapeId);
+    if (transitSegments.length === 0) return;
+
+    let cancelled = false;
+    const loadShapes = async () => {
+      const shapes: Array<{ points: [number, number][]; color: string }> = [];
+      for (const seg of transitSegments) {
+        if (!seg.shapeId) continue;
+        try {
+          const data = await apiService.getShape(seg.shapeId);
+          if (cancelled) return;
+          shapes.push({
+            points: data.points.map((p) => [p.lat, p.lon]),
+            color: seg.lineColor || "#E53935",
+          });
+        } catch {
+          // Ignore shape load errors — fallback to straight line
+        }
+      }
+      if (!cancelled) setShapePolylines(shapes);
+    };
+    loadShapes();
+    return () => { cancelled = true; };
+  }, [trip, segments]);
 
   // ─── Navigation GPS hook ─────────────────────────────────────────────
   const {
@@ -411,6 +442,7 @@ export default function TripDetailPage() {
           zoom={isNavigating ? 16 : 13}
           markers={mapMarkers}
           polyline={tripPolyline.length > 0 ? tripPolyline : undefined}
+          shapePolylines={shapePolylines}
           userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined } : undefined}
           onLocateUser={() => {}}
           isWatching={isNavigating}
