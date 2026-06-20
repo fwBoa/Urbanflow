@@ -3,11 +3,20 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { apiService } from "@/services/api";
 import { getCachedNearbyStops, cacheNearbyStops } from "@/services/offlineDb";
-import type { PrimLine, PrimStop, PrimVelibStation, NearbyVelibStation, JourneyResult, GeocodeResult, ReverseGeocodeResult } from "@/services/api";
+import type {
+  PrimStop,
+  PrimVelibStation,
+  NearbyVelibStation,
+  JourneyResult,
+  GeocodeResult,
+  ReverseGeocodeResult,
+  RealtimeAlert,
+  StopDeparture,
+  NearbyStop,
+} from "@/services/api";
 
-// Re-export types for convenience
+// Re-export pour rétro-compat
 export type { NearbyVelibStation } from "@/services/api";
-import type { RealtimeAlert } from "@/services/api";
 
 // ─── Generic API data hook (DRY) ───────────────────────────────────
 /**
@@ -43,34 +52,6 @@ function useApiData<T>(
   return { data, setData, loading, error };
 }
 
-// ─── Transport Modes ────────────────────────────────────────────────
-export interface TransportModeLine {
-  id: string;
-  name: string;
-  shortName: string;
-  color: string;
-  status: string;
-}
-
-export interface TransportMode {
-  key: string;
-  label: string;
-  emoji: string;
-  color: string;
-  count: number;
-  activeCount: number;
-  lines: TransportModeLine[];
-}
-
-export function useTransportModes() {
-  const { data: modes, loading, error } = useApiData<TransportMode[]>(
-    () => apiService.getTransportModes().then((d) => d.modes || []),
-    [],
-    [],
-  );
-  return { modes, loading, error };
-}
-
 // ─── Lines by Mode ──────────────────────────────────────────────────
 export interface LineByMode {
   id: string;
@@ -94,16 +75,6 @@ export function useLinesByMode() {
     [],
   );
   return { linesByMode, loading, error };
-}
-
-// ─── Lines ────────────────────────────────────────────────────────────────
-export function useLines(limit = 6) {
-  const { data: lines, loading, error } = useApiData<PrimLine[]>(
-    () => apiService.getLines(limit).then((d) => d.results || []),
-    [],
-    [limit],
-  );
-  return { lines, loading, error };
 }
 
 // ─── Stops search ──────────────────────────────────────────────────
@@ -131,7 +102,7 @@ export function useStopSearch(query: string, limit = 10) {
         })
         .finally(() => setLoading(false));
     },
-    [limit]
+    [limit],
   );
 
   useEffect(() => {
@@ -142,19 +113,20 @@ export function useStopSearch(query: string, limit = 10) {
   return { stops, loading, error };
 }
 
-// ─── Vélib' stations ──────────────────────────────────────────────
+// ─── Vélib' stations (liste brute filtrée Paris) ───────────────────
 export function useVelibStations(limit = 50) {
   const { data: stations, loading, error } = useApiData<PrimVelibStation[]>(
-    () => apiService.getVelibStations(limit).then((d) =>
-      (d.results || []).filter(
-        (s) =>
-          s.status === "OPEN" &&
-          s.position.lat > 48.7 &&
-          s.position.lat < 49.0 &&
-          s.position.lon > 2.1 &&
-          s.position.lon < 2.6
-      )
-    ),
+    () =>
+      apiService.getVelibStations(limit).then((d) =>
+        (d.results || []).filter(
+          (s) =>
+            s.status === "OPEN" &&
+            s.position.lat > 48.7 &&
+            s.position.lat < 49.0 &&
+            s.position.lon > 2.1 &&
+            s.position.lon < 2.6,
+        ),
+      ),
     [],
     [limit],
   );
@@ -166,7 +138,9 @@ export function useNearbyVelib(lat: number | null, lon: number | null, radiusKm 
   const { data: stations, loading, error } = useApiData<NearbyVelibStation[]>(
     () => {
       if (lat === null || lon === null) return Promise.resolve([]);
-      return apiService.getNearbyVelibStations(lat, lon, radiusKm, limit).then((d) => d.stations || []);
+      return apiService
+        .getNearbyVelibStations(lat, lon, radiusKm, limit)
+        .then((d) => d.stations || []);
     },
     [],
     [lat, lon, radiusKm, limit],
@@ -180,7 +154,7 @@ export function useNearbyVelib(lat: number | null, lon: number | null, radiusKm 
   return { stations, loading, error };
 }
 
-// ─── Geocoding — Recherche d'adresses ──────────────────────────────────
+// ─── Geocoding — Recherche d'adresses ──────────────────────────────
 export function useGeocode(query: string, limit = 5) {
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -205,7 +179,7 @@ export function useGeocode(query: string, limit = 5) {
         })
         .finally(() => setLoading(false));
     },
-    [limit]
+    [limit],
   );
 
   useEffect(() => {
@@ -216,7 +190,7 @@ export function useGeocode(query: string, limit = 5) {
   return { results, loading, error };
 }
 
-// ─── Reverse Geocoding — Coordonnées → adresse ────────────────────────
+// ─── Reverse Geocoding — Coordonnées → adresse ─────────────────────
 export function useReverseGeocode() {
   const [result, setResult] = useState<ReverseGeocodeResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -241,7 +215,7 @@ export function useReverseGeocode() {
   return { result, loading, error, reverseGeocode };
 }
 
-// ─── OSRM Routing — Géométrie réelle ─────────────────────────────────
+// ─── OSRM Routing — Géométrie réelle ───────────────────────────────
 export function useRoute() {
   const [geometry, setGeometry] = useState<[number, number][]>([]);
   const [distance, setDistance] = useState<number>(0);
@@ -250,46 +224,47 @@ export function useRoute() {
   const [error, setError] = useState<string | null>(null);
   const fetchingRef = useRef(false);
 
-  const fetchRoute = useCallback(async (
-    originLat: number,
-    originLon: number,
-    destLat: number,
-    destLon: number,
-    profile?: 'foot' | 'bike' | 'car',
-  ) => {
-    if (fetchingRef.current) return geometry;
-    fetchingRef.current = true;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiService.getRoute({ originLat, originLon, destLat, destLon, profile });
-      // OSRM GeoJSON: [lon, lat] → Leaflet: [lat, lon]
-      const coords = data.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]] as [number, number]);
-      setGeometry(coords);
-      setDistance(data.distance);
-      setDuration(data.duration);
-      return coords;
-    } catch (err: any) {
-      setError(err.message);
-      setGeometry([]);
-      return [];
-    } finally {
-      setLoading(false);
-      fetchingRef.current = false;
-    }
-  }, [geometry]);
+  const fetchRoute = useCallback(
+    async (
+      originLat: number,
+      originLon: number,
+      destLat: number,
+      destLon: number,
+      profile?: "foot" | "bike" | "car",
+    ) => {
+      if (fetchingRef.current) return geometry;
+      fetchingRef.current = true;
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await apiService.getRoute({
+          originLat,
+          originLon,
+          destLat,
+          destLon,
+          profile,
+        });
+        // OSRM GeoJSON: [lon, lat] → Leaflet: [lat, lon]
+        const coords = data.geometry.coordinates.map(
+          (c: [number, number]) => [c[1], c[0]] as [number, number],
+        );
+        setGeometry(coords);
+        setDistance(data.distance);
+        setDuration(data.duration);
+        return coords;
+      } catch (err: any) {
+        setError(err.message);
+        setGeometry([]);
+        return [];
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    },
+    [geometry],
+  );
 
   return { geometry, distance, duration, loading, error, fetchRoute };
-}
-
-// ─── Traffic messages ──────────────────────────────────────────────
-export function useTrafficMessages(limit = 5) {
-  const { data: messages, loading, error } = useApiData<unknown[]>(
-    () => apiService.getTrafficMessages(limit).then((d) => ((d as Record<string, unknown>).results as unknown[]) || []),
-    [],
-    [limit],
-  );
-  return { messages, loading, error };
 }
 
 // ─── Realtime alerts ───────────────────────────────────────────────
@@ -302,20 +277,7 @@ export function useRealtimeAlerts() {
   return { alerts: alerts || [], loading, error };
 }
 
-export interface StopDeparture {
-  tripId: string;
-  routeId: string;
-  lineName: string;
-  lineColor: string;
-  routeType: number;
-  headsign: string;
-  departureTime: string;
-  arrivalTime: string;
-  waitMinutes: number;
-  platform?: string;
-}
-
-// ─── Prochains départs par arrêt ────────────────────────────────────
+// ─── Prochains départs par arrêt ───────────────────────────────────
 export function useStopTimes(stopId: string | null, limit = 5) {
   const { data: result, loading, error } = useApiData<{ departures: StopDeparture[] }>(
     () => {
@@ -334,25 +296,7 @@ export function useStopTimes(stopId: string | null, limit = 5) {
   return { departures: result?.departures || [], loading, error };
 }
 
-// ─── Health check ──────────────────────────────────────────────────
-export function useHealthCheck() {
-  const { data: status, loading } = useApiData<{ ok: boolean; source: string } | null>(
-    () => apiService.healthCheck().then((d) => ({ ok: d.status === "ok", source: d.source })),
-    null,
-    [],
-  );
-  return { status, loading };
-}
-
-// ─── Nearby stops ──────────────────────────────────────────────────
-export interface NearbyStop {
-  id: string;
-  name: string;
-  lat: number;
-  lon: number;
-  lines: Array<{ id: string; name: string; color: string }>;
-}
-
+// ─── Nearby stops (avec cache offline IndexedDB) ───────────────────
 export function useNearbyStops(lat: number | null, lon: number | null, radiusKm = 0.5, limit = 10) {
   const [stops, setStops] = useState<NearbyStop[]>([]);
   const [loading, setLoading] = useState(false);
@@ -396,7 +340,9 @@ export function useNearbyStops(lat: number | null, lon: number | null, radiusKm 
     };
 
     doFetch();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [lat, lon, radiusKm, limit]);
 
   return { stops, loading, error };
@@ -404,19 +350,22 @@ export function useNearbyStops(lat: number | null, lon: number | null, radiusKm 
 
 // ─── Shape lazy load (trajectoire réelle) ──────────────────────────
 export function useShape(shapeId: string | null) {
-  const { data, loading, error } = useApiData<{ shapeId: string; points: Array<{ lat: number; lon: number; seq: number }> }>(
+  const { data, loading, error } = useApiData<{
+    shapeId: string;
+    points: Array<{ lat: number; lon: number; seq: number }>;
+  }>(
     () => {
-      if (!shapeId) return Promise.resolve({ shapeId: '', points: [] });
+      if (!shapeId) return Promise.resolve({ shapeId: "", points: [] });
       return apiService.getShape(shapeId);
     },
-    { shapeId: '', points: [] },
+    { shapeId: "", points: [] },
     [shapeId],
     false,
   );
   return { points: data?.points || [], loading, error };
 }
 
-// ─── Journey search ────────────────────────────────────────────────
+// ─── Journey search ───────────────────────────────────────────────
 export function useJourney(
   origin: { lat: number; lon: number } | null,
   destination: { lat: number; lon: number } | null,
@@ -426,14 +375,16 @@ export function useJourney(
   const { data: journeys, loading, error } = useApiData<JourneyResult[]>(
     () => {
       if (!origin || !destination) return Promise.resolve([]);
-      return apiService.searchJourney({
-        originLat: origin.lat,
-        originLon: origin.lon,
-        destLat: destination.lat,
-        destLon: destination.lon,
-        departureTime,
-        modes: modes?.join(","),
-      }).then((d) => Array.isArray(d) ? d : []);
+      return apiService
+        .searchJourney({
+          originLat: origin.lat,
+          originLon: origin.lon,
+          destLat: destination.lat,
+          destLon: destination.lon,
+          departureTime,
+          modes: modes?.join(","),
+        })
+        .then((d) => (Array.isArray(d) ? d : []));
     },
     [],
     [origin, destination, departureTime, modes],

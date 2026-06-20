@@ -29,19 +29,6 @@ export interface RealtimeAlert {
   effect?: string;
 }
 
-export interface RealtimeVehiclePosition {
-  tripId: string;
-  routeId: string;
-  routeShortName?: string;
-  latitude: number;
-  longitude: number;
-  bearing?: number;
-  speed?: number;
-  timestamp: string;
-  stopId?: string;
-  status: 'INCOMING_AT' | 'STOPPED_AT' | 'IN_TRANSIT_TO' | 'unknown';
-}
-
 @Injectable()
 export class GtfsRtService {
   private readonly logger = new Logger(GtfsRtService.name);
@@ -77,28 +64,6 @@ export class GtfsRtService {
       this.logger.warn(`Failed to fetch realtime alerts: ${e.message}`);
       return this.alertsCache; // Return stale cache
     }
-  }
-
-  /**
-   * Récupère les positions des véhicules temps réel
-   * L'ancien endpoint GTFS-RT protobuf de PRIM est obsolète.
-   * On retourne un tableau vide — les positions temps réel ne sont plus disponibles.
-   */
-  async getVehiclePositions(lineId?: string): Promise<RealtimeVehiclePosition[]> {
-    this.logger.warn('GTFS-RT vehicle positions unavailable: PRIM endpoint /v1/gtfs-rt is obsolete');
-    return [];
-  }
-
-  /**
-   * Statut du service GTFS-RT
-   */
-  getStatus(): { available: boolean; alertsCount: number; lastRefresh: string; source: string } {
-    return {
-      available: this.alertsCache.length > 0,
-      alertsCount: this.alertsCache.length,
-      lastRefresh: this.alertsLastRefresh ? new Date(this.alertsLastRefresh).toISOString() : 'never',
-      source: 'PRIM IDFM API',
-    };
   }
 
   /**
@@ -174,24 +139,6 @@ export class GtfsRtService {
       }
     }
     return periods.length > 0 ? periods : [{ start: new Date().toISOString(), end: '' }];
-  }
-
-  /**
-   * Map GTFS-RT VehiclePosition status to our enum
-   */
-  private mapVehicleStatus(
-    status: number | undefined,
-  ): 'INCOMING_AT' | 'STOPPED_AT' | 'IN_TRANSIT_TO' | 'unknown' {
-    switch (status) {
-      case 0: // INCOMING_AT
-        return 'INCOMING_AT';
-      case 1: // STOPPED_AT
-        return 'STOPPED_AT';
-      case 2: // IN_TRANSIT_TO
-        return 'IN_TRANSIT_TO';
-      default:
-        return 'unknown';
-    }
   }
 
   /**

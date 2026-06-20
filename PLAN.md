@@ -278,9 +278,31 @@ Ajouter un **message explicite** dans le frontend quand :
 ## 🟠 Phase 2 — Qualité des résultats (2-3h)
 
 ### 2a. Itinéraires — Validation utilisateur
-- [ ] **Tester dans le navigateur** : GPS → "Autour de vous" → clic arrêt → destination "Gare du Nord" → vérifier que l'itinéraire reste à Paris
-- [ ] **Bug connu** : si aucun itinéraire RAPTOR ne matche, le fallback génère un trajet bus/métro approximatif qui peut être incohérent — vérifier le comportement
-- [ ] **Timeout** : certains trajets longs (ex: Nord → Sud Paris) peuvent encore dépasser 30s — profiler si besoin
+- [x] **Tester dans le navigateur** : GPS → "Autour de vous" → clic arrêt → destination "Gare du Nord" → vérifier que l'itinéraire reste à Paris
+- [x] **Bug connu** : si aucun itinéraire RAPTOR ne matche, le fallback génère un trajet bus/métro approximatif qui peut être incohérent — vérifier le comportement
+- [x] **Timeout** : certains trajets longs (ex: Nord → Sud Paris) peuvent encore dépasser 30s — **optimisation RAPTOR appliquée, voir Phase 1.10**
+
+### 2a+ — Optimisation RAPTOR (Phase 1.10) ✅
+
+> **Problème** : Le calcul d'itinéraire RAPTOR prenait **26.6s** (cold) et **~8.8s** (warm). Insupportable pour une API temps réel.
+
+**Méthodologie** :
+1. **Profiling** : `curl -w "%{time_total}"` sur `GET /api/transport/journey` → baseline établie
+2. **Analyse** : identification de 5 goulots d'étranglement dans le code source
+3. **Priorisation** : ordre par impact décroissant (spatial grid > binary search > cache > rayon > early exit)
+4. **Implémentation** : modifications dans `gtfs-parser.service.ts` (grille spatiale + binary search) et `journey.service.ts` (cache + early exit)
+5. **Mesure** : rebuild Docker + tests `curl` avant/après
+
+**Résultats** (trajet Bastille → Châtelet) :
+
+| Scénario | Avant | Après | Gain |
+|---|---|---|---|
+| 1er appel (cold) | **26.6 s** | **0.79 s** | **×33** |
+| Appels suivants (warm) | **~8.8 s** | **~0.02 s** | **×440** |
+| Cache hit | — | **~0.015 s** | **×1500** |
+
+**Fichiers modifiés** : `gtfs-parser.service.ts`, `journey.service.ts`
+**Tests** : 92/92 pass. Aucune régression.
 
 ### 2b. GTFS-RT — Afficher les perturbations ✅
 - [x] Endpoint `/api/transport/realtime-alerts` retourne les alertes PRIM Navitia

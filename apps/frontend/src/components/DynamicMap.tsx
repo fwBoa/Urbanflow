@@ -3,6 +3,10 @@
 import dynamic from "next/dynamic";
 import type { MapProps } from "./MapComponent";
 
+// Ré-export des helpers purs (sans Leaflet) — safe SSR
+export { journeyToSegments, MODE_COLORS } from "./journey-helpers";
+export type { JourneySegmentForMap } from "./journey-helpers";
+
 const MapComponent = dynamic(() => import("./MapComponent"), {
   ssr: false,
   loading: () => (

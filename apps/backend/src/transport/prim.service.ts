@@ -124,77 +124,7 @@ export class PrimService implements OnModuleInit {
     return queryParams;
   }
 
-  // ─── Référentiel des lignes (F1) ──────────────────────────────────────
-
-  /**
-   * Récupère le référentiel des lignes de transport
-   * Dataset: referentiel-des-lignes
-   */
-  async getLines(params?: {
-    select?: string;
-    where?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<any> {
-    return this.callDataApi(
-      '/catalog/datasets/referentiel-des-lignes/records',
-      this.buildQueryParams(params),
-    );
-  }
-
-  // ─── Référentiel des arrêts (F1, F3) ─────────────────────────────────
-
-  /**
-   * Récupère le référentiel des arrêts
-   * Dataset: arrets
-   */
-  async getStops(params?: {
-    select?: string;
-    where?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<any> {
-    return this.callDataApi(
-      '/catalog/datasets/arrets/records',
-      this.buildQueryParams(params),
-    );
-  }
-
-  /**
-   * Récupère les arrêts et lignes associées
-   * Dataset: arrets-lignes
-   */
-  async getStopLines(params?: {
-    select?: string;
-    where?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<any> {
-    return this.callDataApi(
-      '/catalog/datasets/arrets-lignes/records',
-      this.buildQueryParams(params),
-    );
-  }
-
-  // ─── Messages d'actualité / Perturbations (F1) ───────────────────────
-
-  /**
-   * Récupère les messages d'actualité (perturbations, travaux)
-   * Dataset: actualites
-   */
-  async getTrafficMessages(params?: {
-    select?: string;
-    where?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<any> {
-    return this.callDataApi(
-      '/catalog/datasets/actualites/records',
-      this.buildQueryParams(params),
-    );
-  }
-
-  // ─── Vélib' temps réel (F1) ──────────────────────────────────────────
+  // ─── Lignes par mode (F1) ────────────────────────────────────────────
 
   /**
    * Récupère les lignes clés groupées par mode de transport.
@@ -256,11 +186,13 @@ export class PrimService implements OnModuleInit {
     };
   }
 
-  // ─── Vélib' temps réel (F1) ──────────────────────────────────────────
+  // ─── Vélib' — Liste brute des stations (toute l'IDF) ─────────────
 
   /**
    * Disponibilités des stations Vélib' en temps réel
    * Dataset: jcdecaux-bike-stations-data
+   * Note : endpoint conservé pour rétro-compat frontend (HomePage).
+   * Pour les stations proches d'une position, utiliser /velib-nearby.
    */
   async getVelibStations(params?: {
     select?: string;
@@ -395,46 +327,6 @@ export class PrimService implements OnModuleInit {
     return R * c;
   }
 
-  // ─── Ascenseurs / Accessibilité (F1, C7) ────────────────────────────
-
-  /**
-   * État des ascenseurs en temps réel
-   * Dataset: etat-des-ascenseurs
-   */
-  async getElevatorStatus(params?: {
-    select?: string;
-    where?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<any> {
-    return this.callDataApi(
-      '/catalog/datasets/etat-des-ascenseurs/records',
-      this.buildQueryParams(params),
-    );
-  }
-
-  // ─── GTFS — Téléchargement ───────────────────────────────────────────
-
-  /**
-   * URL de téléchargement du GTFS statique (offre horaires)
-   * Nécessite une clé API PRIM
-   * Note: l'ancien endpoint /v1/gtfs/static/download est obsolète.
-   * On utilise maintenant le portail data.iledefrance-mobilites.fr
-   */
-  getGtfsStaticDownloadUrl(): string {
-    return 'https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/offre-horaires-tc-gtfs-idfm/exports/zip';
-  }
-
-  /**
-   * URL du flux GTFS-RT (temps réel)
-   * Nécessite une clé API PRIM
-   * Note: l'ancien endpoint /v1/gtfs-rt est obsolète.
-   * On utilise maintenant l'API Navitia disruptions comme fallback
-   */
-  getGtfsRtFeedUrl(): string {
-    return `${this.primApiUrl}/marketplace/v2/navitia/disruptions`;
-  }
-
   // ─── Geocoding — Recherche d'adresses (data.gouv.fr) ────────────────
 
   /**
@@ -556,132 +448,4 @@ export class PrimService implements OnModuleInit {
     }
   }
 
-  // ─── Agrégation par mode de transport ────────────────────────────────
-
-  /**
-   * Récupère le nombre de lignes par mode de transport (métro, RER, tram, bus, Transilien)
-   * Utilise le référentiel des lignes PRIM pour compter les lignes actives.
-   * Les modes sont agrégés depuis transportmode + transportsubmode :
-   *   - metro → Métro
-   *   - rail + local → RER
-   *   - rail + suburbanRailway → Transilien
-   *   - rail + railShuttle → Navettes (CDG VAL, ORLYVAL)
-   *   - rail + regionalRail → TER
-   *   - tram → Tram
-   *   - bus → Bus
-   *   - cableway → Téléphérique
-   */
-  async getTransportModes(): Promise<{
-    modes: Array<{
-      key: string;
-      label: string;
-      emoji: string;
-      color: string;
-      count: number;
-      activeCount: number;
-      lines: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
-    }>;
-  }> {
-    // Définition des modes attendus avec leurs filtres PRIM
-    const modeQueries: Record<string, { transportmode: string; transportsubmode?: string; label: string; emoji: string; color: string }> = {
-      metro: { transportmode: 'metro', label: 'Métro', emoji: '🚇', color: '#2E7D9B' },
-      rer: { transportmode: 'rail', transportsubmode: 'local', label: 'RER', emoji: '🚉', color: '#FF6B35' },
-      transilien: { transportmode: 'rail', transportsubmode: 'suburbanRailway', label: 'Transilien', emoji: '🚆', color: '#7CB342' },
-      tram: { transportmode: 'tram', label: 'Tram', emoji: '🚊', color: '#9C27B0' },
-      bus: { transportmode: 'bus', label: 'Bus', emoji: '🚌', color: '#FF9800' },
-    };
-
-    const modes: Array<{
-      key: string;
-      label: string;
-      emoji: string;
-      color: string;
-      count: number;
-      activeCount: number;
-      lines: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
-    }> = [];
-
-    for (const [key, config] of Object.entries(modeQueries)) {
-      try {
-        // Construire le filtre where
-        let where = `transportmode='${config.transportmode}'`;
-        if (config.transportsubmode) {
-          where += ` AND transportsubmode='${config.transportsubmode}'`;
-        }
-
-        const data = await this.callDataApi(
-          '/catalog/datasets/referentiel-des-lignes/records',
-          {
-            where,
-            select: 'id_line,name_line,shortname_line,transportmode,transportsubmode,status,colourweb_hexa',
-            limit: '100',
-          },
-        );
-
-        const results = data?.results || [];
-        const totalCount = data?.total_count || results.length;
-        const activeLines = results.filter((l: any) => l.status === 'active');
-        const topLines = activeLines
-          .slice(0, 8)
-          .map((l: any) => ({
-            id: l.id_line,
-            name: l.name_line,
-            shortName: l.shortname_line,
-            color: l.colourweb_hexa || '999999',
-            status: l.status,
-          }));
-
-        modes.push({
-          key,
-          label: config.label,
-          emoji: config.emoji,
-          color: config.color,
-          count: totalCount,
-          activeCount: activeLines.length,
-          lines: topLines,
-        });
-      } catch (error) {
-        this.logger.warn(`Failed to fetch mode ${key}: ${error instanceof Error ? error.message : String(error)}`);
-        modes.push({
-          key,
-          label: config.label,
-          emoji: config.emoji,
-          color: config.color,
-          count: 0,
-          activeCount: 0,
-          lines: [],
-        });
-      }
-    }
-
-    return { modes };
   }
-
-  // ─── Santé du service ────────────────────────────────────────────────
-
-  /**
-   * Vérifie que l'API PRIM est accessible
-   */
-  async healthCheck(): Promise<{
-    status: string;
-    source: string;
-    apiKeyConfigured: boolean;
-  }> {
-    try {
-      await this.callDataApi('/catalog/datasets/referentiel-des-lignes/records', {
-        limit: '1',
-      });
-      return {
-        status: 'ok',
-        source: 'PRIM Île-de-France Mobilités',
-        apiKeyConfigured: !!this.primApiKey,
-      };
-    } catch (error) {
-      return {
-        status: 'error',
-        source: 'PRIM Île-de-France Mobilités',
-        apiKeyConfigured: !!this.primApiKey,
-      };
-    }
-  }
-}

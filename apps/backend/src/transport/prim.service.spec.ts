@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { HttpModule, HttpService } from '@nestjs/axios';
+import { HttpModule } from '@nestjs/axios';
 import { PrimService } from './prim.service';
 
 describe('PrimService', () => {
@@ -37,28 +37,27 @@ describe('PrimService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('getLines', () => {
-    it('should call the data API with correct endpoint', async () => {
-      // This test verifies the method exists and doesn't throw on definition
-      expect(typeof service.getLines).toBe('function');
+  describe('getLinesByMode', () => {
+    it('should expose a getLinesByMode method', () => {
+      expect(typeof service.getLinesByMode).toBe('function');
     });
   });
 
-  describe('getStops', () => {
-    it('should call the data API with correct endpoint', async () => {
-      expect(typeof service.getStops).toBe('function');
+  describe('getNearbyVelibStations', () => {
+    it('should expose a getNearbyVelibStations method', () => {
+      expect(typeof service.getNearbyVelibStations).toBe('function');
     });
   });
 
-  describe('getVelibStations', () => {
-    it('should call the PRIM API for Vélib data', async () => {
-      expect(typeof service.getVelibStations).toBe('function');
+  describe('geocode', () => {
+    it('should expose a geocode method', () => {
+      expect(typeof service.geocode).toBe('function');
     });
   });
 
-  describe('healthCheck', () => {
-    it('should return health status', async () => {
-      expect(typeof service.healthCheck).toBe('function');
+  describe('reverseGeocode', () => {
+    it('should expose a reverseGeocode method', () => {
+      expect(typeof service.reverseGeocode).toBe('function');
     });
   });
 });

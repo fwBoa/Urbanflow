@@ -126,11 +126,15 @@ export interface GtfsIndex {
   tripsById: Map<string, GtfsTrip>;
   stopTimesByTrip: Map<string, GtfsStopTime[]>;
   stopTimesByStop: Map<string, GtfsStopTime[]>;
+  /** Stop times sorted by departure_time for binary search */
+  stopTimesByStopSorted: Map<string, GtfsStopTime[]>;
   calendarByService: Map<string, GtfsCalendar>;
   calendarDatesByService: Map<string, GtfsCalendarDate[]>;
   shapesById: Map<string, GtfsShape[]>;
   transfersByStop: Map<string, GtfsTransfer[]>;
   agenciesById: Map<string, GtfsAgency>;
+  /** Spatial grid for O(1) nearby stop lookup */
+  spatialGrid: Map<string, GtfsStop[]>;
 }
 
 /**
@@ -146,6 +150,27 @@ export interface GtfsIndex {
  * 3. Construit des index optimisés pour les requêtes rapides
  * 4. Expose les données via des méthodes de recherche
  */
+/**
+ * Binary search — retourne l'index du premier élément >= target
+ * selon la clé fournie par keyFn.
+ */
+function bisectLeft<T>(arr: T[], target: number, keyFn: (item: T) => number): number {
+  let lo = 0;
+  let hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (keyFn(arr[mid]) < target) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+const SPATIAL_GRID_LAT_BIN = 0.01;  // ~1.1 km
+const SPATIAL_GRID_LON_BIN = 0.015; // ~1.1 km à latitude 48°N
+
 @Injectable()
 export class GtfsParserService implements OnModuleInit {
   private readonly logger = new Logger(GtfsParserService.name);
@@ -228,18 +253,29 @@ export class GtfsParserService implements OnModuleInit {
 
       const zipPath = path.join(zipDir, 'idfm-gtfs-static.zip');
 
-      // Check if we have a recent cache (less than 8 hours old)
+      // Check if we have a recent AND valid cache (less than 8 hours old + fichiers requis présents)
       if (fs.existsSync(zipPath)) {
         const stats = fs.statSync(zipPath);
         const ageMs = Date.now() - stats.mtimeMs;
         const maxAgeMs = 8 * 60 * 60 * 1000; // 8 hours
         if (ageMs < maxAgeMs && stats.size > 1000000) {
-          // At least 1MB to be valid
-          this.logger.log(`Using cached GTFS ZIP (${Math.round(ageMs / 60000)} minutes old, ${(stats.size / 1024 / 1024).toFixed(1)} MB)`);
-          await this.loadFromZip(zipPath);
-          return;
+          // Validation structurelle : tous les fichiers requis présents et de taille cohérente
+          const validation = await this.validateGtfsZip(zipPath);
+          if (validation.valid) {
+            this.logger.log(
+              `Using cached GTFS ZIP (${Math.round(ageMs / 60000)} minutes old, ${(validation.size / 1024 / 1024).toFixed(1)} MB)`,
+            );
+            await this.loadFromZip(zipPath);
+            return;
+          }
+          this.logger.warn(
+            `Cached GTFS ZIP is structurally invalid (missing/empty: ${validation.missing.join(', ')}), re-downloading...`,
+          );
+          // Cache invalide → on supprime pour forcer le re-téléchargement
+          try { fs.unlinkSync(zipPath); } catch { /* ignore */ }
+        } else {
+          this.logger.log(`Cached GTFS ZIP is ${Math.round(ageMs / 3600000)} hours old, re-downloading...`);
         }
-        this.logger.log(`Cached GTFS ZIP is ${Math.round(ageMs / 3600000)} hours old, re-downloading...`);
       }
 
       // Try each source
@@ -281,6 +317,46 @@ export class GtfsParserService implements OnModuleInit {
       throw error;
     } finally {
       this.loading = false;
+    }
+  }
+
+  /**
+   * Valide qu'un fichier GTFS ZIP contient les fichiers requis
+   * @returns true si tous les fichiers essentiels sont présents
+   */
+  private async validateGtfsZip(zipPath: string): Promise<{ valid: boolean; missing: string[]; size: number }> {
+    const REQUIRED_FILES = ['stops.txt', 'routes.txt', 'trips.txt', 'stop_times.txt', 'calendar.txt'];
+    const OPTIONAL_FILES = ['calendar_dates.txt', 'transfers.txt', 'shapes.txt'];
+    const MIN_FILE_SIZES: Record<string, number> = {
+      'stops.txt': 50_000,         // >50KB (au moins quelques milliers d'arrêts)
+      'routes.txt': 5_000,         // >5KB
+      'trips.txt': 50_000,         // >50KB
+      'stop_times.txt': 1_000_000, // >1MB (fichier massif typique IDFM ~700MB)
+    };
+
+    try {
+      const stats = fs.statSync(zipPath);
+      if (stats.size < 1_000_000) {
+        return { valid: false, missing: REQUIRED_FILES, size: stats.size };
+      }
+      const zip = new AdmZipClass(zipPath);
+      const entries = zip.getEntries().map((e: any) => e.entryName);
+      const missing: string[] = [];
+      for (const req of REQUIRED_FILES) {
+        if (!entries.includes(req)) {
+          missing.push(req);
+          continue;
+        }
+        // Vérifier la taille décompressée
+        const entry = zip.getEntry(req);
+        if (entry && MIN_FILE_SIZES[req] && entry.header.size < MIN_FILE_SIZES[req]) {
+          this.logger.warn(`GTFS ${req} trop petit (${entry.header.size} bytes, attendu > ${MIN_FILE_SIZES[req]})`);
+          missing.push(req);
+        }
+      }
+      return { valid: missing.length === 0, missing, size: stats.size };
+    } catch (e) {
+      return { valid: false, missing: REQUIRED_FILES, size: 0 };
     }
   }
 
@@ -379,6 +455,16 @@ export class GtfsParserService implements OnModuleInit {
       // Transférer les stop_times parsés en streaming dans l'index
       index.stopTimesByTrip = stopTimesByTripTemp;
       index.stopTimesByStop = stopTimesByStopTemp;
+
+      // Construire stopTimesByStopSorted pour binary search O(log n)
+      for (const [stopId, times] of index.stopTimesByStop) {
+        const sorted = [...times].sort((a, b) => {
+          const ta = this.timeToSeconds(a.departure_time);
+          const tb = this.timeToSeconds(b.departure_time);
+          return ta - tb;
+        });
+        index.stopTimesByStopSorted.set(stopId, sorted);
+      }
 
       // ── 6. Parser transfers en streaming, filtrer par stop_id ──────────
       await this.parseFileIncremental<GtfsTransfer>(
@@ -571,11 +657,13 @@ export class GtfsParserService implements OnModuleInit {
       tripsById: new Map(),
       stopTimesByTrip: new Map(),
       stopTimesByStop: new Map(),
+      stopTimesByStopSorted: new Map(),
       calendarByService: new Map(),
       calendarDatesByService: new Map(),
       shapesById: new Map(),
       transfersByStop: new Map(),
       agenciesById: new Map(),
+      spatialGrid: new Map(),
     };
 
     // Agences
@@ -614,9 +702,29 @@ export class GtfsParserService implements OnModuleInit {
       index.stopTimesByStop.set(st.stop_id, stopTimes2);
     }
 
-    // Trier les horaires par séquence
+    // Trier les horaires par séquence (pour trajectoire trip)
     for (const [, times] of index.stopTimesByTrip) {
       times.sort((a, b) => a.stop_sequence - b.stop_sequence);
+    }
+
+    // Trier les horaires par arrêt par heure de départ (binary search rapide)
+    for (const [stopId, times] of index.stopTimesByStop) {
+      const sorted = [...times].sort((a, b) => {
+        const ta = this.timeToSeconds(a.departure_time);
+        const tb = this.timeToSeconds(b.departure_time);
+        return ta - tb;
+      });
+      index.stopTimesByStopSorted.set(stopId, sorted);
+    }
+
+    // Grille spatiale pour findStopsNearby O(1)
+    for (const [, stop] of index.stopsById) {
+      const latBin = Math.floor(stop.stop_lat / SPATIAL_GRID_LAT_BIN);
+      const lonBin = Math.floor(stop.stop_lon / SPATIAL_GRID_LON_BIN);
+      const key = `${latBin}|${lonBin}`;
+      const cell = index.spatialGrid.get(key) || [];
+      cell.push(stop);
+      index.spatialGrid.set(key, cell);
     }
 
     // Calendrier
@@ -736,10 +844,10 @@ export class GtfsParserService implements OnModuleInit {
   /**
    * Filtre les arrêts GTFS pour ne garder que ceux dans la région parisienne.
    *
-   * Rayon ~25 km autour de Notre-Dame (48.8566, 2.3522).
-   * Couvre Paris intra-muros + proche banlieue (Petite Couronne + terminus RER).
-   * Cela permet de diviser la mémoire utilisée par ~3 en éliminant les lignes
-   * de bus de Grande Couronne et les arrêts ruraux de l'IDFM.
+   * Rayon configurable autour de Notre-Dame (48.8566, 2.3522).
+   * Par défaut 15 km — couvre Paris intra-muros + proche banlieue.
+   * Peut être étendu via GTFS_RADIUS_KM dans .env (utile sur VPS avec + de RAM).
+   * Réduit la mémoire par ~3× vs le dataset IDFM complet (54k → ~15-20k arrêts).
    */
   private filterStopsByRegion(stops: GtfsStop[]): {
     filteredStops: GtfsStop[];
@@ -747,7 +855,8 @@ export class GtfsParserService implements OnModuleInit {
   } {
     const PARIS_CENTER_LAT = 48.8566;
     const PARIS_CENTER_LON = 2.3522;
-    const MAX_DISTANCE_KM = 25;
+    // Override via env si VPS avec plus de RAM (laisser 25 km pour la prod)
+    const MAX_DISTANCE_KM = parseInt(process.env.GTFS_RADIUS_KM || '15', 10);
 
     const filteredStops: GtfsStop[] = [];
     const validStopIds = new Set<string>();
@@ -791,7 +900,7 @@ export class GtfsParserService implements OnModuleInit {
    * Recherche des arrêts à proximité (dans un rayon donné)
    * Si la position est trop éloignée de Paris (> 30km), retourne vide immédiatement.
    */
-  findStopsNearby(lat: number, lon: number, radiusKm = 0.5): GtfsStop[] {
+  findStopsNearby(lat: number, lon: number, radiusKm = 0.5, limit = 8): GtfsStop[] {
     if (!this.index) return [];
 
     // Vérifier rapidement si la position est dans la région parisienne
@@ -801,17 +910,33 @@ export class GtfsParserService implements OnModuleInit {
     }
 
     const results: { stop: GtfsStop; distance: number }[] = [];
+    const seen = new Set<string>();
 
-    for (const [, stop] of this.index.stopsById) {
-      const distance = this.haversineKm(lat, lon, stop.stop_lat, stop.stop_lon);
-      if (distance <= radiusKm) {
-        results.push({ stop, distance });
+    const latBin = Math.floor(lat / SPATIAL_GRID_LAT_BIN);
+    const lonBin = Math.floor(lon / SPATIAL_GRID_LON_BIN);
+
+    // Parcourir les 9 cellules voisines (centre + 8 autour)
+    for (let dLat = -1; dLat <= 1; dLat++) {
+      for (let dLon = -1; dLon <= 1; dLon++) {
+        const key = `${latBin + dLat}|${lonBin + dLon}`;
+        const cell = this.index.spatialGrid.get(key);
+        if (!cell) continue;
+
+        for (const stop of cell) {
+          if (seen.has(stop.stop_id)) continue;
+          seen.add(stop.stop_id);
+
+          const distance = this.haversineKm(lat, lon, stop.stop_lat, stop.stop_lon);
+          if (distance <= radiusKm) {
+            results.push({ stop, distance });
+          }
+        }
       }
     }
 
-    // Trier par distance
+    // Trier par distance et limiter
     results.sort((a, b) => a.distance - b.distance);
-    return results.map((r) => r.stop);
+    return results.slice(0, limit).map((r) => r.stop);
   }
 
   /**
@@ -850,34 +975,27 @@ export class GtfsParserService implements OnModuleInit {
   ): { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[] {
     if (!this.index) return [];
 
-    const stopTimes = this.index.stopTimesByStop.get(stopId) || [];
+    const sorted = this.index.stopTimesByStopSorted.get(stopId) || [];
     const results: { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[] = [];
 
     const targetSeconds = this.timeToSeconds(timeAfter);
 
-    for (const st of stopTimes) {
-      const departureSeconds = this.timeToSeconds(st.departure_time);
-      if (departureSeconds >= targetSeconds) {
-        // Recherche O(1) via tripsById (évite la boucle imbriquée catastrophique)
-        const trip = this.index.tripsById.get(st.trip_id);
-        if (trip) {
-          const route = this.index.routesById.get(trip.route_id);
-          if (route) {
-            results.push({ trip, route, stopTime: st });
-          }
-        }
-      }
+    // Binary search O(log n) pour trouver le premier départ >= target
+    const startIdx = bisectLeft(sorted, targetSeconds, (st) =>
+      this.timeToSeconds(st.departure_time),
+    );
 
+    for (let i = startIdx; i < sorted.length; i++) {
+      const st = sorted[i];
+      const trip = this.index.tripsById.get(st.trip_id);
+      if (!trip) continue;
+      const route = this.index.routesById.get(trip.route_id);
+      if (!route) continue;
+      results.push({ trip, route, stopTime: st });
       if (results.length >= limit) break;
     }
 
-    // Trier par heure de départ
-    results.sort((a, b) =>
-      this.timeToSeconds(a.stopTime.departure_time) -
-      this.timeToSeconds(b.stopTime.departure_time),
-    );
-
-    return results.slice(0, limit);
+    return results;
   }
 
   /**

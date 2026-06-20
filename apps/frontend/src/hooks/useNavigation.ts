@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useGeolocation } from "./useGeolocation";
 import type { JourneySegment } from "@/services/api";
+import { Immersion, stopSpeaking, haptic as _haptic } from "@/services/immersion";
 
 // ─── Types ──────────────────────────────────────────────────────────
 export interface NavigationState {
@@ -140,6 +141,9 @@ export function useNavigation(
     lastSpokenRef.current = -1;
     stopWatch(); // Désactiver le GPS
     if (timerRef.current) clearInterval(timerRef.current);
+    // Stop voice & haptic
+    stopSpeaking();
+    _haptic(0); // cancel ongoing vibration
     // Release wake lock
     if (wakeLockRef.current) {
       wakeLockRef.current.release().catch(() => {});
@@ -309,39 +313,27 @@ export function useNavigation(
     if (activeSegment !== lastSpokenRef.current && segments[activeSegment]) {
       lastSpokenRef.current = activeSegment;
       const seg = segments[activeSegment];
-
-      // Vibration
-      if (typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate([50, 100, 50]);
-      }
-
-      // Annonce vocale
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        const text = seg.type === "walking"
+      const text =
+        seg.type === "walking"
           ? `Étape ${activeSegment + 1} : ${seg.instruction}`
           : `Montez dans le ${seg.mode || "transit"} direction ${seg.direction || seg.toStop || ""}`;
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "fr-FR";
-        utterance.rate = 1.1;
-        window.speechSynthesis.speak(utterance);
-      }
+      Immersion.segmentChange(text);
     }
   }, [activeSegment, isNavigating, isPaused, segments]);
 
   // ─── Annonce arrivée ─────────────────────────────────────────────
   useEffect(() => {
     if (arrived && isNavigating) {
-      if (typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate([200, 100, 200, 100, 400]);
-      }
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        const utterance = new SpeechSynthesisUtterance("Vous êtes arrivé à destination.");
-        utterance.lang = "fr-FR";
-        utterance.rate = 1.0;
-        window.speechSynthesis.speak(utterance);
-      }
+      Immersion.arrived();
     }
   }, [arrived, isNavigating]);
+
+  // ─── Alerte hors trajet ──────────────────────────────────────────
+  useEffect(() => {
+    if (offRoute && isNavigating) {
+      Immersion.offRoute();
+    }
+  }, [offRoute, isNavigating]);
 
   // ─── Instruction de direction ──────────────────────────────────────
   const instruction = useMemo<NavigationInstruction>(() => {

@@ -35,6 +35,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
       PRIM_API_KEY: ${PRIM_API_KEY:-}
       PRIM_API_URL: ${PRIM_API_URL:-https://api-lab.idfm.fr}
+      GTFS_RADIUS_KM: ${GTFS_RADIUS_KM:-15}
       NODE_OPTIONS: --max-old-space-size=3584
     ports:
       - '4000:4000'

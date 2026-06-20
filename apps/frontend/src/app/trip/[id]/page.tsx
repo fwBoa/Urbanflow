@@ -3,10 +3,13 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
-import { Clock, MapPin, Footprints, Bike, Train, Bus, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, ChevronUp, ChevronDown } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Clock, MapPin, Footprints, Bike, Train, TramFront, Bus, Ship, Car, ArrowRight, Navigation, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, AlertOctagon, CheckCircle2, ChevronUp, ChevronDown, Wifi, WifiOff, Search, X, Timer, ArrowDown, CircleDot } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
+import JourneyLine from "@/components/JourneyLine";
+import ModeBadge from "@/components/ModeBadge";
 import { useRoute } from "@/hooks/useTransport";
 import { useNavigation } from "@/hooks/useNavigation";
 import { apiService } from "@/services/api";
@@ -35,13 +38,34 @@ function getModeLabel(mode?: string): string {
 }
 
 function getSegmentIcon(segment: JourneyResult["segments"][0], isDone: boolean) {
-  if (isDone) return <span className="text-xs">✓</span>;
+  if (isDone) return <CheckCircle2 size={14} />;
   if (segment.type === "walking") return <Footprints size={14} />;
   if (segment.type === "velib") return <Bike size={14} />;
   const mode = segment.mode?.toLowerCase() || "";
+  if (mode.includes("tram")) return <TramFront size={14} />;
   if (mode.includes("bus")) return <Bus size={14} />;
-  if (mode.includes("tram")) return <Train size={14} />;
-  return <Train size={14} />; // métro / RER / train par défaut
+  if (mode.includes("rer")) return <Train size={14} />;
+  if (mode.includes("métro") || mode.includes("metro")) return <Train size={14} />;
+  return <Bus size={14} />;
+}
+
+// ─── Mode metadata (label FR, icône, couleur de fond, couleur d'accent) ─────
+function getModeInfo(mode?: string, type?: string): {
+  label: string;
+  Icon: React.ComponentType<{ size?: number }>;
+  bgColor: string;
+  ringColor: string;
+} {
+  const m = (mode || "").toLowerCase();
+  const t = type || "";
+  if (t === "walking") return { label: "Marche", Icon: Footprints, bgColor: "bg-slate-100 dark:bg-slate-800", ringColor: "ring-slate-300" };
+  if (t === "velib" || m.includes("vélib") || m.includes("velib")) return { label: "Vélib'", Icon: Bike, bgColor: "bg-[var(--color-eco-green)]/10", ringColor: "ring-[var(--color-eco-green)]" };
+  if (m.includes("tram")) return { label: "Tram", Icon: TramFront, bgColor: "bg-purple-100 dark:bg-purple-900/30", ringColor: "ring-purple-300" };
+  if (m.includes("bus")) return { label: "Bus", Icon: Bus, bgColor: "bg-sky-100 dark:bg-sky-900/30", ringColor: "ring-sky-300" };
+  if (m.includes("rer")) return { label: "RER", Icon: Train, bgColor: "bg-pink-100 dark:bg-pink-900/30", ringColor: "ring-pink-300" };
+  if (m.includes("métro") || m.includes("metro")) return { label: "Métro", Icon: Train, bgColor: "bg-blue-100 dark:bg-blue-900/30", ringColor: "ring-blue-300" };
+  if (m.includes("transilien") || m.includes("train")) return { label: "Train", Icon: Train, bgColor: "bg-indigo-100 dark:bg-indigo-900/30", ringColor: "ring-indigo-300" };
+  return { label: "Transit", Icon: Bus, bgColor: "bg-slate-100", ringColor: "ring-slate-300" };
 }
 
 // Fallback data when no journey data is passed
@@ -102,8 +126,16 @@ export default function TripDetailPage() {
   const segments = (trip?.segments || fallbackTrip.segments) as JourneyResult["segments"];
   const firstSeg = segments[0];
   const lastSeg = segments[segments.length - 1];
-  const departure = firstSeg?.fromStop || firstSeg?.instruction?.split(" ").slice(-1)[0] || "Départ";
-  const arrival = lastSeg?.toStop || lastSeg?.instruction?.split(" ").slice(-1)[0] || "Arrivée";
+  // Vrai nom de l'arrêt de départ : toStop du 1er walking, ou fromStop du 1er transit
+  const realDeparture = firstSeg?.type === "walking"
+    ? (firstSeg.toStop ?? firstSeg.fromStop)
+    : firstSeg?.fromStop;
+  // Vrai nom de l'arrêt d'arrivée : fromStop du dernier walking, ou toStop du dernier transit
+  const realArrival = lastSeg?.type === "walking"
+    ? (lastSeg.fromStop ?? lastSeg.toStop)
+    : lastSeg?.toStop;
+  const departure = realDeparture ?? firstSeg?.instruction?.split(" ").slice(-1)[0] ?? "Départ";
+  const arrival = realArrival ?? lastSeg?.instruction?.split(" ").slice(-1)[0] ?? "Arrivée";
   const duration = trip ? `${trip.durationMinutes} min` : fallbackTrip.duration;
   const co2 = trip?.co2Ggrams || fallbackTrip.co2;
   const transfers = trip?.transfers ?? fallbackTrip.transfers;
@@ -252,7 +284,19 @@ export default function TripDetailPage() {
       }
     >
       {/* Summary Card */}
-      <div className="bg-[var(--color-primary)] rounded-[var(--card-radius)] p-4 text-white mb-4">
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="bg-[var(--color-primary)] rounded-[var(--card-radius)] p-4 text-white mb-4 relative overflow-hidden"
+      >
+        {/* Halo animé d'arrière-plan */}
+        <motion.div
+          aria-hidden
+          className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl"
+          animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        />
         <div className="flex items-center justify-between mb-2">
           <div>
             <p className="text-sm text-white/80">Trajet</p>
@@ -276,7 +320,7 @@ export default function TripDetailPage() {
               : `${transfers} correspondance${transfers > 1 ? "s" : ""}`}
           </span>
         </div>
-      </div>
+      </motion.div>
 
       {/* CO2 Comparison */}
       <div className="bg-[var(--color-eco-green)]/10 rounded-[var(--card-radius)] p-3 mb-4 border border-[var(--color-eco-green)]/20">
@@ -327,113 +371,150 @@ export default function TripDetailPage() {
       <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-3">
         Détail du trajet
       </h2>
-      <div className="space-y-0">
+      <motion.div
+        className="space-y-3"
+        initial="hidden"
+        animate="visible"
+        variants={{
+          hidden: {},
+          visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } },
+        }}
+      >
         {segments.map((segment, i) => {
           const isActive = isNavigating && i === activeSegment;
           const isDone = isNavigating && i < activeSegment;
+          const modeMeta = getModeInfo(segment.mode, segment.type);
+          const ModeIcon = modeMeta.Icon;
+          const lineColor = segment.lineColor;
+
           return (
-            <div key={i} className="flex gap-3">
-              {/* Timeline line */}
-              <div className="flex flex-col items-center">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                    isActive
-                      ? "ring-2 ring-[var(--color-primary)] ring-offset-2 scale-110"
-                      : ""
-                  } ${
-                    isDone
-                      ? "bg-[var(--color-eco-green)] text-white"
-                      : segment.type === "walking"
-                        ? "bg-[var(--color-surface)] text-[var(--color-text-tertiary)]"
-                        : "text-white"
+            <motion.div
+              key={i}
+              variants={{
+                hidden: { opacity: 0, x: -12 },
+                visible: { opacity: 1, x: 0, transition: { type: "spring" as const, stiffness: 300, damping: 28 } },
+              }}
+              className={`relative flex gap-3 rounded-xl p-3 border ${
+                isActive ? "bg-[var(--color-primary)]/5 border-[var(--color-primary)]/30 shadow-sm"
+                  : isDone ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200/50"
+                  : "bg-white border-[var(--color-border)]"
+              }`}
+            >
+              {/* Timeline node : icône + couleur de la ligne */}
+              <div className="flex flex-col items-center pt-0.5">
+                <motion.div
+                  layout
+                  animate={{ scale: isActive ? 1.12 : 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                  className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm ${
+                    isDone ? "bg-emerald-500 text-white" : "text-white"
                   }`}
-                  style={
-                    !isDone && segment.type !== "walking"
-                      ? { backgroundColor: segment.lineColor || "var(--color-primary)" }
-                      : isDone ? {} : {}
-                  }
+                  style={!isDone ? { backgroundColor: lineColor || "#2E7D9B" } : {}}
                 >
-                  {getSegmentIcon(segment, isDone)}
-                </div>
+                  {isDone ? <CheckCircle2 size={18} /> : <ModeIcon size={18} />}
+                </motion.div>
                 {i < segments.length - 1 && (
-                  <div className={`w-0.5 h-12 ${isDone ? "bg-[var(--color-eco-green)]" : "bg-[var(--color-border)]"}`} />
+                  <div
+                    className={`w-0.5 flex-1 min-h-[12px] mt-1 ${isDone ? "bg-emerald-300" : "bg-[var(--color-border)]"}`}
+                  />
                 )}
               </div>
 
               {/* Segment content */}
-              <div className={`flex-1 pb-4 transition-opacity ${isDone ? "opacity-50" : isActive ? "opacity-100" : "opacity-80"}`}>
-                {/* Badge ligne + instruction */}
+              <div className={`flex-1 min-w-0 ${isDone ? "opacity-60" : ""}`}>
+                {/* Ligne 1 : mode badge + trajet */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  {segment.type === "transit" && segment.lineName && (
-                    <span
-                      className="shrink-0 inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[11px] font-bold text-white"
-                      style={{ backgroundColor: segment.lineColor || "var(--color-primary)" }}
-                    >
-                      {segment.lineName}
-                    </span>
+                  {segment.type === "transit" && segment.lineName ? (
+                    <ModeBadge
+                      mode={segment.mode}
+                      type={segment.type}
+                      lineName={segment.lineName}
+                      lineColor={lineColor}
+                      size="md"
+                    />
+                  ) : (
+                    <ModeBadge
+                      mode={segment.mode}
+                      type={segment.type}
+                      size="md"
+                      showLabel
+                    />
                   )}
-                  <p className={`text-sm font-medium ${isActive ? "text-[var(--color-primary)]" : "text-[var(--color-text-primary)]"}`}>
+                  <span className={`text-sm font-medium truncate ${isActive ? "text-[var(--color-primary)]" : "text-[var(--color-text-primary)]"}`}>
                     {segment.type === "transit"
                       ? `${segment.fromStop} → ${segment.toStop}`
                       : segment.instruction}
-                    {isActive && <span className="ml-2 text-xs text-[var(--color-primary)] font-normal">← En cours</span>}
-                  </p>
+                  </span>
+                  {isActive && (
+                    <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--color-primary)] text-white shrink-0">
+                      <CircleDot size={10} /> En cours
+                    </span>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <span className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1">
+                {/* Ligne 2 : stats rapides (durée, arrêts, horaires) */}
+                <div className="flex items-center gap-3 mt-1.5 flex-wrap text-[11px] text-[var(--color-text-tertiary)]">
+                  <span className="inline-flex items-center gap-1 font-medium text-[var(--color-text-secondary)]">
                     <Clock size={11} />
                     {segment.durationMinutes} min
                   </span>
                   {segment.type !== "walking" && segment.numStops && (
-                    <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                    <span className="inline-flex items-center gap-1">
+                      <CircleDot size={11} />
                       {segment.numStops} arrêt{segment.numStops > 1 ? "s" : ""}
                     </span>
                   )}
                   {segment.departureTime && segment.arrivalTime && (
-                    <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                    <span className="inline-flex items-center gap-1 font-mono">
+                      <Timer size={11} />
                       {segment.departureTime.slice(0, 5)} → {segment.arrivalTime.slice(0, 5)}
                     </span>
                   )}
+                  {segment.distanceKm && segment.distanceKm > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <ArrowRight size={11} />
+                      {(segment.distanceKm * 1000).toFixed(0)}m
+                    </span>
+                  )}
                 </div>
-                {/* ─── Détails enrichis (direction, quai, attente, mode) ─── */}
-                {segment.type === "transit" && (segment.direction || segment.platform || segment.waitTimeMinutes || segment.mode) && (
-                  <div className="mt-2 bg-[var(--color-surface)] rounded-lg p-2.5 space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)]">
-                      <span className="font-medium text-[var(--color-text-primary)]">{getModeLabel(segment.mode)}</span>
-                      {segment.lineName && <span className="text-[var(--color-text-tertiary)]">· {segment.lineName}</span>}
-                    </div>
+
+                {/* Détails enrichis : direction, terminus, quai, attente */}
+                {segment.type === "transit" && (segment.direction || segment.platform || segment.waitTimeMinutes !== undefined || segment.headsign) && (
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                     {segment.direction && (
-                      <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
-                        <Navigation2 size={10} className="text-[var(--color-primary)]" />
-                        Direction : <span className="font-medium">{segment.direction}</span>
-                      </p>
+                      <div className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]">
+                        <Navigation2 size={11} className="text-[var(--color-primary)] shrink-0" />
+                        <span>Direction :</span>
+                        <span className="font-semibold text-[var(--color-text-primary)]">{segment.direction}</span>
+                      </div>
                     )}
                     {segment.headsign && segment.headsign !== segment.direction && (
-                      <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
-                        <MapPin size={10} className="text-[var(--color-mobility-orange)]" />
-                        Terminus affiché : <span className="font-medium">{segment.headsign}</span>
-                      </p>
+                      <div className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]">
+                        <MapPin size={11} className="text-[var(--color-mobility-orange)] shrink-0" />
+                        <span>Terminus :</span>
+                        <span className="font-semibold text-[var(--color-text-primary)]">{segment.headsign}</span>
+                      </div>
                     )}
                     {segment.platform && (
-                      <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
-                        <span className="inline-block w-4 h-4 rounded-full bg-[var(--color-mobility-orange)]/10 text-[var(--color-mobility-orange)] flex items-center justify-center text-[9px] font-bold">P</span>
-                        {segment.platform}
-                      </p>
+                      <div className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]">
+                        <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-[var(--color-mobility-orange)]/15 text-[var(--color-mobility-orange)] text-[9px] font-bold shrink-0">P</span>
+                        <span>{segment.platform}</span>
+                      </div>
                     )}
-                    {segment.waitTimeMinutes && (
-                      <p className="text-[11px] text-[var(--color-text-secondary)] flex items-center gap-1">
-                        <Clock size={10} className="text-[var(--color-eco-green)]" />
-                        Attente : <span className="font-medium">{segment.waitTimeMinutes} min</span>
-                      </p>
+                    {segment.waitTimeMinutes !== undefined && (
+                      <div className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]">
+                        <Clock size={11} className="text-[var(--color-eco-green)] shrink-0" />
+                        <span>Attente :</span>
+                        <span className="font-semibold text-[var(--color-text-primary)]">{segment.waitTimeMinutes} min</span>
+                      </div>
                     )}
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
 
       {/* Map */}
       <div className="rounded-[var(--card-radius)] h-48 mb-4 border border-[var(--color-border)] overflow-hidden">
@@ -452,16 +533,36 @@ export default function TripDetailPage() {
       </div>
 
       {/* CTA — Navigation mode */}
-      {!isNavigating ? (
-        <button
-          onClick={startNavigation}
-          className="w-full h-[52px] rounded-[var(--cta-radius)] bg-[var(--color-primary)] text-white font-semibold text-base hover:bg-[var(--color-primary-dark)] transition-colors active:scale-[0.98] flex items-center justify-center gap-2"
-        >
-          <Play size={18} />
-          Démarrer le trajet
-        </button>
-      ) : (
-        <div className="space-y-3">
+      <AnimatePresence mode="wait">
+        {!isNavigating ? (
+          <motion.button
+            key="cta-start"
+            onClick={startNavigation}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ duration: 0.25 }}
+            className="w-full h-[52px] rounded-[var(--cta-radius)] bg-[var(--color-primary)] text-white font-semibold text-base hover:bg-[var(--color-primary-dark)] transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[var(--color-primary)]/20"
+          >
+            <motion.span
+              animate={{ scale: [1, 1.15, 1] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              className="inline-flex"
+            >
+              <Play size={18} />
+            </motion.span>
+            Démarrer le trajet
+          </motion.button>
+        ) : (
+          <motion.div
+            key="nav-active"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-3"
+          >
           {/* Progress bar */}
           <div className="bg-[var(--color-surface)] rounded-full h-2 overflow-hidden">
             <div
@@ -560,8 +661,9 @@ export default function TripDetailPage() {
               </div>
             </div>
           )}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AppShell>
   );
 }

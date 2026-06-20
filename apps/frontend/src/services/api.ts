@@ -1,18 +1,6 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-export interface PrimLine {
-  id_line: string;
-  name_line: string;
-  shortname_line: string;
-  transportmode: string;
-  transportsubmode: string;
-  operatorname: string;
-  networkname: string;
-  colourweb_hexa: string;
-  textcolourweb_hexa: string;
-  status: string;
-  accessibility: string;
-}
+// ─── Types ──────────────────────────────────────────────────────────
 
 export interface PrimStop {
   arrid: string;
@@ -47,7 +35,7 @@ export interface NearbyVelibStation {
   capacity: number;
   is_renting: boolean;
   is_returning: boolean;
-  distance: number; // en mètres
+  distance: number; // mètres
   arrondissement: string;
 }
 
@@ -67,17 +55,6 @@ export interface GeocodeResult {
   isParis: boolean;
 }
 
-export interface RealtimeAlert {
-  id: string;
-  headerText: string;
-  descriptionText?: string;
-  severity: 'info' | 'warning' | 'severe' | 'unknown';
-  affectedRoutes: string[];
-  activePeriod?: { start: string; end: string }[];
-  cause?: string;
-  effect?: string;
-}
-
 export interface GeocodeResponse {
   total_count: number;
   results: GeocodeResult[];
@@ -95,6 +72,17 @@ export interface ReverseGeocodeResult {
   isParis: boolean;
 }
 
+export interface RealtimeAlert {
+  id: string;
+  headerText: string;
+  descriptionText?: string;
+  severity: "info" | "warning" | "severe" | "unknown";
+  affectedRoutes: string[];
+  activePeriod?: { start: string; end: string }[];
+  cause?: string;
+  effect?: string;
+}
+
 export interface JourneySegment {
   type: "walking" | "transit" | "velib";
   mode?: string;
@@ -109,12 +97,12 @@ export interface JourneySegment {
   arrivalTime?: string;
   co2Ggrams: number;
   instruction: string;
-  // ─── Détails enrichis ──────────────────────────────────────────────
-  direction?: string;        // ex: "direction Poissy"
-  platform?: string;         // ex: "Voie 2"
-  headsign?: string;         // ex: "Saint-Germain-en-Laye"
-  waitTimeMinutes?: number;  // ex: 4
-  shapeId?: string;          // lazy-load trajectoire réelle
+  // ─── Détails enrichis ────────────────────────────────────────────
+  direction?: string;
+  platform?: string;
+  headsign?: string;
+  waitTimeMinutes?: number;
+  shapeId?: string;
 }
 
 export interface JourneyResult {
@@ -125,11 +113,32 @@ export interface JourneyResult {
   segments: JourneySegment[];
   departureTime: string;
   arrivalTime: string;
-  /** Indique si l'itinéraire est un fallback (données GTFS non disponibles) */
   isFallback?: boolean;
-  /** Alertes temps réel affectant les lignes de ce trajet */
   alerts?: RealtimeAlert[];
 }
+
+export interface StopDeparture {
+  tripId: string;
+  routeId: string;
+  lineName: string;
+  lineColor: string;
+  routeType: number;
+  headsign: string;
+  departureTime: string;
+  arrivalTime: string;
+  waitMinutes: number;
+  platform?: string;
+}
+
+export interface NearbyStop {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  lines: Array<{ id: string; name: string; color: string }>;
+}
+
+// ─── API Client ─────────────────────────────────────────────────────
 
 class ApiService {
   private baseUrl: string;
@@ -150,49 +159,6 @@ class ApiService {
     return res.json();
   }
 
-  // ─── Health ────────────────────────────────────────────────────────
-  async healthCheck() {
-    return this.fetch<{ status: string; source: string; apiKeyConfigured: boolean }>(
-      "/api/transport/health"
-    );
-  }
-
-  // ─── Lines ─────────────────────────────────────────────────────────
-  async getLines(limit = 20, offset = 0): Promise<PrimDataResponse<PrimLine>> {
-    return this.fetch(`/api/transport/lines?limit=${limit}&offset=${offset}`);
-  }
-
-  // ─── Stops ─────────────────────────────────────────────────────────
-  async getStops(limit = 20, offset = 0): Promise<PrimDataResponse<PrimStop>> {
-    return this.fetch(`/api/transport/stops?limit=${limit}&offset=${offset}`);
-  }
-
-  async searchStops(query: string, limit = 10): Promise<PrimDataResponse<PrimStop>> {
-    return this.fetch(
-      `/api/transport/stops?limit=${limit}&where=search(arrname,"${encodeURIComponent(query)}")`
-    );
-  }
-
-  // ─── Stop-Lines ────────────────────────────────────────────────────
-  async getStopLines(limit = 20, offset = 0) {
-    return this.fetch(`/api/transport/stop-lines?limit=${limit}&offset=${offset}`);
-  }
-
-  // ─── Transport Modes ────────────────────────────────────────────────
-  async getTransportModes(): Promise<{
-    modes: Array<{
-      key: string;
-      label: string;
-      emoji: string;
-      color: string;
-      count: number;
-      activeCount: number;
-      lines: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
-    }>;
-  }> {
-    return this.fetch('/api/transport/modes');
-  }
-
   // ─── Lines by Mode ─────────────────────────────────────────────────
   async getLinesByMode(): Promise<{
     metro: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
@@ -200,20 +166,17 @@ class ApiService {
     tram: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
     transilien: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
   }> {
-    return this.fetch('/api/transport/lines-by-mode');
+    return this.fetch("/api/transport/lines-by-mode");
   }
 
-  // ─── Traffic ───────────────────────────────────────────────────────
-  async getTrafficMessages(limit = 10) {
-    return this.fetch(`/api/transport/traffic?limit=${limit}`);
+  // ─── Stops ──────────────────────────────────────────────────────────
+  async searchStops(query: string, limit = 10): Promise<PrimDataResponse<PrimStop>> {
+    return this.fetch(
+      `/api/transport/stops?limit=${limit}&where=search(arrname,"${encodeURIComponent(query)}")`,
+    );
   }
 
-  // ─── Vélib' ────────────────────────────────────────────────────────
-  async getVelibStations(limit = 20, offset = 0): Promise<PrimDataResponse<PrimVelibStation>> {
-    return this.fetch(`/api/transport/velib?limit=${limit}&offset=${offset}`);
-  }
-
-  // ─── Vélib' proches (F4) ──────────────────────────────────────────
+  // ─── Vélib' proches (F4) ────────────────────────────────────────────
   async getNearbyVelibStations(
     lat: number,
     lon: number,
@@ -221,26 +184,24 @@ class ApiService {
     limit = 10,
   ): Promise<{ stations: NearbyVelibStation[]; total: number }> {
     return this.fetch(
-      `/api/transport/velib-nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`
+      `/api/transport/velib-nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`,
     );
   }
 
-  // ─── Elevators ─────────────────────────────────────────────────────
-  async getElevatorStatus(limit = 20) {
-    return this.fetch(`/api/transport/elevators?limit=${limit}`);
+  // ─── Vélib' — Liste brute filtrée Paris ─────────────────────────────
+  async getVelibStations(
+    limit = 50,
+    offset = 0,
+  ): Promise<PrimDataResponse<PrimVelibStation>> {
+    return this.fetch(`/api/transport/velib?limit=${limit}&offset=${offset}`);
   }
 
-  // ─── GTFS URLs ────────────────────────────────────────────────────
-  async getGtfsUrls() {
-    return this.fetch<{ gtfs_static: string; gtfs_rt: string }>("/api/transport/gtfs-url");
-  }
-
-  // ─── Geocoding ───────────────────────────────────────────────────────
+  // ─── Geocoding ──────────────────────────────────────────────────────
   async geocode(query: string, limit = 5): Promise<GeocodeResponse> {
     return this.fetch(`/api/transport/geocode?q=${encodeURIComponent(query)}&limit=${limit}`);
   }
 
-  // ─── Reverse Geocoding ───────────────────────────────────────────────
+  // ─── Reverse Geocoding ──────────────────────────────────────────────
   async reverseGeocode(lat: number, lon: number): Promise<ReverseGeocodeResult> {
     return this.fetch(`/api/transport/reverse-geocode?lat=${lat}&lon=${lon}`);
   }
@@ -251,7 +212,7 @@ class ApiService {
     originLon: number;
     destLat: number;
     destLon: number;
-    profile?: 'foot' | 'bike' | 'car';
+    profile?: "foot" | "bike" | "car";
   }): Promise<{
     geometry: { type: string; coordinates: [number, number][] };
     distance: number;
@@ -263,51 +224,58 @@ class ApiService {
       destLat: String(params.destLat),
       destLon: String(params.destLon),
     });
-    if (params.profile) query.set('profile', params.profile);
+    if (params.profile) query.set("profile", params.profile);
     return this.fetch(`/api/transport/route?${query.toString()}`);
   }
 
-  // ─── Nearby stops ─────────────────────────────────────────────────
+  // ─── Nearby stops ───────────────────────────────────────────────────
   async getNearbyStops(
     lat: number,
     lon: number,
     radiusKm = 0.5,
     limit = 10,
-  ): Promise<{ stops: Array<{ id: string; name: string; lat: number; lon: number; lines: Array<{ id: string; name: string; color: string }> }> }> {
+  ): Promise<{
+    stops: Array<{
+      id: string;
+      name: string;
+      lat: number;
+      lon: number;
+      lines: Array<{ id: string; name: string; color: string }>;
+    }>;
+  }> {
     return this.fetch(
-      `/api/transport/nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`
+      `/api/transport/nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`,
     );
   }
 
-  // ─── Realtime alerts ───────────────────────────────────────────────
+  // ─── Realtime alerts ────────────────────────────────────────────────
   async getRealtimeAlerts(): Promise<RealtimeAlert[]> {
-    return this.fetch('/api/transport/realtime-alerts');
+    return this.fetch("/api/transport/realtime-alerts");
   }
 
   // ─── Prochains départs par arrêt ────────────────────────────────────
-  async getStopTimes(stopId: string, limit = 5): Promise<{
-    departures: Array<{
-      tripId: string;
-      routeId: string;
-      lineName: string;
-      lineColor: string;
-      routeType: number;
-      headsign: string;
-      departureTime: string;
-      arrivalTime: string;
-      waitMinutes: number;
-      platform?: string;
-    }>;
+  async getStopTimes(
+    stopId: string,
+    limit = 5,
+  ): Promise<{
+    departures: StopDeparture[];
   }> {
-    return this.fetch(`/api/transport/stop-times?stopId=${encodeURIComponent(stopId)}&limit=${limit}`);
+    return this.fetch(
+      `/api/transport/stop-times?stopId=${encodeURIComponent(stopId)}&limit=${limit}`,
+    );
   }
 
-  // ─── Shape lazy load ───────────────────────────────────────────────
-  async getShape(shapeId: string): Promise<{ shapeId: string; points: Array<{ lat: number; lon: number; seq: number }> }> {
+  // ─── Shape lazy load ────────────────────────────────────────────────
+  async getShape(
+    shapeId: string,
+  ): Promise<{
+    shapeId: string;
+    points: Array<{ lat: number; lon: number; seq: number }>;
+  }> {
     return this.fetch(`/api/transport/shape/${encodeURIComponent(shapeId)}`);
   }
 
-  // ─── Journey ──────────────────────────────────────────────────────
+  // ─── Journey ────────────────────────────────────────────────────────
   async searchJourney(params: {
     originLat: number;
     originLon: number;
@@ -325,7 +293,8 @@ class ApiService {
     });
     if (params.departureTime) query.set("departureTime", params.departureTime);
     if (params.modes) query.set("modes", params.modes);
-    if (params.maxTransfers !== undefined) query.set("maxTransfers", String(params.maxTransfers));
+    if (params.maxTransfers !== undefined)
+      query.set("maxTransfers", String(params.maxTransfers));
 
     return this.fetch(`/api/transport/journey?${query.toString()}`);
   }

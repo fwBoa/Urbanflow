@@ -2,12 +2,14 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Zap, Leaf, MapPin, Navigation, Clock, Loader2, Building2, Train, Bus, Bike, AlertTriangle, X, ChevronRight } from "lucide-react";
+import { Zap, Leaf, MapPin, Navigation, Clock, Loader2, Building2, Train, Bus, Bike, AlertTriangle, AlertOctagon, X, ChevronRight } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import SearchBar from "@/components/SearchBar";
 import FilterChip from "@/components/FilterChip";
 import TripCard from "@/components/TripCard";
 import DynamicMap from "@/components/DynamicMap";
+import { journeyToSegments } from "@/components/journey-helpers";
+import JourneyLineLazy from "@/components/JourneyLineLoader";
 import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute, useNearbyStops, useStopTimes } from "@/hooks/useTransport";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { addToHistory } from "@/services/favorites";
@@ -250,7 +252,6 @@ function SearchPageContent() {
           if (coords.length > 0) {
             setMapPolyline(coords);
           } else {
-            // Fallback: straight line
             setMapPolyline([
               [selectedOrigin.lat, selectedOrigin.lon],
               [selectedDest.lat, selectedDest.lon],
@@ -264,6 +265,36 @@ function SearchPageContent() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOrigin, selectedDest]);
+
+  // Sort journeys based on active filter
+  const sortedJourneys = useMemo(() => {
+    const sorted = [...journeys];
+    switch (activeFilter) {
+      case "fast":
+        return sorted.sort((a, b) => a.durationMinutes - b.durationMinutes);
+      case "eco":
+        return sorted.sort((a, b) => a.co2Ggrams - b.co2Ggrams);
+      default:
+        return sorted;
+    }
+  }, [journeys, activeFilter]);
+
+  // ── Tracé animé multi-segments depuis le meilleur itinéraire ──
+  // On prend le 1er itinéraire de la liste (le plus rapide après tri)
+  const journeySegments = useMemo(() => {
+    if (!selectedOrigin || !selectedDest || sortedJourneys.length === 0) return [];
+    const best = sortedJourneys[0];
+    return journeyToSegments(
+      best,
+      selectedOrigin.lat,
+      selectedOrigin.lon,
+      selectedDest.lat,
+      selectedDest.lon
+    );
+  }, [sortedJourneys, selectedOrigin, selectedDest]);
+
+  // ── Instance Leaflet (récupérée via onMapReady) ──
+  const [mapInstance, setMapInstance] = useState<unknown>(null);
 
   // ─── Sélection d'une suggestion (arrêt ou adresse) ──────────────────
   const handleOriginSelect = (item: SuggestionItem) => {
@@ -289,19 +320,6 @@ function SearchPageContent() {
   // ─── Réinitialiser un champ ─────────────────────────────────────────
   const clearOrigin = () => { setOrigin(""); setSelectedOrigin(null); };
   const clearDest = () => { setDestination(""); setSelectedDest(null); };
-
-  // Sort journeys based on active filter
-  const sortedJourneys = useMemo(() => {
-    const sorted = [...journeys];
-    switch (activeFilter) {
-      case "fast":
-        return sorted.sort((a, b) => a.durationMinutes - b.durationMinutes);
-      case "eco":
-        return sorted.sort((a, b) => a.co2Ggrams - b.co2Ggrams);
-      default:
-        return sorted;
-    }
-  }, [journeys, activeFilter]);
 
   // Get mode label from segments
   const getModeLabel = (journey: typeof journeys[0]) => {
@@ -596,8 +614,13 @@ function SearchPageContent() {
           onToggleWatch={toggleWatch}
           followUser={followUser}
           onMapClick={handleMapClick}
+          onMapReady={setMapInstance}
         />
       </div>
+      {/* Tracé animé multi-segments (au-dessus de la carte) */}
+      {journeySegments.length > 0 && (
+        <JourneyLineLazy map={mapInstance} segments={journeySegments} />
+      )}
       {/* Click-on-map hint */}
       {(!selectedOrigin || !selectedDest) && (
         <p className="text-[var(--color-text-tertiary)] text-xs text-center mb-3">
@@ -663,6 +686,38 @@ function SearchPageContent() {
               />
             ))}
           </>
+        )}
+
+        {/* ─── Empty state / Erreurs enrichies ────────────────────────── */}
+        {selectedOrigin && selectedDest && journeysError && (
+          <div className="bg-red-50 border border-red-200 rounded-[var(--card-radius)] p-4 flex items-start gap-3" role="alert">
+            <AlertOctagon size={20} className="text-red-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-800">Impossible de calculer l'itinéraire</p>
+              <p className="text-xs text-red-700 mt-0.5">
+                {journeysError || "Le service est temporairement indisponible. Réessayez dans quelques instants."}
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-2 inline-flex items-center gap-1 px-3 py-1 rounded-md bg-red-100 text-red-800 text-xs font-medium hover:bg-red-200 transition-colors"
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        )}
+
+        {selectedOrigin && selectedDest && !journeysLoading && !journeysError && journeys.length === 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-[var(--card-radius)] p-4 flex items-start gap-3" role="alert">
+            <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-800">Aucun itinéraire trouvé</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Vérifiez que vos points sont bien à Paris ou en proche banlieue (≤ 30 km du centre).
+                Pour les longues distances, essayez d'autres modes (train, marche).
+              </p>
+            </div>
+          </div>
         )}
 
         {!journeysLoading && !journeysError && (!selectedOrigin || !selectedDest) && (
