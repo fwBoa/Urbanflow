@@ -1,9 +1,19 @@
+# ─── Log rotation (per-tier retention set by deploy.sh via env) ──────────────
+#   defaults: 10m per file, 5 files (~50 MB rolling per service)
+#   staging keeps more history, prod less — see scripts/deploy.sh
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "${LOG_MAX_SIZE:-10m}"
+    max-file: "${LOG_MAX_FILE:-5}"
+
 services:
   # ─── PostgreSQL ───
   postgres:
     image: postgres:16-alpine
     container_name: urbanflow-db
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-urbanflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-urbanflow_dev}
@@ -26,6 +36,7 @@ services:
       dockerfile: Dockerfile
     container_name: urbanflow-api
     restart: unless-stopped
+    logging: *default-logging
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-urbanflow}:${POSTGRES_PASSWORD:-urbanflow_dev}@postgres:5432/${POSTGRES_DB:-urbanflow}
       PORT: 4000
@@ -52,6 +63,7 @@ services:
       dockerfile: Dockerfile
     container_name: urbanflow-web
     restart: unless-stopped
+    logging: *default-logging
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
       NODE_ENV: ${NODE_ENV:-development}
@@ -65,6 +77,7 @@ services:
     image: nginx:alpine
     container_name: urbanflow-nginx
     restart: unless-stopped
+    logging: *default-logging
     profiles:
       - production
     ports:

@@ -8,11 +8,22 @@ set -e
 ENV=${1:-staging}
 BRANCH=${2:-staging}
 
+# ─── Per-tier environment + log retention ───────────────────────────────
+# NODE_ENV drives the backend log levels + error redaction (see main.ts):
+#   staging    → operational logs, full error detail (diagnose the RC)
+#   production → operational logs, redacted errors
+# LOG_MAX_* sets Docker json-file rotation per service (see docker-compose.yml).
 if [ "$ENV" = "prod" ]; then
   BRANCH="main"
+  export NODE_ENV="production"
+  export LOG_MAX_SIZE="10m"
+  export LOG_MAX_FILE="5"    # ~50 MB rolling per service
   echo "🚀 Déploiement en PRODUCTION..."
   PROFILE="--profile production"
 else
+  export NODE_ENV="staging"
+  export LOG_MAX_SIZE="10m"
+  export LOG_MAX_FILE="10"   # ~100 MB rolling per service (more history)
   echo "📦 Déploiement en PRE-PRODUCTION..."
   PROFILE=""
 fi

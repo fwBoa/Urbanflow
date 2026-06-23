@@ -35,7 +35,11 @@ export default function ServiceWorkerRegistration() {
           });
         });
 
-        console.log("✅ Service Worker registered:", registration.scope);
+        // No success log in production (avoid console noise for end users);
+        // a registration failure is still surfaced for diagnosis.
+        if (process.env.NODE_ENV !== "production") {
+          console.log("✅ Service Worker registered:", registration.scope);
+        }
       } catch (error) {
         console.error("❌ Service Worker registration failed:", error);
       }

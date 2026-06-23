@@ -1,11 +1,26 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './all-exceptions.filter';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 
+// ─── 3-tier log levels (driven by NODE_ENV) ───────────────────────────────
+//   development → full verbosity (debug/log/warn/error)
+//   staging     → operational only (log/warn/error) — enough to diagnose a RC
+//   production  → operational only (log/warn/error), errors redacted by filter
+const LOG_LEVELS: Record<string, ('log' | 'debug' | 'warn' | 'error')[]> = {
+  development: ['debug', 'log', 'warn', 'error'],
+  staging: ['log', 'warn', 'error'],
+  production: ['log', 'warn', 'error'],
+};
+const nodeEnv = process.env.NODE_ENV ?? 'development';
+const loggerLevels = LOG_LEVELS[nodeEnv] ?? LOG_LEVELS.development;
+const isProd = nodeEnv === 'production';
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger: loggerLevels });
+  const logger = new Logger('Bootstrap');
 
   // ─── OWASP A07: Parse cookies for httpOnly JWT ───
   app.use(cookieParser());
@@ -41,19 +56,24 @@ async function bootstrap() {
   });
 
   // ─── Validation globale des DTOs (OWASP: input validation) ───
+  // production: suppress detailed validation messages to the client.
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      disableErrorMessages: isProd,
     }),
   );
+
+  // ─── Global exception filter: redact internals only in production ───
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Préfixe API
   app.setGlobalPrefix('api');
 
   const port = process.env.PORT || 4000;
   await app.listen(port);
-  console.log(`🚀 UrbanFlow API running on http://localhost:${port}`);
+  logger.log(`🚀 UrbanFlow API running on http://0.0.0.0:${port} [${nodeEnv}]`);
 }
 bootstrap();
