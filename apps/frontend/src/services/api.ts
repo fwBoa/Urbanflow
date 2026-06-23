@@ -1,4 +1,7 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+// In production (Docker) NEXT_PUBLIC_API_URL is unset, so API_BASE is "" and
+// all fetches use relative "/api/..." paths routed to the backend by nginx.
+// In dev, .env sets NEXT_PUBLIC_API_URL=http://localhost:4000 for cross-port access.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 // ─── Types ──────────────────────────────────────────────────────────
 

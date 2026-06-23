@@ -103,7 +103,7 @@ export default function ProfilePage() {
     setPrefs(updated);
     // Sync notifications preference to backend when authenticated
     if (key === "notifications" && isAuthenticated) {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
       fetch(`${API_URL}/api/auth/notifications-preference`, {
         method: "PUT",
         credentials: "include",

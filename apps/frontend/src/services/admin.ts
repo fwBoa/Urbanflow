@@ -67,7 +67,8 @@ export interface GtfsStatus {
   } | null;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+// "" in prod → relative "/api/..." via nginx; set in .env for dev cross-port.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 async function fetchAdmin<T>(endpoint: string): Promise<T> {
   const res = await fetch(`${API_URL}${endpoint}`, {

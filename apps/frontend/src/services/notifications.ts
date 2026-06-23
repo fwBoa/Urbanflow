@@ -3,7 +3,8 @@
  * Connects to backend /api/notifications endpoints
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+// "" in prod → relative "/api/..." via nginx; set in .env for dev cross-port.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 export interface NotificationItem {
   id: string;
