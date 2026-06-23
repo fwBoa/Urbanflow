@@ -31,7 +31,9 @@ import { AdminModule } from './admin/admin.module';
         url: process.env.DATABASE_URL || 'postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow',
         entities: [User, Favorite, History, Notification],
         // AdminModule entities are loaded via TypeOrmModule.forFeature()
-        synchronize: true,
+        // ─── Never auto-mutate the schema in production (data-loss risk). ───
+        // Use migrations in prod; synchronize only re-syncs the dev schema.
+        synchronize: process.env.NODE_ENV !== 'production',
         logging: false,
         // Retry connection for up to 30 seconds
         connectTimeoutMS: 30000,

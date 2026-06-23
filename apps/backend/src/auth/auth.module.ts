@@ -9,17 +9,18 @@ import { JwtStrategy } from './jwt.strategy';
 import { User } from './user.entity';
 import { FavoritesModule } from '../favorites/favorites.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { resolveJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    // ─── OWASP: Load JWT secret from env, no hardcoded fallback ───
+    // ─── OWASP: Require JWT_SECRET in production (see resolveJwtSecret) ───
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', 'dev_only_secret'),
+        secret: resolveJwtSecret(config),
         signOptions: { expiresIn: '2h' }, // Reduced from 24h for security
       }),
     }),
