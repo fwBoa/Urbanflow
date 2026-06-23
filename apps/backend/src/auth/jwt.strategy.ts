@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
+import { resolveJwtSecret } from './jwt-secret';
 
 // ─── OWASP A07: Extract JWT from httpOnly cookie (fallback: Authorization header) ───
 function extractJwtFromCookieOrHeader(req: Request): string | null {
@@ -23,8 +24,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: extractJwtFromCookieOrHeader,
       ignoreExpiration: false,
-      // ─── OWASP: Load secret from env via ConfigService ───
-      secretOrKey: configService.get<string>('JWT_SECRET', 'dev_only_secret'),
+      // ─── OWASP: Require JWT_SECRET in production (see resolveJwtSecret) ───
+      secretOrKey: resolveJwtSecret(configService),
     });
   }
 
