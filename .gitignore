@@ -35,12 +35,11 @@ coverage/
 docker/data/
 docker/postgres/
 
+# ─── TLS certs (never commit — see docker/certs/README.md) ───
+docker/certs/*.pem
+docker/certs/*.key
+docker/certs/*.crt
+
 # ─── Misc ───
 *.tmp
 .cache/
-
-# ─── Testing ───
-coverage/
-
-# ─── Docker ───
-docker/postgres_data/KAIZEN.md

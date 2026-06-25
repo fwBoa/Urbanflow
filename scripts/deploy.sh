@@ -30,16 +30,24 @@ fi
 
 # ─── Vérifications pré-déploiement ───
 echo "🔍 Vérification des variables d'environnement..."
-if [ ! -f .env ]; then
-  echo "⚠️  Fichier .env manquant. Copiez .env.example vers .env et configurez les secrets."
-  echo "   cp .env.example .env"
+# docker compose auto-loads docker/.env — that is the real source of secrets.
+if [ ! -f docker/.env ]; then
+  echo "⚠️  docker/.env manquant. Copiez .env.example vers docker/.env et configurez les secrets."
+  echo "   cp .env.example docker/.env"
   exit 1
 fi
 
 # Vérifier que JWT_SECRET n'est pas la valeur par défaut en production
 if [ "$ENV" = "prod" ]; then
-  if grep -q "change_me_in_production" .env; then
-    echo "❌ JWT_SECRET doit être changé en production !"
+  if grep -q "change_me_in_production" docker/.env; then
+    echo "❌ JWT_SECRET doit être changé en production (docker/.env) !"
+    exit 1
+  fi
+  # Le profil production (nginx TLS) nécessite des certificats réels.
+  if [ ! -f docker/certs/fullchain.pem ] || [ ! -f docker/certs/privkey.pem ]; then
+    echo "❌ Certificats TLS manquants : docker/certs/{fullchain,privkey}.pem"
+    echo "   Placez des certificats réels (Let's Encrypt) ou, pour tester :"
+    echo "     ./scripts/generate-certs.sh   # self-signed — TESTING ONLY"
     exit 1
   fi
 fi
