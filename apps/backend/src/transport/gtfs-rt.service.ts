@@ -41,8 +41,13 @@ export class GtfsRtService {
   private readonly ALERTS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
   constructor(private readonly httpService: HttpService) {
-    this.primApiKey = process.env.PRIM_API_KEY || 'ccNiEkDJ8KFvcMT8lnnuGvQWuCdBjsIo';
+    this.primApiKey = process.env.PRIM_API_KEY || '';
     this.primApiUrl = process.env.PRIM_API_URL || 'https://prim.iledefrance-mobilites.fr';
+    if (!this.primApiKey) {
+      this.logger.warn(
+        'PRIM_API_KEY is not set. Realtime alerts will be unavailable (register at https://prim.iledefrance-mobilites.fr/).',
+      );
+    }
   }
 
   /**
