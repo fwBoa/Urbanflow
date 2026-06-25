@@ -227,7 +227,12 @@ export class GtfsParserService implements OnModuleInit {
     this.loading = true;
 
     try {
-      const apiKey = this.configService.get<string>('PRIM_API_KEY') || 'ccNiEkDJ8KFvcMT8lnnuGvQWuCdBjsIo';
+      const apiKey = this.configService.get<string>('PRIM_API_KEY', '');
+      if (!apiKey) {
+        this.logger.warn(
+          'PRIM_API_KEY is not set. The PRIM API GTFS source will be unavailable (register at https://prim.iledefrance-mobilites.fr/).',
+        );
+      }
 
       // Try multiple GTFS sources in order
       const gtfsSources: Array<{ name: string; url: string; headers: Record<string, string> }> = [
