@@ -125,9 +125,8 @@ export interface GtfsIndex {
   tripsByRoute: Map<string, GtfsTrip[]>;
   tripsById: Map<string, GtfsTrip>;
   stopTimesByTrip: Map<string, GtfsStopTime[]>;
+  /** Stop times par arrêt, triés EN PLACE par departure_time (binary search dans getNextDepartures). */
   stopTimesByStop: Map<string, GtfsStopTime[]>;
-  /** Stop times sorted by departure_time for binary search */
-  stopTimesByStopSorted: Map<string, GtfsStopTime[]>;
   calendarByService: Map<string, GtfsCalendar>;
   calendarDatesByService: Map<string, GtfsCalendarDate[]>;
   shapesById: Map<string, GtfsShape[]>;
@@ -178,7 +177,9 @@ export class GtfsParserService implements OnModuleInit {
   private index: GtfsIndex | null = null;
   private lastLoadTime: Date | null = null;
   private loading = false;
+  /** Cache LRU borné des shapes lues paresseusement sur disque (évite la fuite mémoire). */
   private readonly shapeCache = new Map<string, GtfsShape[]>();
+  private readonly SHAPE_CACHE_MAX = 100;
 
   constructor(
     private readonly configService: ConfigService,
@@ -192,13 +193,18 @@ export class GtfsParserService implements OnModuleInit {
    * Downloads the PRIM GTFS ZIP if not cached, then parses it
    */
   async onModuleInit() {
-    this.logger.log('GtfsParserService initializing — attempting GTFS auto-load...');
-    try {
-      await this.downloadAndLoad();
-    } catch (error) {
-      this.logger.warn(`GTFS auto-load failed: ${error instanceof Error ? error.message : error}. Journey planning will use fallback data.`);
-      // Don't crash — fallback journey data will be used
-    }
+    this.logger.log('GtfsParserService initializing — GTFS auto-load lancé en arrière-plan (non bloquant).');
+    // Non bloquant : on NE await pas downloadAndLoad() pour que app.listen() s'exécute
+    // immédiatement. Les endpoints PRIM (métro/bus/vélib/alertes) — qui ne dépendent pas
+    // du GTFS — sont ainsi disponibles dès le boot. Les endpoints GTFS (journey, nearby,
+    // stop-times…) renvoient 503 "chargement en cours" jusqu'à ce que l'index soit prêt
+    // (voir garde isLoaded() dans le controller).
+    void this.downloadAndLoad().catch((error) => {
+      this.logger.warn(
+        `GTFS background load failed: ${error instanceof Error ? error.message : error}. ` +
+          `GTFS-dependent endpoints stay unavailable; PRIM endpoints remain up.`,
+      );
+    });
   }
 
   /**
@@ -378,10 +384,39 @@ export class GtfsParserService implements OnModuleInit {
     const startTime = Date.now();
 
     try {
-      // Extraire le ZIP
-      const zip = new AdmZipClass(zipPath);
+      // Extraire le ZIP — ou réutiliser les fichiers déjà extraits si le ZIP n'a pas
+      // changé. extractAllTo (AdmZip) est SYNCHRONE et bloque l'event loop ~30-60s
+      // sur 160 Mo : on l'évite au démarrage à chaud (fichiers présents sur le volume).
       const extractDir = path.join(this.dataDir, 'extracted');
-      zip.extractAllTo(extractDir, true);
+      const markerPath = path.join(extractDir, '.extracted_from');
+      let reuseExtracted = false;
+      try {
+        const zipStat = fs.statSync(zipPath);
+        const marker = fs.readFileSync(markerPath, 'utf8');
+        const [m, s] = marker.split('|');
+        if (
+          String(zipStat.mtimeMs) === m &&
+          String(zipStat.size) === s &&
+          fs.existsSync(path.join(extractDir, 'stops.txt'))
+        ) {
+          reuseExtracted = true;
+        }
+      } catch {
+        /* marqueur absent → extraction nécessaire */
+      }
+      if (reuseExtracted) {
+        this.logger.log('Reusing already-extracted GTFS files (ZIP unchanged) — skipping sync extraction.');
+      } else {
+        this.logger.log('Extracting GTFS ZIP…');
+        const zip = new AdmZipClass(zipPath);
+        zip.extractAllTo(extractDir, true);
+        try {
+          const zipStat = fs.statSync(zipPath);
+          fs.writeFileSync(markerPath, `${zipStat.mtimeMs}|${zipStat.size}`);
+        } catch {
+          /* échec d'écriture du marqueur non bloquant */
+        }
+      }
 
       // ── 1. Parser les fichiers de base ─────────────────────────────────
       const agencies = await this.parseFile<GtfsAgency>(
@@ -408,8 +443,9 @@ export class GtfsParserService implements OnModuleInit {
 
       // ── 2. Filtrer les arrêts par bounding box Paris ─────────────────────
       const { filteredStops, validStopIds } = this.filterStopsByRegion(allStops);
+      const radiusKm = process.env.GTFS_RADIUS_KM || '15';
       this.logger.log(
-        `Bounding-box filter: ${filteredStops.length}/${allStops.length} stops kept (≤25 km from Paris)`,
+        `Bounding-box filter: ${filteredStops.length}/${allStops.length} stops kept (≤${radiusKm} km from Paris)`,
       );
 
       // ── 3. Parser stop_times en streaming, filtrer par stop_id ─────────
@@ -418,10 +454,23 @@ export class GtfsParserService implements OnModuleInit {
       const stopTimesByStopTemp = new Map<string, GtfsStopTime[]>();
       const validTripIds = new Set<string>();
 
+      // Progression : stop_times.txt fait ~1,1 Go / 12,3 M lignes — sans logs,
+      // le chargement reste muet pendant des minutes (semble bloqué).
+      let stopTimesScanned = 0;
+      let stopTimesKept = 0;
+
       await this.parseFileIncremental<GtfsStopTime>(
         path.join(extractDir, 'stop_times.txt'),
         (st) => {
+          stopTimesScanned++;
+          if (stopTimesScanned % 1_000_000 === 0) {
+            this.logger.log(
+              `stop_times: ${stopTimesScanned.toLocaleString('fr-FR')} lignes parcourues, ` +
+                `${stopTimesKept.toLocaleString('fr-FR')} conservées…`,
+            );
+          }
           if (!validStopIds.has(st.stop_id)) return;
+          stopTimesKept++;
           validTripIds.add(st.trip_id);
 
           const tripTimes = stopTimesByTripTemp.get(st.trip_id) || [];
@@ -432,6 +481,10 @@ export class GtfsParserService implements OnModuleInit {
           stopTimes2.push(st);
           stopTimesByStopTemp.set(st.stop_id, stopTimes2);
         },
+      );
+      this.logger.log(
+        `stop_times: ${stopTimesScanned.toLocaleString('fr-FR')} lignes parcourues, ` +
+          `${stopTimesKept.toLocaleString('fr-FR')} conservées (terminé).`,
       );
 
       // ── 4. Filtrer trips et routes en cascade ────────────────────────────
@@ -461,14 +514,14 @@ export class GtfsParserService implements OnModuleInit {
       index.stopTimesByTrip = stopTimesByTripTemp;
       index.stopTimesByStop = stopTimesByStopTemp;
 
-      // Construire stopTimesByStopSorted pour binary search O(log n)
-      for (const [stopId, times] of index.stopTimesByStop) {
-        const sorted = [...times].sort((a, b) => {
-          const ta = this.timeToSeconds(a.departure_time);
-          const tb = this.timeToSeconds(b.departure_time);
-          return ta - tb;
-        });
-        index.stopTimesByStopSorted.set(stopId, sorted);
+      // Trier les horaires par arrêt EN PLACE par departure_time (binary search O(log n)
+      // dans getNextDepartures). Tri en place (pas de copie) : 3×→2× l'empreinte mémoire
+      // des stop_times, indispensable pour tenir sous le heap limit sur un hôte 8 Go.
+      for (const [, times] of index.stopTimesByStop) {
+        times.sort(
+          (a, b) =>
+            this.timeToSeconds(a.departure_time) - this.timeToSeconds(b.departure_time),
+        );
       }
 
       // ── 6. Parser transfers en streaming, filtrer par stop_id ──────────
@@ -506,6 +559,15 @@ export class GtfsParserService implements OnModuleInit {
   }
 
   /**
+   * Cède la main à l'event loop. Le parsing GTFS est lourd et Node est monothreadé :
+   * sans céder périodiquement, le chargement (lancé en arrière-plan) bloque le traitement
+   * des requêtes HTTP et retarde même app.listen(). Appelé tous les N enregistrements.
+   */
+  private async yieldToEventLoop(): Promise<void> {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+
+  /**
    * Parse un fichier GTFS texte (CSV) en tableau d'objets typés
    * Utilise un stream pour gérer les fichiers volumineux (ex: stop_times.txt > 500MB)
    */
@@ -540,6 +602,8 @@ export class GtfsParserService implements OnModuleInit {
         records.push(record as T);
       }
       lineCount++;
+      // Cède la main régulièrement pour ne pas bloquer l'event loop (API + app.listen).
+      if (lineCount % 50_000 === 0) await this.yieldToEventLoop();
     }
 
     this.logger.debug(`Parsed ${records.length} records from ${path.basename(filePath)}`);
@@ -586,6 +650,8 @@ export class GtfsParserService implements OnModuleInit {
         recordCount++;
       }
       lineCount++;
+      // Cède la main régulièrement pour ne pas bloquer l'event loop (API + app.listen).
+      if (lineCount % 50_000 === 0) await this.yieldToEventLoop();
     }
 
     this.logger.debug(`Parsed ${recordCount} records from ${path.basename(filePath)}`);
@@ -662,7 +728,6 @@ export class GtfsParserService implements OnModuleInit {
       tripsById: new Map(),
       stopTimesByTrip: new Map(),
       stopTimesByStop: new Map(),
-      stopTimesByStopSorted: new Map(),
       calendarByService: new Map(),
       calendarDatesByService: new Map(),
       shapesById: new Map(),
@@ -712,14 +777,13 @@ export class GtfsParserService implements OnModuleInit {
       times.sort((a, b) => a.stop_sequence - b.stop_sequence);
     }
 
-    // Trier les horaires par arrêt par heure de départ (binary search rapide)
-    for (const [stopId, times] of index.stopTimesByStop) {
-      const sorted = [...times].sort((a, b) => {
-        const ta = this.timeToSeconds(a.departure_time);
-        const tb = this.timeToSeconds(b.departure_time);
-        return ta - tb;
-      });
-      index.stopTimesByStopSorted.set(stopId, sorted);
+    // Trier les horaires par arrêt EN PLACE par heure de départ (binary search rapide
+    // dans getNextDepartures) — pas de copie, pour limiter l'empreinte mémoire.
+    for (const [, times] of index.stopTimesByStop) {
+      times.sort(
+        (a, b) =>
+          this.timeToSeconds(a.departure_time) - this.timeToSeconds(b.departure_time),
+      );
     }
 
     // Grille spatiale pour findStopsNearby O(1)
@@ -797,7 +861,9 @@ export class GtfsParserService implements OnModuleInit {
     return {
       stops: this.index.stopsById.size,
       routes: this.index.routesById.size,
-      trips: this.index.tripsByRoute.size,
+      // tripsByRoute.size == nombre de routes uniques, pas le total de trips.
+      // tripsById recense chaque course (383k ici) → c'est la vraie valeur.
+      trips: this.index.tripsById.size,
       agencies: this.index.agenciesById.size,
     };
   }
@@ -808,7 +874,11 @@ export class GtfsParserService implements OnModuleInit {
    */
   async getShapeById(shapeId: string): Promise<GtfsShape[]> {
     if (this.shapeCache.has(shapeId)) {
-      return this.shapeCache.get(shapeId)!;
+      // LRU : marquer comme récemment utilisé (déplacer en fin de Map)
+      const cached = this.shapeCache.get(shapeId)!;
+      this.shapeCache.delete(shapeId);
+      this.shapeCache.set(shapeId, cached);
+      return cached;
     }
 
     const shapesPath = path.join(this.dataDir, 'extracted', 'shapes.txt');
@@ -842,6 +912,11 @@ export class GtfsParserService implements OnModuleInit {
 
     points.sort((a, b) => a.shape_pt_sequence - b.shape_pt_sequence);
     this.shapeCache.set(shapeId, points);
+    // LRU : éviction de l'entrée la plus ancienne si la borne est dépassée
+    if (this.shapeCache.size > this.SHAPE_CACHE_MAX) {
+      const oldest = this.shapeCache.keys().next().value;
+      if (oldest !== undefined) this.shapeCache.delete(oldest);
+    }
     this.logger.log(`Lazy-loaded shape ${shapeId}: ${points.length} points`);
     return points;
   }
@@ -980,7 +1055,8 @@ export class GtfsParserService implements OnModuleInit {
   ): { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[] {
     if (!this.index) return [];
 
-    const sorted = this.index.stopTimesByStopSorted.get(stopId) || [];
+    // stopTimesByStop est trié en place par departure_time (voir loadFromZip/buildIndex).
+    const sorted = this.index.stopTimesByStop.get(stopId) || [];
     const results: { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[] = [];
 
     const targetSeconds = this.timeToSeconds(timeAfter);
