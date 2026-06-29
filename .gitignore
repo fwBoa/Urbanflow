@@ -35,6 +35,10 @@ coverage/
 docker/data/
 docker/postgres/
 
+# ─── GTFS data (regenerated at runtime — downloaded from PRIM + extracted,
+#     never commit ~1.5 GB of artefacts) ───
+apps/backend/data/gtfs/
+
 # ─── TLS certs (never commit — see docker/certs/README.md) ───
 docker/certs/*.pem
 docker/certs/*.key
