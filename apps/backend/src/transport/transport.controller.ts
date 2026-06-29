@@ -13,6 +13,7 @@ import { GtfsParserService } from './gtfs-parser.service';
 import { JourneyService, JourneyQuery, JourneyResult } from './journey.service';
 import { OsrmService } from './osrm.service';
 import { GtfsRtService, RealtimeAlert } from './gtfs-rt.service';
+import { GbfsService } from './gbfs.service';
 
 /**
  * Contrôleur Transport — Expose les données PRIM (Île-de-France Mobilités)
@@ -38,6 +39,7 @@ export class TransportController {
     private readonly journeyService: JourneyService,
     private readonly osrmService: OsrmService,
     private readonly gtfsRtService: GtfsRtService,
+    private readonly gbfsService: GbfsService,
   ) {}
 
   /**
@@ -81,6 +83,30 @@ export class TransportController {
       parseFloat(lon),
       radius ? parseFloat(radius) : 2,
       limit ? parseInt(limit, 10) : 10,
+    );
+  }
+
+  // ─── Trottinettes/vélos partagés (free-floating, GBFS) ───────────────
+  // Indépendant du GTFS : jamais de garde 503.
+
+  @Get('scooters-nearby')
+  async getNearbyScooters(
+    @Query('lat') lat?: string,
+    @Query('lon') lon?: string,
+    @Query('radius') radius?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!lat || !lon) {
+      throw new HttpException(
+        'Query parameters "lat" and "lon" are required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.gbfsService.getSharedVehicles(
+      parseFloat(lat),
+      parseFloat(lon),
+      radius ? parseFloat(radius) : 2,
+      limit ? parseInt(limit, 10) : 20,
     );
   }
 
