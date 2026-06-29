@@ -42,6 +42,23 @@ export interface NearbyVelibStation {
   arrondissement: string;
 }
 
+export interface NearbyScooter {
+  id: string;
+  operator: string;
+  type: "trottinette" | "bike";
+  position: { lat: number; lon: number };
+  battery?: number;
+  available: boolean;
+  distance: number; // mètres
+}
+
+export interface NearbyScootersResponse {
+  vehicles: NearbyScooter[];
+  total: number;
+  source: string;
+  message?: string;
+}
+
 export interface PrimDataResponse<T> {
   total_count: number;
   results: T[];
@@ -188,6 +205,18 @@ class ApiService {
   ): Promise<{ stations: NearbyVelibStation[]; total: number }> {
     return this.fetch(
       `/api/transport/velib-nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`,
+    );
+  }
+
+  // ─── Trottinettes/vélos partagés (GBFS free-floating) ───────────────
+  async getNearbyScooters(
+    lat: number,
+    lon: number,
+    radiusKm = 2,
+    limit = 20,
+  ): Promise<NearbyScootersResponse> {
+    return this.fetch(
+      `/api/transport/scooters-nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`,
     );
   }
 

@@ -36,6 +36,11 @@ export interface MapProps {
     available_bikes: number;
     available_bike_stands: number;
   }>;
+  scooterStations?: Array<{
+    position: { lat: number; lon: number };
+    operator?: string;
+    type?: "trottinette" | "bike";
+  }>;
   onMapClick?: (lat: number, lng: number) => void;
   userPosition?: { lat: number; lon: number; accuracy?: number; heading?: number | null } | null;
   onLocateUser?: () => void;
@@ -55,6 +60,7 @@ export default function MapComponent({
   className = "",
   showVelib = false,
   velibStations = [],
+  scooterStations = [],
   onMapClick,
   userPosition,
   onLocateUser,
@@ -118,6 +124,7 @@ export default function MapComponent({
 
   const routeMarkersRef = useRef<L.Marker[]>([]);
   const velibMarkersRef = useRef<L.Marker[]>([]);
+  const scooterMarkersRef = useRef<L.Marker[]>([]);
 
   // Add markers
   useEffect(() => {
@@ -176,6 +183,35 @@ export default function MapComponent({
       });
     }
   }, [map, showVelib, velibStations]);
+
+  // Trottinettes/vélos partagés (GBFS)
+  useEffect(() => {
+    if (!map) return;
+    scooterMarkersRef.current.forEach((m) => map.removeLayer(m));
+    scooterMarkersRef.current = [];
+
+    if (scooterStations.length > 0) {
+      scooterStations.forEach((v) => {
+        const emoji = v.type === "bike" ? "🚲" : "🛴";
+        const icon = L.divIcon({
+          className: "scooter-marker",
+          html: `<div style="
+            width: 22px; height: 22px; border-radius: 50%;
+            background: #F57C00; border: 2px solid white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 11px;
+          ">${emoji}</div>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+        });
+        const marker = L.marker([v.position.lat, v.position.lon], { icon })
+          .addTo(map)
+          .bindPopup(`<strong>${v.operator || (v.type === "bike" ? "Vélo" : "Trottinette")}</strong>`);
+        scooterMarkersRef.current.push(marker);
+      });
+    }
+  }, [map, scooterStations]);
 
   const polylineRef = useRef<L.Polyline | null>(null);
   const shapePolylinesRef = useRef<L.Polyline[]>([]);
