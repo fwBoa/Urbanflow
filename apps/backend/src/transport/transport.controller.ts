@@ -40,6 +40,20 @@ export class TransportController {
     private readonly gtfsRtService: GtfsRtService,
   ) {}
 
+  /**
+   * Garde pour les endpoints dépendant de l'index GTFS : renvoie 503 tant que
+   * le chargement en arrière-plan n'est pas terminé. Les endpoints PRIM directs
+   * (lines-by-mode, velib*, realtime-alerts, geocode…) ne passent PAS par ici.
+   */
+  private requireGtfsLoaded(): void {
+    if (!this.gtfsParser.isLoaded()) {
+      throw new HttpException(
+        { message: 'GTFS en cours de chargement…', loaded: false },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
   // ─── Lignes par mode (F1) ────────────────────────────────────────────
 
   @Get('lines-by-mode')
@@ -79,6 +93,7 @@ export class TransportController {
     @Query('radius') radius?: string,
     @Query('limit') limit?: string,
   ) {
+    this.requireGtfsLoaded();
     if (!lat || !lon) {
       throw new HttpException(
         'Query parameters "lat" and "lon" are required',
@@ -140,6 +155,7 @@ export class TransportController {
 
   @Get('shape/:shapeId')
   async getShape(@Param('shapeId') shapeId?: string) {
+    this.requireGtfsLoaded();
     if (!shapeId) {
       throw new HttpException('shapeId requis', HttpStatus.BAD_REQUEST);
     }
@@ -161,6 +177,7 @@ export class TransportController {
     @Query('stopId') stopId?: string,
     @Query('limit') limit?: string,
   ) {
+    this.requireGtfsLoaded();
     if (!stopId) {
       throw new HttpException(
         'Query parameter "stopId" is required',
@@ -182,6 +199,7 @@ export class TransportController {
     @Query('q') query?: string,
     @Query('limit') limit?: string,
   ) {
+    this.requireGtfsLoaded();
     if (!query) {
       throw new HttpException(
         'Query parameter "q" is required',
@@ -210,6 +228,7 @@ export class TransportController {
     @Query('where') where?: string,
     @Query('limit') limit?: string,
   ) {
+    this.requireGtfsLoaded();
     const match = where?.match(/search\(arrname,"([^"]+)"\)/i);
     const q = match?.[1]?.trim() ?? '';
     if (q.length < 2) {
@@ -319,6 +338,7 @@ export class TransportController {
     @Query('modes') modes?: string,
     @Query('maxTransfers') maxTransfers?: string,
   ) {
+    this.requireGtfsLoaded();
     if (!originLat || !originLon || !destLat || !destLon) {
       throw new HttpException(
         'originLat, originLon, destLat, destLon are required',
