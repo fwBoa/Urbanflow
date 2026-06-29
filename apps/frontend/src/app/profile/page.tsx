@@ -36,7 +36,20 @@ import {
 } from "@/services/favorites";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateProfile as updateRemoteProfile } from "@/services/auth";
+import { apiService } from "@/services/api";
 import { useDarkMode } from "@/hooks/useDarkMode";
+
+// ─── Mapping mode de mobilité : UI (fast|eco|cheap) ↔ backend (rapide|eco|economique) ───
+const MODE_UI_TO_BACKEND: Record<string, string> = {
+  fast: "rapide",
+  eco: "eco",
+  cheap: "economique",
+};
+const MODE_BACKEND_TO_UI: Record<string, "fast" | "eco" | "cheap"> = {
+  rapide: "fast",
+  eco: "eco",
+  economique: "cheap",
+};
 
 const modeOptions = [
   { key: "fast" as const, label: "Rapide", icon: <Zap size={14} /> },
@@ -82,7 +95,7 @@ export default function ProfilePage() {
       });
       setPrefs((p) => ({
         ...p,
-        defaultMode: user.preferredMode === "economique" ? "cheap" : (user.preferredMode as "fast" | "eco" | "cheap"),
+        defaultMode: MODE_BACKEND_TO_UI[user.preferredMode] ?? "fast",
         accessibility: user.accessibilityNeeds,
       }));
     } else {
@@ -101,6 +114,12 @@ export default function ProfilePage() {
     }
     const updated = savePreferences({ [key]: !prefs[key] });
     setPrefs(updated);
+    // Sync accessibility needs to backend when authenticated
+    if (key === "accessibility" && isAuthenticated) {
+      updateRemoteProfile({ accessibilityNeeds: !prefs.accessibility }).catch(() => {
+        /* non-critical */
+      });
+    }
     // Sync notifications preference to backend when authenticated
     if (key === "notifications" && isAuthenticated) {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
@@ -116,6 +135,12 @@ export default function ProfilePage() {
   const handleModeChange = (mode: "fast" | "eco" | "cheap") => {
     const updated = savePreferences({ defaultMode: mode });
     setPrefs(updated);
+    // Persiste le mode côté backend (mapping UI → backend) quand authentifié
+    if (isAuthenticated) {
+      updateRemoteProfile({ preferredMode: MODE_UI_TO_BACKEND[mode] }).catch(() => {
+        /* non-critical */
+      });
+    }
   };
 
   const handleSaveName = async () => {
@@ -465,7 +490,7 @@ export default function ProfilePage() {
               <button
                 onClick={async () => {
                   try {
-                    const res = await fetch("/api/auth/me/export", {
+                    const res = await fetch(`${apiService.getBaseUrl()}/api/auth/me/export`, {
                       credentials: "include",
                     });
                     if (!res.ok) throw new Error("Export failed");
@@ -492,7 +517,7 @@ export default function ProfilePage() {
                 onClick={async () => {
                   if (!confirm("⚠️ Cette action supprimera votre compte. Vos données seront effacées sous 30 jours. Continuer ?")) return;
                   try {
-                    const res = await fetch("/api/auth/me", {
+                    const res = await fetch(`${apiService.getBaseUrl()}/api/auth/me`, {
                       method: "DELETE",
                       credentials: "include",
                     });
