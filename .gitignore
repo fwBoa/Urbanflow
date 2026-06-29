@@ -47,3 +47,8 @@ docker/certs/*.crt
 # ─── Misc ───
 *.tmp
 .cache/
+
+# ─── Docs internes de travail (audit/kaizen/plan) — pas pour le dépôt public ───
+AUDIT_PROJET.md
+KAIZEN.md
+PLAN.md
