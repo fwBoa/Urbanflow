@@ -113,7 +113,7 @@ export function useNavigation(
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const wakeLockRef = useRef<any | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const lastSpokenRef = useRef<number>(-1);
 
   // ─── Démarrer/Arrêter la navigation ────────────────────────────────
@@ -168,10 +168,10 @@ export function useNavigation(
   // ─── Screen Wake Lock ──────────────────────────────────────────────
   useEffect(() => {
     if (!isNavigating) return;
-    const nav = navigator as any;
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinel> } };
     if (nav.wakeLock && typeof nav.wakeLock.request === "function") {
       nav.wakeLock.request("screen")
-        .then((lock: any) => {
+        .then((lock: WakeLockSentinel) => {
           wakeLockRef.current = lock;
         })
         .catch(() => {

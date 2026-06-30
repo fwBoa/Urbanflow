@@ -20,15 +20,19 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    loadNotifications();
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const data = await getNotifications();
+      if (!cancelled) {
+        setNotifications(data);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthenticated]);
-
-  async function loadNotifications() {
-    setLoading(true);
-    const data = await getNotifications();
-    setNotifications(data);
-    setLoading(false);
-  }
 
   async function handleMarkAsRead(id: string) {
     const updated = await markAsRead(id);

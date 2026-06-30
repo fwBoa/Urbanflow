@@ -61,6 +61,12 @@ services:
     build:
       context: ../apps/frontend
       dockerfile: Dockerfile
+      # NEXT_PUBLIC_* est inliné par Next.js AU BUILD (pas au runtime).
+      # On passe donc l'URL API en build arg pour qu'elle soit bake dans le
+      # bundle client. En prod (derrière nginx), laisser NEXT_PUBLIC_API_URL
+      # vide dans l'env → API_BASE="" → URLs relatives "/api" proxifiées par nginx.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     container_name: urbanflow-web
     restart: unless-stopped
     logging: *default-logging

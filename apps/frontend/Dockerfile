@@ -1,6 +1,11 @@
 # ─── Build ───
 FROM node:20-alpine AS builder
 WORKDIR /app
+# NEXT_PUBLIC_* est inliné par Next.js AU BUILD ; l'env runtime ne suffit pas.
+# On accepte l'arg pour le baker dans le bundle client. En prod (nginx) on
+# le laisse vide → API_BASE="" → URLs relatives "/api" proxifiées par nginx.
+ARG NEXT_PUBLIC_API_URL=""
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY package*.json ./
 RUN npm ci
 COPY . .

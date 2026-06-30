@@ -9,7 +9,6 @@ import { CarbonService } from './carbon.service';
 
 import { OsrmService } from './osrm.service';
 import { GtfsRtService } from './gtfs-rt.service';
-import { GbfsService } from './gbfs.service';
 
 /**
  * Module Transport — Intégration PRIM (Île-de-France Mobilités)
@@ -21,12 +20,11 @@ import { GbfsService } from './gbfs.service';
  * - CarbonService : Calcul empreinte carbone (facteurs ADEME)
  * - OsrmService : Routing réel via OpenStreetMap (OSRM)
  * - GtfsRtService : Données temps réel GTFS-RT (alertes, retards)
- * - GbfsService : Véhicules partagés free-floating (trottinettes/vélos, standard GBFS)
  */
 @Module({
   imports: [HttpModule, ScheduleModule.forRoot()],
   controllers: [TransportController],
-  providers: [PrimService, GtfsParserService, JourneyService, CarbonService, OsrmService, GtfsRtService, GbfsService],
-  exports: [HttpModule, PrimService, GtfsParserService, JourneyService, CarbonService, OsrmService, GtfsRtService, GbfsService],
+  providers: [PrimService, GtfsParserService, JourneyService, CarbonService, OsrmService, GtfsRtService],
+  exports: [HttpModule, PrimService, GtfsParserService, JourneyService, CarbonService, OsrmService, GtfsRtService],
 })
 export class TransportModule {}

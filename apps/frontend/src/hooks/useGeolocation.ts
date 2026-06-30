@@ -164,7 +164,7 @@ export function useGeolocation(): GeolocationState & {
           if (result.state === "granted") {
             locate();
           }
-          setState((s) => ({ ...s, permission: result.state as any }));
+          setState((s) => ({ ...s, permission: result.state }));
         })
         .catch(() => {});
     }
