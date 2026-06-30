@@ -47,7 +47,11 @@ services:
       PRIM_API_KEY: ${PRIM_API_KEY:-}
       PRIM_API_URL: ${PRIM_API_URL:-https://api-lab.idfm.fr}
       GTFS_RADIUS_KM: ${GTFS_RADIUS_KM:-15}
-      NODE_OPTIONS: --max-old-space-size=3584
+      # GTFS désormais en PostgreSQL : Node ne conserve plus les ~6,8 M
+      # stop_times en heap (consommation réelle ~100 Mo). L'ancienne limite
+      # 3584 Mo (ère Maps en mémoire → OOM exit 137 sur la VM 3,826 Gio) est
+      # donc abaissée à 1024 Mo : plafonnnement confortable, marge sous la VM.
+      NODE_OPTIONS: --max-old-space-size=1024
     ports:
       - '4000:4000'
     volumes:

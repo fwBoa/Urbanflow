@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { GtfsParserService, GtfsIndex, GtfsStop, GtfsStopTime, GtfsTrip, GtfsRoute, GtfsCalendar } from './gtfs-parser.service';
+import {
+  GtfsParserService,
+  GtfsStop,
+  GtfsStopTime,
+  GtfsTrip,
+  GtfsRoute,
+} from './gtfs-parser.service';
 import { CarbonService } from './carbon.service';
 import { PrimService } from './prim.service';
 
@@ -124,7 +130,10 @@ export class JourneyService {
   private readonly VELIB_RADIUS_KM = 1.0;
 
   /** Cache LRU des résultats journey — clé: hash params, TTL 120s, 500 entrées */
-  private readonly journeyCache = new Map<string, { result: JourneyResult[]; expiry: number }>();
+  private readonly journeyCache = new Map<
+    string,
+    { result: JourneyResult[]; expiry: number }
+  >();
   private readonly CACHE_TTL_MS = 120_000;
   private readonly CACHE_MAX_SIZE = 500;
 
@@ -134,7 +143,11 @@ export class JourneyService {
     private readonly primService: PrimService,
   ) {}
 
-  private cacheKey(query: JourneyQuery, maxTransfers: number, timeStr: string): string {
+  private cacheKey(
+    query: JourneyQuery,
+    maxTransfers: number,
+    timeStr: string,
+  ): string {
     return [
       query.origin.lat.toFixed(4),
       query.origin.lon.toFixed(4),
@@ -162,7 +175,10 @@ export class JourneyService {
       const first = this.journeyCache.keys().next().value;
       if (first !== undefined) this.journeyCache.delete(first);
     }
-    this.journeyCache.set(key, { result, expiry: Date.now() + this.CACHE_TTL_MS });
+    this.journeyCache.set(key, {
+      result,
+      expiry: Date.now() + this.CACHE_TTL_MS,
+    });
   }
 
   /**
@@ -188,42 +204,58 @@ export class JourneyService {
     const cacheKey = this.cacheKey(query, maxTransfers, timeStr);
     const cached = this.getCached(cacheKey);
     if (cached) {
-      this.logger.debug(`Journey cache hit for key=${cacheKey.slice(0, 40)}...`);
+      this.logger.debug(
+        `Journey cache hit for key=${cacheKey.slice(0, 40)}...`,
+      );
       return cached;
     }
 
     // Vérifier que l'origine et la destination sont dans la région parisienne
-    const originDistFromParis = this.haversineKm(query.origin.lat, query.origin.lon, 48.8566, 2.3522);
-    const destDistFromParis = this.haversineKm(query.destination.lat, query.destination.lon, 48.8566, 2.3522);
+    const originDistFromParis = this.haversineKm(
+      query.origin.lat,
+      query.origin.lon,
+      48.8566,
+      2.3522,
+    );
+    const destDistFromParis = this.haversineKm(
+      query.destination.lat,
+      query.destination.lon,
+      48.8566,
+      2.3522,
+    );
     if (originDistFromParis > 30 || destDistFromParis > 30) {
-      this.logger.warn(`Journey request outside Paris region: origin=${originDistFromParis.toFixed(1)}km, dest=${destDistFromParis.toFixed(1)}km from Paris center`);
+      this.logger.warn(
+        `Journey request outside Paris region: origin=${originDistFromParis.toFixed(1)}km, dest=${destDistFromParis.toFixed(1)}km from Paris center`,
+      );
       return []; // Hors scope — aucun itinéraire disponible
     }
 
     // Determine active service IDs for the departure day
-    const activeServiceIds = this.getActiveServiceIds(departureTime);
+    const activeServiceIds =
+      await this.gtfsParser.getActiveServiceIds(departureTime);
 
     // 1. Find stops near origin and destination — en parallèle pour gagner ~30% sur I/O GTFS
     const [originStops, destStops] = await Promise.all([
-      Promise.resolve(this.gtfsParser.findStopsNearby(
+      this.gtfsParser.findStopsNearby(
         query.origin.lat,
         query.origin.lon,
         this.WALK_RADIUS_KM,
         5,
-      )),
-      Promise.resolve(this.gtfsParser.findStopsNearby(
+      ),
+      this.gtfsParser.findStopsNearby(
         query.destination.lat,
         query.destination.lon,
         this.WALK_RADIUS_KM,
         5,
-      )),
+      ),
     ]);
 
     const journeys: JourneyResult[] = [];
+    const loaded = await this.gtfsParser.isLoaded();
 
     // 2. Use RAPTOR algorithm if GTFS data is loaded
-    if (this.gtfsParser.isLoaded() && originStops.length > 0 && destStops.length > 0) {
-      const raptorJourneys = this.raptorSearch(
+    if (loaded && originStops.length > 0 && destStops.length > 0) {
+      const raptorJourneys = await this.raptorSearch(
         originStops,
         destStops,
         timeStr,
@@ -235,8 +267,8 @@ export class JourneyService {
     }
 
     // 2b. Fallback: generate approximate transit journeys when GTFS is not available
-    if (!this.gtfsParser.isLoaded() || journeys.length === 0) {
-      const fallbackJourneys = this.computeFallbackTransitJourney(query);
+    if (!loaded || journeys.length === 0) {
+      const fallbackJourneys = await this.computeFallbackTransitJourney(query);
       journeys.push(...fallbackJourneys);
     }
 
@@ -267,17 +299,14 @@ export class JourneyService {
    * - Update earliest arrival times
    * - Mark stops that improved for the next round
    */
-  private raptorSearch(
+  private async raptorSearch(
     originStops: GtfsStop[],
     destStops: GtfsStop[],
     departureTime: string,
     query: JourneyQuery,
     activeServiceIds: Set<string>,
     maxTransfers: number,
-  ): JourneyResult[] {
-    const index = this.gtfsParser.getIndex();
-    if (!index) return [];
-
+  ): Promise<JourneyResult[]> {
     const destStopIds = new Set(destStops.map((s) => s.stop_id));
     const departureSeconds = this.timeToSeconds(departureTime);
 
@@ -285,14 +314,48 @@ export class JourneyService {
     // key: stop_id, value: earliest arrival time in seconds since midnight
     const bestArrival = new Map<string, number>();
     // Track which route+trip brought us to each stop (for path reconstruction)
-    const cameFrom = new Map<string, {
-      stopId: string;
-      tripId: string;
-      routeId: string;
-      fromStopId: string;
-      arrivalTime: number;
-      departureTime: number;
-    }>();
+    const cameFrom = new Map<
+      string,
+      {
+        stopId: string;
+        tripId: string;
+        routeId: string;
+        fromStopId: string;
+        arrivalTime: number;
+        departureTime: number;
+      }
+    >();
+
+    // Mémo par requête : un même trip / transfert peut être revisité sur plusieurs rounds.
+    // Borné (LRU 200) pour se prémunir d'un parcours pathologique.
+    const tripCache = new Map<string, GtfsStopTime[]>();
+    const transferCache = new Map<
+      string,
+      { to_stop_id: string; min_transfer_time: number | null }[]
+    >();
+    const TRIP_CACHE_MAX = 200;
+    const getTripStopTimes = async (
+      tripId: string,
+    ): Promise<GtfsStopTime[]> => {
+      let t = tripCache.get(tripId);
+      if (!t) {
+        t = await this.gtfsParser.getTripStopTimes(tripId);
+        if (tripCache.size >= TRIP_CACHE_MAX) {
+          const k = tripCache.keys().next().value;
+          if (k !== undefined) tripCache.delete(k);
+        }
+        tripCache.set(tripId, t);
+      }
+      return t;
+    };
+    const getTransfers = async (stopId: string) => {
+      let t = transferCache.get(stopId);
+      if (!t) {
+        t = await this.gtfsParser.getTransfersFrom(stopId);
+        transferCache.set(stopId, t);
+      }
+      return t;
+    };
 
     // Initialize: origin stops are reachable at departure time
     const markedStops = new Set<string>();
@@ -312,7 +375,7 @@ export class JourneyService {
         const currentArrival = bestArrival.get(stopId) ?? Infinity;
 
         // Get departures from this stop after current arrival time
-        const departures = this.gtfsParser.getNextDepartures(
+        const departures = await this.gtfsParser.getNextDepartures(
           stopId,
           this.secondsToTime(currentArrival),
           5,
@@ -324,11 +387,14 @@ export class JourneyService {
           if (seenRoutes.has(dep.route.route_id)) continue;
           seenRoutes.add(dep.route.route_id);
           // Filter by active service
-          if (activeServiceIds.size > 0 && !activeServiceIds.has(dep.trip.service_id)) {
+          if (
+            activeServiceIds.size > 0 &&
+            !activeServiceIds.has(dep.trip.service_id)
+          ) {
             continue;
           }
 
-          const tripStopTimes = index.stopTimesByTrip.get(dep.trip.trip_id) || [];
+          const tripStopTimes = await getTripStopTimes(dep.trip.trip_id);
           const originSeq = tripStopTimes.find((st) => st.stop_id === stopId);
           if (!originSeq) continue;
 
@@ -356,9 +422,11 @@ export class JourneyService {
 
               // Check if we reached a destination stop
               if (destStopIds.has(st.stop_id)) {
-                const destStop = destStops.find((s) => s.stop_id === st.stop_id);
+                const destStop = destStops.find(
+                  (s) => s.stop_id === st.stop_id,
+                );
                 if (destStop) {
-                  const journey = this.reconstructJourney(
+                  const journey = await this.reconstructJourney(
                     st.stop_id,
                     originStops,
                     destStop,
@@ -379,13 +447,13 @@ export class JourneyService {
         }
       }
 
-      // Foot-path transfers: use pre-computed GTFS transfers (O(1) lookup)
-      // instead of findStopsNearby which scans all 54K stops each time.
+      // Foot-path transfers : correspondances GTFS (lookup SQL, mémo par requête).
       for (const stopId of newMarkedStops) {
-        const transfers = index.transfersByStop.get(stopId) || [];
+        const transfers = await getTransfers(stopId);
         for (const transfer of transfers) {
-          const walkTimeSeconds = (transfer.min_transfer_time ?? 120); // default 2 min = 120s
-          const arrivalViaWalk = (bestArrival.get(stopId) ?? Infinity) + walkTimeSeconds;
+          const walkTimeSeconds = transfer.min_transfer_time ?? 120; // default 2 min = 120s
+          const arrivalViaWalk =
+            (bestArrival.get(stopId) ?? Infinity) + walkTimeSeconds;
           const previousBest = bestArrival.get(transfer.to_stop_id) ?? Infinity;
 
           if (arrivalViaWalk < previousBest) {
@@ -411,18 +479,21 @@ export class JourneyService {
   /**
    * Reconstruct a journey from RAPTOR cameFrom data
    */
-  private reconstructJourney(
+  private async reconstructJourney(
     destStopId: string,
     originStops: GtfsStop[],
     destStop: GtfsStop,
-    cameFrom: Map<string, {
-      stopId: string;
-      tripId: string;
-      routeId: string;
-      fromStopId: string;
-      arrivalTime: number;
-      departureTime: number;
-    }>,
+    cameFrom: Map<
+      string,
+      {
+        stopId: string;
+        tripId: string;
+        routeId: string;
+        fromStopId: string;
+        arrivalTime: number;
+        departureTime: number;
+      }
+    >,
     bestArrival: Map<string, number>,
     query: JourneyQuery,
     route: GtfsRoute,
@@ -430,16 +501,18 @@ export class JourneyService {
     destSeq: GtfsStopTime,
     tripStopTimes: GtfsStopTime[],
     trip: GtfsTrip,
-  ): JourneyResult | null {
-    const index = this.gtfsParser.getIndex();
-    if (!index) return null;
-
+  ): Promise<JourneyResult | null> {
     // Find the best origin stop
     let bestOriginStop = originStops[0];
     let bestOriginWalkTime = Infinity;
     for (const os of originStops) {
       const walkTime = Math.round(
-        (this.haversineKm(query.origin.lat, query.origin.lon, os.stop_lat, os.stop_lon) /
+        (this.haversineKm(
+          query.origin.lat,
+          query.origin.lon,
+          os.stop_lat,
+          os.stop_lon,
+        ) /
           this.WALK_SPEED_KMH) *
           60,
       );
@@ -468,7 +541,7 @@ export class JourneyService {
       originSeq.departure_time,
       destSeq.arrival_time,
     );
-    const transitDistance = this.estimateTransitDistance(
+    const transitDistance = await this.estimateTransitDistance(
       tripStopTimes,
       originSeq.stop_sequence,
       destSeq.stop_sequence,
@@ -479,9 +552,8 @@ export class JourneyService {
       transitDistance,
     );
 
-    // Récupérer le quai / platform depuis l'index si disponible
-    const originStopDetails = index.stopsById.get(bestOriginStop.stop_id);
-    const platform = originStopDetails?.platform_code || undefined;
+    // Quai / platform : porté par le stop (récupéré via findStopsNearby en amont)
+    const platform = bestOriginStop.platform_code || undefined;
 
     const transitSegment: JourneySegment = {
       type: 'transit',
@@ -516,7 +588,8 @@ export class JourneyService {
 
     const totalDuration =
       walkOrigin.durationMinutes + transitDuration + walkDest.durationMinutes;
-    const totalCo2 = walkOrigin.co2Ggrams + co2.emissionsGco2 + walkDest.co2Ggrams;
+    const totalCo2 =
+      walkOrigin.co2Ggrams + co2.emissionsGco2 + walkDest.co2Ggrams;
 
     return {
       durationMinutes: totalDuration,
@@ -537,51 +610,6 @@ export class JourneyService {
   }
 
   /**
-   * Get active service IDs for a given date based on calendar.txt
-   */
-  private getActiveServiceIds(date: Date): Set<string> {
-    const index = this.gtfsParser.getIndex();
-    if (!index) return new Set();
-
-    const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ...
-    const dayFields: (keyof GtfsCalendar)[] = [
-      'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
-    ];
-    const dayField = dayFields[dayOfWeek];
-
-    const activeIds = new Set<string>();
-    const dateNum = parseInt(
-      date.toISOString().slice(0, 10).replace(/-/g, ''),
-    );
-
-    // Check calendar.txt
-    for (const [serviceId, calendar] of index.calendarByService) {
-      const startDate = parseInt(calendar.start_date);
-      const endDate = parseInt(calendar.end_date);
-
-      if (dateNum >= startDate && dateNum <= endDate && calendar[dayField] === 1) {
-        activeIds.add(serviceId);
-      }
-    }
-
-    // Apply calendar_dates exceptions (added=1, removed=2) — UNIQUEMENT pour la date demandée
-    for (const [serviceId, dates] of index.calendarDatesByService) {
-      for (const cd of dates) {
-        const cdDateNum = parseInt(cd.date);
-        if (cdDateNum === dateNum) {
-          if (cd.exception_type === 1) {
-            activeIds.add(cd.service_id);
-          } else if (cd.exception_type === 2) {
-            activeIds.delete(cd.service_id);
-          }
-        }
-      }
-    }
-
-    return activeIds;
-  }
-
-  /**
    * Filter journeys by requested transport modes
    */
   private filterByModes(
@@ -591,15 +619,20 @@ export class JourneyService {
     if (!modes || modes.length === 0) return journeys;
 
     return journeys.filter((journey) => {
-      const transitSegments = journey.segments.filter((s) => s.type === 'transit');
+      const transitSegments = journey.segments.filter(
+        (s) => s.type === 'transit',
+      );
       if (transitSegments.length === 0) return true; // Walking/Vélib always allowed
 
       return transitSegments.some((segment) => {
         const mode = segment.mode?.toLowerCase() || '';
-        if (modes.includes('metro') && (mode === 'métro' || mode === 'metro')) return true;
-        if (modes.includes('rer') && (mode === 'rer' || mode === 'rer/train')) return true;
+        if (modes.includes('metro') && (mode === 'métro' || mode === 'metro'))
+          return true;
+        if (modes.includes('rer') && (mode === 'rer' || mode === 'rer/train'))
+          return true;
         if (modes.includes('bus') && mode === 'bus') return true;
-        if (modes.includes('tram') && (mode === 'tramway' || mode === 'tram')) return true;
+        if (modes.includes('tram') && (mode === 'tramway' || mode === 'tram'))
+          return true;
         if (modes.includes('transilien') && mode === 'transilien') return true;
         if (modes.includes('velib') && segment.type === 'velib') return true;
         if (modes.includes('marche') && segment.type === 'walking') return true;
@@ -609,332 +642,14 @@ export class JourneyService {
   }
 
   /**
-   * Cherche un trajet direct entre deux arrêts
-   */
-  private findDirectJourney(
-    originStop: GtfsStop,
-    destStop: GtfsStop,
-    departureTime: string,
-    query: JourneyQuery,
-    activeServiceIds: Set<string>,
-  ): JourneyResult | null {
-    const departures = this.gtfsParser.getNextDepartures(
-      originStop.stop_id,
-      departureTime,
-      20,
-    );
-
-    for (const dep of departures) {
-      // Filter by active service
-      if (activeServiceIds.size > 0 && !activeServiceIds.has(dep.trip.service_id)) {
-        continue;
-      }
-
-      // Vérifier si cette course passe aussi par l'arrêt de destination
-      const tripStopTimes = this.gtfsParser.getIndex()?.stopTimesByTrip.get(dep.trip.trip_id) || [];
-      const originSeq = tripStopTimes.find((st) => st.stop_id === originStop.stop_id);
-      const destSeq = tripStopTimes.find((st) => st.stop_id === destStop.stop_id);
-
-      if (originSeq && destSeq && destSeq.stop_sequence > originSeq.stop_sequence) {
-        // Course directe trouvée !
-        const walkOrigin = this.walkSegment(
-          query.origin.lat,
-          query.origin.lon,
-          originStop.stop_lat,
-          originStop.stop_lon,
-          originStop.stop_name,
-        );
-        const walkDest = this.walkSegment(
-          destStop.stop_lat,
-          destStop.stop_lon,
-          query.destination.lat,
-          query.destination.lon,
-          destStop.stop_name,
-        );
-
-        const transitDuration = this.timeDiffMinutes(
-          originSeq.departure_time,
-          destSeq.arrival_time,
-        );
-
-        const transitDistance = this.estimateTransitDistance(
-          tripStopTimes,
-          originSeq.stop_sequence,
-          destSeq.stop_sequence,
-        );
-
-        const modeName = this.getModeName(dep.route.route_type);
-        const co2 = this.carbonService.calculateFromGtfsRouteType(
-          dep.route.route_type,
-          transitDistance,
-        );
-
-        const transitSegment: JourneySegment = {
-          type: 'transit',
-          mode: modeName,
-          lineName: dep.route.route_short_name || dep.route.route_long_name,
-          lineColor: dep.route.route_color ? `#${dep.route.route_color}` : undefined,
-          fromStop: originStop.stop_name,
-          toStop: destStop.stop_name,
-          durationMinutes: transitDuration,
-          distanceKm: transitDistance,
-          numStops: destSeq.stop_sequence - originSeq.stop_sequence,
-          departureTime: originSeq.departure_time,
-          arrivalTime: destSeq.arrival_time,
-          co2Ggrams: co2.emissionsGco2,
-          instruction: `Prendre ${dep.route.route_short_name || dep.route.route_long_name} de ${originStop.stop_name} à ${destStop.stop_name}`,
-          shapeId: dep.trip.shape_id || undefined,
-        };
-
-        const totalDuration =
-          walkOrigin.durationMinutes +
-          transitDuration +
-          walkDest.durationMinutes;
-
-        const totalCo2 =
-          walkOrigin.co2Ggrams + co2.emissionsGco2 + walkDest.co2Ggrams;
-
-        return {
-          durationMinutes: totalDuration,
-          transfers: 0,
-          distanceKm:
-            walkOrigin.distanceKm + transitDistance + walkDest.distanceKm,
-          co2Ggrams: totalCo2,
-          segments: [walkOrigin, transitSegment, walkDest],
-          departureTime: originSeq.departure_time,
-          arrivalTime: destSeq.arrival_time,
-        };
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Cherche un trajet avec 1 correspondance
-   */
-  private findOneTransferJourney(
-    originStops: GtfsStop[],
-    destStops: GtfsStop[],
-    departureTime: string,
-    query: JourneyQuery,
-    activeServiceIds: Set<string>,
-  ): JourneyResult[] {
-    const results: JourneyResult[] = [];
-    const index = this.gtfsParser.getIndex();
-    if (!index) return results;
-
-    const destStopIds = new Set(destStops.map((s) => s.stop_id));
-
-    for (const originStop of originStops) {
-      const departures = this.gtfsParser.getNextDepartures(
-        originStop.stop_id,
-        departureTime,
-        10,
-      );
-
-      for (const dep of departures) {
-        // Filter by active service
-        if (activeServiceIds.size > 0 && !activeServiceIds.has(dep.trip.service_id)) {
-          continue;
-        }
-
-        const tripStopTimes = index.stopTimesByTrip.get(dep.trip.trip_id) || [];
-        const originSeq = tripStopTimes.find(
-          (st) => st.stop_id === originStop.stop_id,
-        );
-
-        if (!originSeq) continue;
-
-        // Parcourir les arrêts suivants de cette course
-        for (const st of tripStopTimes) {
-          if (st.stop_sequence <= originSeq.stop_sequence) continue;
-
-          // Cet arrêt est-il une correspondance possible ?
-          const transferStop = index.stopsById.get(st.stop_id);
-          if (!transferStop) continue;
-
-          // Vérifier s'il y a une course de cet arrêt vers la destination
-          const transferDepartures = this.gtfsParser.getNextDepartures(
-            st.stop_id,
-            st.arrival_time,
-            10,
-          );
-
-          for (const dep2 of transferDepartures) {
-            const trip2StopTimes = index.stopTimesByTrip.get(dep2.trip.trip_id) || [];
-            const transferSeq = trip2StopTimes.find(
-              (st2) => st2.stop_id === st.stop_id,
-            );
-
-            for (const destStop of destStops) {
-              const destSeq = trip2StopTimes.find(
-                (st2) => st2.stop_id === destStop.stop_id,
-              );
-
-              if (
-                transferSeq &&
-                destSeq &&
-                destSeq.stop_sequence > transferSeq.stop_sequence &&
-                dep.trip.trip_id !== dep2.trip.trip_id
-              ) {
-                // Trajet avec 1 correspondance trouvé !
-                const journey = this.buildTwoSegmentJourney(
-                  query,
-                  originStop,
-                  transferStop,
-                  destStop,
-                  dep,
-                  dep2,
-                  originSeq,
-                  st,
-                  transferSeq,
-                  destSeq,
-                  tripStopTimes,
-                  trip2StopTimes,
-                );
-                if (journey) results.push(journey);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * Construit un trajet à 2 segments (1 correspondance)
-   */
-  private buildTwoSegmentJourney(
-    query: JourneyQuery,
-    originStop: GtfsStop,
-    transferStop: GtfsStop,
-    destStop: GtfsStop,
-    dep1: { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime },
-    dep2: { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime },
-    originSeq: GtfsStopTime,
-    transferArrival: GtfsStopTime,
-    transferDeparture: GtfsStopTime,
-    destSeq: GtfsStopTime,
-    trip1StopTimes: GtfsStopTime[],
-    trip2StopTimes: GtfsStopTime[],
-  ): JourneyResult | null {
-    const walkOrigin = this.walkSegment(
-      query.origin.lat,
-      query.origin.lon,
-      originStop.stop_lat,
-      originStop.stop_lon,
-      originStop.stop_name,
-    );
-    const walkDest = this.walkSegment(
-      destStop.stop_lat,
-      destStop.stop_lon,
-      query.destination.lat,
-      query.destination.lon,
-      destStop.stop_name,
-    );
-
-    const transit1Duration = this.timeDiffMinutes(
-      originSeq.departure_time,
-      transferArrival.arrival_time,
-    );
-    const transit2Duration = this.timeDiffMinutes(
-      transferDeparture.departure_time,
-      destSeq.arrival_time,
-    );
-    const waitTime = this.timeDiffMinutes(
-      transferArrival.arrival_time,
-      transferDeparture.departure_time,
-    );
-
-    const transit1Dist = this.estimateTransitDistance(
-      trip1StopTimes,
-      originSeq.stop_sequence,
-      transferArrival.stop_sequence,
-    );
-    const transit2Dist = this.estimateTransitDistance(
-      trip2StopTimes,
-      transferDeparture.stop_sequence,
-      destSeq.stop_sequence,
-    );
-
-    const co2_1 = this.carbonService.calculateFromGtfsRouteType(
-      dep1.route.route_type,
-      transit1Dist,
-    );
-    const co2_2 = this.carbonService.calculateFromGtfsRouteType(
-      dep2.route.route_type,
-      transit2Dist,
-    );
-
-    const segment1: JourneySegment = {
-      type: 'transit',
-      mode: this.getModeName(dep1.route.route_type),
-      lineName: dep1.route.route_short_name || dep1.route.route_long_name,
-      lineColor: dep1.route.route_color ? `#${dep1.route.route_color}` : undefined,
-      fromStop: originStop.stop_name,
-      toStop: transferStop.stop_name,
-      durationMinutes: transit1Duration,
-      distanceKm: transit1Dist,
-      numStops: transferArrival.stop_sequence - originSeq.stop_sequence,
-      departureTime: originSeq.departure_time,
-      arrivalTime: transferArrival.arrival_time,
-      co2Ggrams: co2_1.emissionsGco2,
-      instruction: `Prendre ${dep1.route.route_short_name || dep1.route.route_long_name} de ${originStop.stop_name} à ${transferStop.stop_name}`,
-      shapeId: dep1.trip.shape_id || undefined,
-    };
-
-    const segment2: JourneySegment = {
-      type: 'transit',
-      mode: this.getModeName(dep2.route.route_type),
-      lineName: dep2.route.route_short_name || dep2.route.route_long_name,
-      lineColor: dep2.route.route_color ? `#${dep2.route.route_color}` : undefined,
-      fromStop: transferStop.stop_name,
-      toStop: destStop.stop_name,
-      durationMinutes: transit2Duration,
-      distanceKm: transit2Dist,
-      numStops: destSeq.stop_sequence - transferDeparture.stop_sequence,
-      departureTime: transferDeparture.departure_time,
-      arrivalTime: destSeq.arrival_time,
-      co2Ggrams: co2_2.emissionsGco2,
-      instruction: `Correspondance — Prendre ${dep2.route.route_short_name || dep2.route.route_long_name} de ${transferStop.stop_name} à ${destStop.stop_name}`,
-      shapeId: dep2.trip.shape_id || undefined,
-    };
-
-    const totalDuration =
-      walkOrigin.durationMinutes +
-      transit1Duration +
-      waitTime +
-      transit2Duration +
-      walkDest.durationMinutes;
-
-    const totalCo2 =
-      walkOrigin.co2Ggrams +
-      co2_1.emissionsGco2 +
-      co2_2.emissionsGco2 +
-      walkDest.co2Ggrams;
-
-    return {
-      durationMinutes: totalDuration,
-      transfers: 1,
-      distanceKm:
-        walkOrigin.distanceKm + transit1Dist + transit2Dist + walkDest.distanceKm,
-      co2Ggrams: totalCo2,
-      segments: [walkOrigin, segment1, segment2, walkDest],
-      departureTime: originSeq.departure_time,
-      arrivalTime: destSeq.arrival_time,
-    };
-  }
-
-  /**
    * Fallback intelligent : génère des itinéraires approximatifs en utilisant
    * les VRAIS arrêts GTFS à proximité (déjà chargés en mémoire).
    * Au lieu de labels génériques "Station de départ", on utilise les noms
    * d'arrêts réels trouvés par findStopsNearby().
    */
-  private computeFallbackTransitJourney(query: JourneyQuery): JourneyResult[] {
+  private async computeFallbackTransitJourney(
+    query: JourneyQuery,
+  ): Promise<JourneyResult[]> {
     const directDistance = this.haversineKm(
       query.origin.lat,
       query.origin.lon,
@@ -947,50 +662,82 @@ export class JourneyService {
     const departureTime = now.toISOString();
 
     // ─── VRAIS arrêts à proximité ──────────────────────────────────
-    const nearbyOriginStops = this.gtfsParser.findStopsNearby(
-      query.origin.lat, query.origin.lon, 0.5, 3,
-    );
-    const nearbyDestStops = this.gtfsParser.findStopsNearby(
-      query.destination.lat, query.destination.lon, 0.5, 3,
-    );
+    const [nearbyOriginStops, nearbyDestStops] = await Promise.all([
+      this.gtfsParser.findStopsNearby(
+        query.origin.lat,
+        query.origin.lon,
+        0.5,
+        3,
+      ),
+      this.gtfsParser.findStopsNearby(
+        query.destination.lat,
+        query.destination.lon,
+        0.5,
+        3,
+      ),
+    ]);
 
     // Priorité : arrêt desservi par métro/RER > bus > marche
-    const pickBestStop = (stops: typeof nearbyOriginStops) => {
+    const pickBestStop = async (
+      stops: typeof nearbyOriginStops,
+    ): Promise<(typeof nearbyOriginStops)[number] | null> => {
       if (stops.length === 0) return null;
-      const transit = stops.find((s) => {
-        const routes = this.gtfsParser.getRoutesForStop(s.stop_id);
-        return routes.some((r) => r.route_type <= 2);
-      });
-      return transit ?? stops[0];
+      for (const s of stops) {
+        const routes = await this.gtfsParser.getRoutesForStop(s.stop_id);
+        if (routes.some((r) => r.route_type <= 2)) return s;
+      }
+      return stops[0];
     };
 
-    const originStop = pickBestStop(nearbyOriginStops);
-    const destStop = pickBestStop(nearbyDestStops);
+    const [originStop, destStop] = await Promise.all([
+      pickBestStop(nearbyOriginStops),
+      pickBestStop(nearbyDestStops),
+    ]);
 
     const originName = originStop?.stop_name ?? 'Position actuelle';
     const destName = destStop?.stop_name ?? 'Destination';
 
-    // Lignes desservant l'arrêt d'origine
-    const originLines = originStop
-      ? this.gtfsParser.getRoutesForStop(originStop.stop_id)
-      : [];
-    // Lignes desservant l'arrêt de destination
-    const destLines = destStop
-      ? this.gtfsParser.getRoutesForStop(destStop.stop_id)
-      : [];
+    // Lignes desservant l'arrêt d'origine / destination
+    const [originLines, destLines] = await Promise.all([
+      originStop
+        ? this.gtfsParser.getRoutesForStop(originStop.stop_id)
+        : Promise.resolve([]),
+      destStop
+        ? this.gtfsParser.getRoutesForStop(destStop.stop_id)
+        : Promise.resolve([]),
+    ]);
 
     // Itinéraire Métro/RER (pour distances > 2km)
     if (directDistance > 2) {
       // Calcul distance marche réelle vers l'arrêt
       const walkToKm = originStop
-        ? this.haversineKm(query.origin.lat, query.origin.lon, originStop.stop_lat, originStop.stop_lon)
+        ? this.haversineKm(
+            query.origin.lat,
+            query.origin.lon,
+            originStop.stop_lat,
+            originStop.stop_lon,
+          )
         : Math.min(0.5, directDistance * 0.15);
       const walkFromKm = destStop
-        ? this.haversineKm(query.destination.lat, query.destination.lon, destStop.stop_lat, destStop.stop_lon)
+        ? this.haversineKm(
+            query.destination.lat,
+            query.destination.lon,
+            destStop.stop_lat,
+            destStop.stop_lon,
+          )
         : Math.min(0.5, directDistance * 0.15);
-      const transitDistance = Math.max(0.5, directDistance - walkToKm - walkFromKm);
-      const walkToMin = Math.max(1, Math.round((walkToKm / this.WALK_SPEED_KMH) * 60));
-      const walkFromMin = Math.max(1, Math.round((walkFromKm / this.WALK_SPEED_KMH) * 60));
+      const transitDistance = Math.max(
+        0.5,
+        directDistance - walkToKm - walkFromKm,
+      );
+      const walkToMin = Math.max(
+        1,
+        Math.round((walkToKm / this.WALK_SPEED_KMH) * 60),
+      );
+      const walkFromMin = Math.max(
+        1,
+        Math.round((walkFromKm / this.WALK_SPEED_KMH) * 60),
+      );
       const transitMin = Math.round((transitDistance / 35) * 60);
       const totalMin = walkToMin + transitMin + walkFromMin;
 
@@ -999,16 +746,26 @@ export class JourneyService {
       const commonLine = destLines.find((l) => originLineIds.has(l.route_id));
       const chosenLine = commonLine ?? originLines[0] ?? null;
 
-      const lineName = chosenLine ? (chosenLine.route_short_name || chosenLine.route_long_name) : 'Ligne directe';
-      const lineColor = chosenLine?.route_color ? `#${chosenLine.route_color}` : '#1A5A73';
+      const lineName = chosenLine
+        ? chosenLine.route_short_name || chosenLine.route_long_name
+        : 'Ligne directe';
+      const lineColor = chosenLine?.route_color
+        ? `#${chosenLine.route_color}`
+        : '#1A5A73';
       const lineMode = chosenLine
-        ? (chosenLine.route_type === 1 ? 'metro'
-          : chosenLine.route_type === 2 ? 'rer'
-          : chosenLine.route_type === 0 ? 'tram'
-          : 'bus')
+        ? chosenLine.route_type === 1
+          ? 'metro'
+          : chosenLine.route_type === 2
+            ? 'rer'
+            : chosenLine.route_type === 0
+              ? 'tram'
+              : 'bus'
         : 'Métro/RER';
 
-      const co2 = this.carbonService.calculateEmissions(lineMode as any, transitDistance);
+      const co2 = this.carbonService.calculateEmissions(
+        lineMode,
+        transitDistance,
+      );
       const waitTime = 3;
 
       results.push({
@@ -1056,29 +813,59 @@ export class JourneyService {
           },
         ],
         departureTime,
-        arrivalTime: new Date(now.getTime() + (totalMin + waitTime) * 60000).toISOString(),
+        arrivalTime: new Date(
+          now.getTime() + (totalMin + waitTime) * 60000,
+        ).toISOString(),
       });
     }
 
     // Itinéraire avec correspondance (pour distances > 5km)
     if (directDistance > 5) {
       const walkToKm = originStop
-        ? this.haversineKm(query.origin.lat, query.origin.lon, originStop.stop_lat, originStop.stop_lon)
+        ? this.haversineKm(
+            query.origin.lat,
+            query.origin.lon,
+            originStop.stop_lat,
+            originStop.stop_lon,
+          )
         : 0.3;
       const walkFromKm = destStop
-        ? this.haversineKm(query.destination.lat, query.destination.lon, destStop.stop_lat, destStop.stop_lon)
+        ? this.haversineKm(
+            query.destination.lat,
+            query.destination.lon,
+            destStop.stop_lat,
+            destStop.stop_lon,
+          )
         : 0.3;
       const transit1Dist = directDistance * 0.5;
-      const transit2Dist = Math.max(0.3, directDistance - transit1Dist - walkToKm - walkFromKm - 0.2);
-      const walkToMin = Math.max(1, Math.round((walkToKm / this.WALK_SPEED_KMH) * 60));
+      const transit2Dist = Math.max(
+        0.3,
+        directDistance - transit1Dist - walkToKm - walkFromKm - 0.2,
+      );
+      const walkToMin = Math.max(
+        1,
+        Math.round((walkToKm / this.WALK_SPEED_KMH) * 60),
+      );
       const walkTransferMin = 5; // marche + attente correspondance
-      const walkFromMin = Math.max(1, Math.round((walkFromKm / this.WALK_SPEED_KMH) * 60));
+      const walkFromMin = Math.max(
+        1,
+        Math.round((walkFromKm / this.WALK_SPEED_KMH) * 60),
+      );
       const transit1Min = Math.round((transit1Dist / 30) * 60);
       const transit2Min = Math.round((transit2Dist / 25) * 60);
       const waitMin = 5;
-      const totalMin = walkToMin + transit1Min + waitMin + walkTransferMin + transit2Min + walkFromMin;
+      const totalMin =
+        walkToMin +
+        transit1Min +
+        waitMin +
+        walkTransferMin +
+        transit2Min +
+        walkFromMin;
       const co2_1 = this.carbonService.calculateEmissions('rer', transit1Dist);
-      const co2_2 = this.carbonService.calculateEmissions('metro', transit2Dist);
+      const co2_2 = this.carbonService.calculateEmissions(
+        'metro',
+        transit2Dist,
+      );
 
       const line1 = originLines[0];
       const line2 = destLines[0];
@@ -1103,7 +890,9 @@ export class JourneyService {
           {
             type: 'transit',
             mode: 'rer',
-            lineName: line1 ? (line1.route_short_name || line1.route_long_name) : 'RER',
+            lineName: line1
+              ? line1.route_short_name || line1.route_long_name
+              : 'RER',
             lineColor: line1?.route_color ? `#${line1.route_color}` : '#1A5A73',
             fromStop: originName,
             toStop: 'Gare de correspondance',
@@ -1127,7 +916,9 @@ export class JourneyService {
           {
             type: 'transit',
             mode: 'metro',
-            lineName: line2 ? (line2.route_short_name || line2.route_long_name) : 'Métro',
+            lineName: line2
+              ? line2.route_short_name || line2.route_long_name
+              : 'Métro',
             lineColor: line2?.route_color ? `#${line2.route_color}` : '#E53935',
             fromStop: 'Gare de correspondance',
             toStop: destName,
@@ -1161,7 +952,9 @@ export class JourneyService {
   /**
    * Calcule un trajet sans transport en commun (marche / vélib)
    */
-  private async computeNonTransitJourney(query: JourneyQuery): Promise<JourneyResult[]> {
+  private async computeNonTransitJourney(
+    query: JourneyQuery,
+  ): Promise<JourneyResult[]> {
     const directDistance = this.haversineKm(
       query.origin.lat,
       query.origin.lon,
@@ -1172,7 +965,9 @@ export class JourneyService {
     const results: JourneyResult[] = [];
 
     // Marche
-    const walkDuration = Math.round((directDistance / this.WALK_SPEED_KMH) * 60);
+    const walkDuration = Math.round(
+      (directDistance / this.WALK_SPEED_KMH) * 60,
+    );
     results.push({
       durationMinutes: walkDuration,
       transfers: 0,
@@ -1201,10 +996,16 @@ export class JourneyService {
       try {
         const [originStations, destStations] = await Promise.all([
           this.primService.getNearbyVelibStations(
-            query.origin.lat, query.origin.lon, this.VELIB_RADIUS_KM, 5,
+            query.origin.lat,
+            query.origin.lon,
+            this.VELIB_RADIUS_KM,
+            5,
           ),
           this.primService.getNearbyVelibStations(
-            query.destination.lat, query.destination.lon, this.VELIB_RADIUS_KM, 5,
+            query.destination.lat,
+            query.destination.lon,
+            this.VELIB_RADIUS_KM,
+            5,
           ),
         ]);
 
@@ -1217,23 +1018,41 @@ export class JourneyService {
 
         if (pickup && dropoff) {
           const walkToStationKm = this.haversineKm(
-            query.origin.lat, query.origin.lon,
-            pickup.position.lat, pickup.position.lon,
+            query.origin.lat,
+            query.origin.lon,
+            pickup.position.lat,
+            pickup.position.lon,
           );
           const walkFromStationKm = this.haversineKm(
-            dropoff.position.lat, dropoff.position.lon,
-            query.destination.lat, query.destination.lon,
+            dropoff.position.lat,
+            dropoff.position.lon,
+            query.destination.lat,
+            query.destination.lon,
           );
           const bikeDistanceKm = this.haversineKm(
-            pickup.position.lat, pickup.position.lon,
-            dropoff.position.lat, dropoff.position.lon,
+            pickup.position.lat,
+            pickup.position.lon,
+            dropoff.position.lat,
+            dropoff.position.lon,
           );
-          const walkToMin = Math.max(1, Math.round((walkToStationKm / this.WALK_SPEED_KMH) * 60));
-          const walkFromMin = Math.max(1, Math.round((walkFromStationKm / this.WALK_SPEED_KMH) * 60));
-          const bikeDuration = Math.round((bikeDistanceKm / this.BIKE_SPEED_KMH) * 60);
+          const walkToMin = Math.max(
+            1,
+            Math.round((walkToStationKm / this.WALK_SPEED_KMH) * 60),
+          );
+          const walkFromMin = Math.max(
+            1,
+            Math.round((walkFromStationKm / this.WALK_SPEED_KMH) * 60),
+          );
+          const bikeDuration = Math.round(
+            (bikeDistanceKm / this.BIKE_SPEED_KMH) * 60,
+          );
           const totalDuration = walkToMin + bikeDuration + walkFromMin;
-          const bikeCo2 = this.carbonService.calculateEmissions('velib_electrique', bikeDistanceKm);
-          const totalDistance = walkToStationKm + bikeDistanceKm + walkFromStationKm;
+          const bikeCo2 = this.carbonService.calculateEmissions(
+            'velib_electrique',
+            bikeDistanceKm,
+          );
+          const totalDistance =
+            walkToStationKm + bikeDistanceKm + walkFromStationKm;
 
           results.push({
             durationMinutes: totalDuration,
@@ -1273,13 +1092,17 @@ export class JourneyService {
               },
             ],
             departureTime: new Date().toISOString(),
-            arrivalTime: new Date(new Date().getTime() + totalDuration * 60000).toISOString(),
+            arrivalTime: new Date(
+              new Date().getTime() + totalDuration * 60000,
+            ).toISOString(),
           });
         }
         // Si aucune station dispo : on n'insère pas l'alternative vélib
         // (mieux vaut ne rien proposer que mentir avec des constantes).
       } catch (error) {
-        this.logger.warn(`Vélib alternative indisponible : ${error instanceof Error ? error.message : String(error)}`);
+        this.logger.warn(
+          `Vélib alternative indisponible : ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -1324,7 +1147,12 @@ export class JourneyService {
     return modes[routeType] || 'Transport';
   }
 
-  private haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  private haversineKm(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -1355,27 +1183,30 @@ export class JourneyService {
    * Estime la distance d'un segment de trajet en transport
    * en sommant les distances entre arrêts consécutifs
    */
-  private estimateTransitDistance(
+  private async estimateTransitDistance(
     stopTimes: GtfsStopTime[],
     fromSequence: number,
     toSequence: number,
-  ): number {
+  ): Promise<number> {
     let totalDistance = 0;
-    const index = this.gtfsParser.getIndex();
-    if (!index) return 0;
+    if (stopTimes.length === 0) return 0;
+
+    // Récupère en une seule requête les coordonnées de tous les arrêts du trip
+    const stopIds = Array.from(new Set(stopTimes.map((st) => st.stop_id)));
+    const coords = await this.gtfsParser.getStopCoordsByIds(stopIds);
 
     for (let i = fromSequence; i < toSequence; i++) {
       const st1 = stopTimes.find((st) => st.stop_sequence === i);
       const st2 = stopTimes.find((st) => st.stop_sequence === i + 1);
       if (st1 && st2) {
-        const stop1 = index.stopsById.get(st1.stop_id);
-        const stop2 = index.stopsById.get(st2.stop_id);
+        const stop1 = coords.get(st1.stop_id);
+        const stop2 = coords.get(st2.stop_id);
         if (stop1 && stop2) {
           totalDistance += this.haversineKm(
-            stop1.stop_lat,
-            stop1.stop_lon,
-            stop2.stop_lat,
-            stop2.stop_lon,
+            stop1.lat,
+            stop1.lon,
+            stop2.lat,
+            stop2.lon,
           );
         }
       }
