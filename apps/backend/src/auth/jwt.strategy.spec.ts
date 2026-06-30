@@ -63,7 +63,7 @@ describe('JwtStrategy', () => {
       const result = await strategy.validate(payload);
 
       expect(authService.validateUser).toHaveBeenCalledWith('user-123');
-      expect(result).toEqual({ id: 'user-123', email: 'test@example.com' });
+      expect(result).toEqual({ id: 'user-123', email: 'test@example.com', role: 'user' });
     });
 
     it('should throw UnauthorizedException if user not found', async () => {
