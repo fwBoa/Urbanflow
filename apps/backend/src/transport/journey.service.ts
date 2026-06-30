@@ -30,7 +30,6 @@ export type TransportMode =
   | 'tram'
   | 'bus'
   | 'velib'
-  | 'trottinette'
   | 'marche';
 
 export interface JourneyAlert {
@@ -63,7 +62,7 @@ export interface JourneyResult {
 }
 
 export interface JourneySegment {
-  type: 'walking' | 'transit' | 'velib' | 'trottinette';
+  type: 'walking' | 'transit' | 'velib';
   mode?: string;
   /** Ligne (ex: "M1", "RER A", "Bus 42") */
   lineName?: string;
@@ -119,8 +118,6 @@ export class JourneyService {
   private readonly WALK_SPEED_KMH = 4;
   /** Vitesse vélo : 15 km/h */
   private readonly BIKE_SPEED_KMH = 15;
-  /** Vitesse trottinette électrique : 15 km/h (comprend les phases à pied/pousser) */
-  private readonly SCOOTER_SPEED_KMH = 15;
   /** Rayon de marche max autour d'un arrêt : 500m (5 min à pied, plus réaliste) */
   private readonly WALK_RADIUS_KM = 0.5;
   /** Rayon vélib max : 1km */
@@ -243,7 +240,7 @@ export class JourneyService {
       journeys.push(...fallbackJourneys);
     }
 
-    // 3. Always include non-transit alternatives (walk + Vélib + trottinette)
+    // 3. Always include non-transit alternatives (walk + Vélib)
     const nonTransitJourneys = await this.computeNonTransitJourney(query);
     journeys.push(...nonTransitJourneys);
 
@@ -605,7 +602,6 @@ export class JourneyService {
         if (modes.includes('tram') && (mode === 'tramway' || mode === 'tram')) return true;
         if (modes.includes('transilien') && mode === 'transilien') return true;
         if (modes.includes('velib') && segment.type === 'velib') return true;
-        if (modes.includes('trottinette') && segment.type === 'trottinette') return true;
         if (modes.includes('marche') && segment.type === 'walking') return true;
         return false;
       });
@@ -1285,56 +1281,6 @@ export class JourneyService {
       } catch (error) {
         this.logger.warn(`Vélib alternative indisponible : ${error instanceof Error ? error.message : String(error)}`);
       }
-    }
-
-    // Trottinette électrique partagée (si distance > 0.5km) — marche→trottinette→marche
-    // NB : Paris a interdit les trottinettes free-floating en 2023, donc le
-    // service GBFS (branche 4) renverra une liste vide à Paris ; l'alternative
-    // reste calculée (vitesse/CO2) pour les villes qui l'autorisent.
-    if (directDistance > 0.5) {
-      const walkToScootKm = Math.min(0.2, directDistance * 0.1);
-      const walkFromScootKm = Math.min(0.2, directDistance * 0.1);
-      const scootDistanceKm = Math.max(0.3, directDistance - walkToScootKm - walkFromScootKm);
-      const walkToMin = Math.max(1, Math.round((walkToScootKm / this.WALK_SPEED_KMH) * 60));
-      const walkFromMin = Math.max(1, Math.round((walkFromScootKm / this.WALK_SPEED_KMH) * 60));
-      const scootDuration = Math.round((scootDistanceKm / this.SCOOTER_SPEED_KMH) * 60);
-      const totalDuration = walkToMin + scootDuration + walkFromMin;
-      const scootCo2 = this.carbonService.calculateEmissions('trottinette_electrique', scootDistanceKm);
-
-      results.push({
-        durationMinutes: totalDuration,
-        transfers: 0,
-        distanceKm: Math.round(directDistance * 100) / 100,
-        co2Ggrams: scootCo2.emissionsGco2,
-        segments: [
-          {
-            type: 'walking',
-            mode: 'marche',
-            durationMinutes: walkToMin,
-            distanceKm: Math.round(walkToScootKm * 100) / 100,
-            co2Ggrams: 0,
-            instruction: `Marcher jusqu'à la trottinette la plus proche`,
-          },
-          {
-            type: 'trottinette',
-            mode: 'trottinette_electrique',
-            durationMinutes: scootDuration,
-            distanceKm: Math.round(scootDistanceKm * 100) / 100,
-            co2Ggrams: scootCo2.emissionsGco2,
-            instruction: `Trottinette électrique jusqu'à destination (${scootDistanceKm.toFixed(1)} km)`,
-          },
-          {
-            type: 'walking',
-            mode: 'marche',
-            durationMinutes: walkFromMin,
-            distanceKm: Math.round(walkFromScootKm * 100) / 100,
-            co2Ggrams: 0,
-            instruction: `Marcher jusqu'à destination`,
-          },
-        ],
-        departureTime: new Date().toISOString(),
-        arrivalTime: new Date(new Date().getTime() + totalDuration * 60000).toISOString(),
-      });
     }
 
     return results;

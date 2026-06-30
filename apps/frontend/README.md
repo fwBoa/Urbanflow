@@ -59,7 +59,7 @@ Types exportés : `PrimLine`, `PrimStop`, `PrimVelibStation`, `JourneyResult`, `
 | Catégorie | Tokens |
 |---|---|
 | Couleurs | Primary (#2E7D9B), Eco Green (#7CB342), Mobility Orange (#FF6B35), etc. |
-| Transport | metro, bus, velo, rer, tram, trottinette, voiture, marche |
+| Transport | metro, bus, velo, rer, tram, train, voiture, marche |
 | Espacements | header-height (60px), navbar-height (80px), card-radius (12px), cta-radius (26px) |
 | Typographie | font-family Inter, tailles 10-32px |
 

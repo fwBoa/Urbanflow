@@ -8,7 +8,6 @@ import { JourneyService } from './journey.service';
 import { GtfsParserService } from './gtfs-parser.service';
 import { GtfsRtService } from './gtfs-rt.service';
 import { OsrmService } from './osrm.service';
-import { GbfsService } from './gbfs.service';
 
 describe('TransportController', () => {
   let controller: TransportController;
@@ -26,7 +25,6 @@ describe('TransportController', () => {
         GtfsParserService,
         GtfsRtService,
         OsrmService,
-        GbfsService,
         {
           provide: ConfigService,
           useValue: {

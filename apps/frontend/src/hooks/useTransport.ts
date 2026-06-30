@@ -7,8 +7,6 @@ import type {
   PrimStop,
   PrimVelibStation,
   NearbyVelibStation,
-  NearbyScooter,
-  NearbyScootersResponse,
   JourneyResult,
   GeocodeResult,
   ReverseGeocodeResult,
@@ -19,7 +17,6 @@ import type {
 
 // Re-export pour rétro-compat
 export type { NearbyVelibStation } from "@/services/api";
-export type { NearbyScooter } from "@/services/api";
 
 // ─── Generic API data hook (DRY) ───────────────────────────────────
 /**
@@ -157,35 +154,6 @@ export function useNearbyVelib(lat: number | null, lon: number | null, radiusKm 
   return { stations, loading, error };
 }
 
-// ─── Trottinettes/vélos partagés (GBFS) ──────────────────────────────
-export function useNearbyScooters(lat: number | null, lon: number | null, radiusKm = 2, limit = 20) {
-  const { data: response, loading, error } = useApiData<NearbyScootersResponse>(
-    () => {
-      if (lat === null || lon === null) return Promise.resolve({ vehicles: [], total: 0, source: "GBFS" });
-      return apiService.getNearbyScooters(lat, lon, radiusKm, limit);
-    },
-    { vehicles: [], total: 0, source: "GBFS" },
-    [lat, lon, radiusKm, limit],
-    false,
-  );
-
-  if (lat === null || lon === null) {
-    return {
-      vehicles: [] as NearbyScooter[],
-      message: undefined as string | undefined,
-      loading: false,
-      error: null,
-    };
-  }
-
-  return {
-    vehicles: response?.vehicles ?? [],
-    message: response?.message,
-    loading,
-    error,
-  };
-}
-
 // ─── Geocoding — Recherche d'adresses ──────────────────────────────
 export function useGeocode(query: string, limit = 5) {
   const [results, setResults] = useState<GeocodeResult[]>([]);
@@ -235,8 +203,8 @@ export function useReverseGeocode() {
       const data = await apiService.reverseGeocode(lat, lon);
       setResult(data);
       return data;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
       setResult(null);
       return null;
     } finally {
@@ -284,8 +252,8 @@ export function useRoute() {
         setDistance(data.distance);
         setDuration(data.duration);
         return coords;
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : String(err));
         setGeometry([]);
         return [];
       } finally {
@@ -361,9 +329,9 @@ export function useNearbyStops(lat: number | null, lon: number | null, radiusKm 
           setError(null);
           await cacheNearbyStops(lat, lon, radiusKm, limit, fresh);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          setError(err.message);
+          setError(err instanceof Error ? err.message : String(err));
           // Keep cached data if available — already set above
         }
       } finally {

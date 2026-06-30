@@ -8,8 +8,8 @@ import NavBar from "@/components/NavBar";
 import SearchBar from "@/components/SearchBar";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
-import { NearbyVelibSection, NearbyScootersSection } from "@/components/VelibStationCard";
-import { useVelibStations, useLinesByMode, useNearbyVelib, useNearbyScooters } from "@/hooks/useTransport";
+import { NearbyVelibSection } from "@/components/VelibStationCard";
+import { useVelibStations, useLinesByMode, useNearbyVelib } from "@/hooks/useTransport";
 import type { LineByMode, LinesByMode } from "@/hooks/useTransport";
 import { getHistory } from "@/services/favorites";
 import type { HistoryJourney } from "@/services/favorites";
@@ -158,13 +158,6 @@ export default function HomePage() {
     8
   );
 
-  const { vehicles: nearbyScooters, message: scootersMessage, loading: scootersLoading, error: scootersError } = useNearbyScooters(
-    userPosition?.lat ?? null,
-    userPosition?.lon ?? null,
-    2,
-    20
-  );
-
   return (
     <div className="min-h-screen flex flex-col bg-white">
       {/* WCAG 2.4.1: Skip navigation link */}
@@ -225,15 +218,6 @@ export default function HomePage() {
           onRequestLocation={requestLocation}
         />
 
-        {/* Nearby shared scooters/bikes (GBFS — F3) */}
-        <NearbyScootersSection
-          vehicles={nearbyScooters}
-          message={scootersMessage}
-          loading={scootersLoading && userPosition !== null}
-          error={geoError || scootersError}
-          onRequestLocation={requestLocation}
-        />
-
         {/* Map */}
         <div className="rounded-[var(--card-radius)] h-44 mb-6 border border-[var(--color-border)] overflow-hidden">
           <DynamicMap
@@ -256,11 +240,6 @@ export default function HomePage() {
             }
             userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon } : null}
             onLocateUser={requestLocation}
-            scooterStations={nearbyScooters.map((v) => ({
-              position: v.position,
-              operator: v.operator,
-              type: v.type,
-            }))}
           />
         </div>
 

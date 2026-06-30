@@ -324,7 +324,6 @@ export const TRANSPORT_COLORS: Record<string, string> = {
   metro: '#2E7D9B',
   bus: '#7CB342',
   velo: '#4CAF50',
-  trottinette: '#4A9DB8',
   voiture: '#FF6B35',
   marche: '#FF9800',
   rer: '#1A5A73',

@@ -76,7 +76,7 @@ export default function LegalPage() {
               </a>
             </li>
             <li>
-              <strong>PRIM / JCDecaux</strong> — Disponibilité temps réel Vélib'
+              <strong>PRIM / JCDecaux</strong> — Disponibilité temps réel Vélib&apos;
             </li>
             <li>
               <strong>OSRM</strong> — Calcul d&apos;itinéraires piéton/vélo/voiture

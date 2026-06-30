@@ -9,11 +9,10 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { PrimService } from './prim.service';
-import { GtfsParserService } from './gtfs-parser.service';
+import { GtfsParserService, routeTypeLabel, modeKey } from './gtfs-parser.service';
 import { JourneyService, JourneyQuery, JourneyResult } from './journey.service';
 import { OsrmService } from './osrm.service';
 import { GtfsRtService, RealtimeAlert } from './gtfs-rt.service';
-import { GbfsService } from './gbfs.service';
 
 /**
  * Contrôleur Transport — Expose les données PRIM (Île-de-France Mobilités)
@@ -39,7 +38,6 @@ export class TransportController {
     private readonly journeyService: JourneyService,
     private readonly osrmService: OsrmService,
     private readonly gtfsRtService: GtfsRtService,
-    private readonly gbfsService: GbfsService,
   ) {}
 
   /**
@@ -83,30 +81,6 @@ export class TransportController {
       parseFloat(lon),
       radius ? parseFloat(radius) : 2,
       limit ? parseInt(limit, 10) : 10,
-    );
-  }
-
-  // ─── Trottinettes/vélos partagés (free-floating, GBFS) ───────────────
-  // Indépendant du GTFS : jamais de garde 503.
-
-  @Get('scooters-nearby')
-  async getNearbyScooters(
-    @Query('lat') lat?: string,
-    @Query('lon') lon?: string,
-    @Query('radius') radius?: string,
-    @Query('limit') limit?: string,
-  ) {
-    if (!lat || !lon) {
-      throw new HttpException(
-        'Query parameters "lat" and "lon" are required',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    return this.gbfsService.getSharedVehicles(
-      parseFloat(lat),
-      parseFloat(lon),
-      radius ? parseFloat(radius) : 2,
-      limit ? parseInt(limit, 10) : 20,
     );
   }
 
@@ -242,6 +216,11 @@ export class TransportController {
         lon: s.stop_lon,
         type: s.location_type === 1 ? 'station' : 'stop',
         platform: s.platform_code,
+        // Modes desservant l'arrêt (train/métro/bus/tram…) + lignes associées.
+        modes: this.gtfsParser.getStopModes(s.stop_id).map(routeTypeLabel),
+        lines: this.gtfsParser
+          .getStopLines(s.stop_id)
+          .map((l) => ({ mode: routeTypeLabel(l.mode), name: l.name })),
       })),
     };
   }
@@ -261,18 +240,27 @@ export class TransportController {
       return { total_count: 0, results: [] };
     }
     const stops = this.gtfsParser.searchStopsByName(q, limit ? parseInt(limit, 10) : 10);
-    // Mapper vers le format PrimStop (id PRIM) attendu par l'ancien frontend
+    // Mapper vers le format PrimStop (id PRIM) attendu par l'ancien frontend.
+    // arrtype = mode principal (clé anglaise pour l'icône frontend) ;
+    // arrmodes/arrlines précisent la nature de l'arrêt (train/métro/bus/tram…).
     return {
       total_count: stops.length,
-      results: stops.map((s) => ({
-        arrid: s.stop_id,
-        arrname: s.stop_name,
-        arrtype: 'stop',
-        arrtown: 'Paris',
-        arrpostalregion: '75',
-        arrgeopoint: { lon: s.stop_lon, lat: s.stop_lat },
-        arraccessibility: s.wheelchair_boarding === 1 ? 'oui' : 'non',
-      })),
+      results: stops.map((s) => {
+        const modes = this.gtfsParser.getStopModes(s.stop_id);
+        return {
+          arrid: s.stop_id,
+          arrname: s.stop_name,
+          arrtype: modeKey(modes[0]),
+          arrmodes: modes.map(routeTypeLabel),
+          arrlines: this.gtfsParser
+            .getStopLines(s.stop_id)
+            .map((l) => ({ mode: routeTypeLabel(l.mode), name: l.name })),
+          arrtown: 'Paris',
+          arrpostalregion: '75',
+          arrgeopoint: { lon: s.stop_lon, lat: s.stop_lat },
+          arraccessibility: s.wheelchair_boarding === 1 ? 'oui' : 'non',
+        };
+      }),
     };
   }
 
@@ -318,6 +306,12 @@ export class TransportController {
         coordinates: [s.stop_lon, s.stop_lat],
       },
       gtfsStopId: s.stop_id,
+      // Modes desservant l'arrêt (train/métro/bus/tram…) — précise la nature
+      // de l'arrêt dans la recherche d'adresse.
+      modes: this.gtfsParser.getStopModes(s.stop_id).map(routeTypeLabel),
+      lines: this.gtfsParser
+        .getStopLines(s.stop_id)
+        .map((l) => ({ mode: routeTypeLabel(l.mode), name: l.name })),
     }));
 
     // Fusionner : arrêts GTFS en premier (plus pertinents pour les transports)

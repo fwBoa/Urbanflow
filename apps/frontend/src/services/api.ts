@@ -9,6 +9,10 @@ export interface PrimStop {
   arrid: string;
   arrname: string;
   arrtype: string;
+  /** Modes desservant l'arrêt (libellés FR : Métro, Train, Bus, Tramway…). */
+  arrmodes?: string[];
+  /** Lignes desservant l'arrêt (mode + nom). */
+  arrlines?: { mode: string; name: string }[];
   arrtown: string;
   arrpostalregion: string;
   arrgeopoint: { lon: number; lat: number };
@@ -42,23 +46,6 @@ export interface NearbyVelibStation {
   arrondissement: string;
 }
 
-export interface NearbyScooter {
-  id: string;
-  operator: string;
-  type: "trottinette" | "bike";
-  position: { lat: number; lon: number };
-  battery?: number;
-  available: boolean;
-  distance: number; // mètres
-}
-
-export interface NearbyScootersResponse {
-  vehicles: NearbyScooter[];
-  total: number;
-  source: string;
-  message?: string;
-}
-
 export interface PrimDataResponse<T> {
   total_count: number;
   results: T[];
@@ -73,6 +60,12 @@ export interface GeocodeResult {
   context: string;
   geometry: { type: string; coordinates: [number, number] }; // [lon, lat]
   isParis: boolean;
+  /** Présents pour les arrêts GTFS (type === "gtfs_stop") : modes desservant l'arrêt. */
+  modes?: string[];
+  /** Lignes desservant l'arrêt (mode + nom). */
+  lines?: { mode: string; name: string }[];
+  /** ID arrêt GTFS (type === "gtfs_stop"). */
+  gtfsStopId?: string;
 }
 
 export interface GeocodeResponse {
@@ -205,18 +198,6 @@ class ApiService {
   ): Promise<{ stations: NearbyVelibStation[]; total: number }> {
     return this.fetch(
       `/api/transport/velib-nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`,
-    );
-  }
-
-  // ─── Trottinettes/vélos partagés (GBFS free-floating) ───────────────
-  async getNearbyScooters(
-    lat: number,
-    lon: number,
-    radiusKm = 2,
-    limit = 20,
-  ): Promise<NearbyScootersResponse> {
-    return this.fetch(
-      `/api/transport/scooters-nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`,
     );
   }
 

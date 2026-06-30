@@ -3,8 +3,15 @@
 import { useState, useEffect } from "react";
 import { Download, X } from "lucide-react";
 
+// L'événement `beforeinstallprompt` n'est pas typé dans les lib DOM standards.
+// On déclare le sous-ensemble utilisé (prompt() + userChoice) pour éviter `any`.
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
 export default function PwaInstallBanner() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -12,14 +19,14 @@ export default function PwaInstallBanner() {
 
     const handler = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
       setVisible(true);
     };
 
     window.addEventListener("beforeinstallprompt", handler);
 
     // Hide if already installed
-    if ((window as any).matchMedia("(display-mode: standalone)").matches) {
+    if (window.matchMedia("(display-mode: standalone)").matches) {
       setVisible(false);
     }
 

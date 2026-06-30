@@ -127,6 +127,10 @@ export interface GtfsIndex {
   stopTimesByTrip: Map<string, GtfsStopTime[]>;
   /** Stop times par arrêt, triés EN PLACE par departure_time (binary search dans getNextDepartures). */
   stopTimesByStop: Map<string, GtfsStopTime[]>;
+  /** Modes (route_type GTFS) desservant chaque arrêt — précalculé à l'indexation. */
+  stopModesByStop: Map<string, number[]>;
+  /** Lignes (route_short_name) desservant chaque arrêt, groupées par mode — précalculé. */
+  stopLinesByStop: Map<string, { mode: number; name: string }[]>;
   calendarByService: Map<string, GtfsCalendar>;
   calendarDatesByService: Map<string, GtfsCalendarDate[]>;
   shapesById: Map<string, GtfsShape[]>;
@@ -169,6 +173,73 @@ function bisectLeft<T>(arr: T[], target: number, keyFn: (item: T) => number): nu
 
 const SPATIAL_GRID_LAT_BIN = 0.01;  // ~1.1 km
 const SPATIAL_GRID_LON_BIN = 0.015; // ~1.1 km à latitude 48°N
+
+/**
+ * Priorité d'affichage des modes GTFS (route_type) : on met en avant les
+ * modes lourds (train/RER > métro > tram > bus) pour qu'un arrêt multimodal
+ * comme Châtelet soit présenté d'abord comme « train / métro » plutôt que « bus ».
+ * Retourne <0 si a prioritaire, >0 si b, 0 si égal.
+ */
+const ROUTE_TYPE_PRIORITY: Record<number, number> = {
+  2: 0, // Rail (RER / Transilien / train)
+  1: 1, // Subway / Métro
+  0: 2, // Tram
+  3: 3, // Bus
+  4: 4, // Ferry
+  7: 5, // Funiculaire
+  6: 6, // Gondola
+  5: 7, // Cable car / Trolleybus
+};
+function routeTypePriority(a: number, b: number): number {
+  const pa = ROUTE_TYPE_PRIORITY[a] ?? 99;
+  const pb = ROUTE_TYPE_PRIORITY[b] ?? 99;
+  return pa - pb;
+}
+
+/** Libellé français d'un route_type GTFS (aligné sur journey.service.getModeName). */
+export function routeTypeLabel(routeType: number): string {
+  switch (routeType) {
+    case 0:
+      return 'Tramway';
+    case 1:
+      return 'Métro';
+    case 2:
+      return 'Train';
+    case 3:
+      return 'Bus';
+    case 4:
+      return 'Navette fluviale';
+    case 5:
+      return 'Trolleybus';
+    case 6:
+      return 'Téléphérique';
+    case 7:
+      return 'Funiculaire';
+    default:
+      return 'Transport';
+  }
+}
+
+/**
+ * Clé de mode (anglaise, lower-case) d'un route_type GTFS — utilisée pour
+ * choisir l'icône côté frontend (ex: getStopIcon). 'stop' par défaut.
+ */
+export function modeKey(routeType: number | undefined): string {
+  switch (routeType) {
+    case 0:
+      return 'tram';
+    case 1:
+      return 'metro';
+    case 2:
+      return 'train';
+    case 3:
+      return 'bus';
+    case 4:
+      return 'ferry';
+    default:
+      return 'stop';
+  }
+}
 
 @Injectable()
 export class GtfsParserService implements OnModuleInit {
@@ -524,6 +595,13 @@ export class GtfsParserService implements OnModuleInit {
         );
       }
 
+      // ── 5b. Précalculer modes & lignes par arrêt (train/métro/bus/tram…)
+      //     Maintenant que stopTimesByStop est peuplé en streaming. buildIndex
+      //     l'avait appelé sur stopTimes=[] (vide) — on le (re)calcule ici sur
+      //     les vraies données. Agrège aussi vers la gare parente (parent_station)
+      //     pour qu'un quay sans horaire direct hérite des modes de ses quais frères.
+      this.buildStopModes(index);
+
       // ── 6. Parser transfers en streaming, filtrer par stop_id ──────────
       await this.parseFileIncremental<GtfsTransfer>(
         path.join(extractDir, 'transfers.txt'),
@@ -728,6 +806,8 @@ export class GtfsParserService implements OnModuleInit {
       tripsById: new Map(),
       stopTimesByTrip: new Map(),
       stopTimesByStop: new Map(),
+      stopModesByStop: new Map(),
+      stopLinesByStop: new Map(),
       calendarByService: new Map(),
       calendarDatesByService: new Map(),
       shapesById: new Map(),
@@ -786,6 +866,11 @@ export class GtfsParserService implements OnModuleInit {
       );
     }
 
+    // Modes & lignes desservant chaque arrêt (train/métro/bus/tram…).
+    // Précalcul : voir buildStopModes(). Appelé aussi après injection des
+    // stop_times en streaming dans loadFromZip (buildIndex reçoit stopTimes=[]).
+    this.buildStopModes(index);
+
     // Grille spatiale pour findStopsNearby O(1)
     for (const [, stop] of index.stopsById) {
       const latBin = Math.floor(stop.stop_lat / SPATIAL_GRID_LAT_BIN);
@@ -828,6 +913,62 @@ export class GtfsParserService implements OnModuleInit {
     }
 
     return index;
+  }
+
+  /**
+   * Précalcule stopModesByStop + stopLinesByStop à partir de stopTimesByStop.
+   *
+   * Pour chaque arrêt desservi, on collecte ses route_ids (un seul lookup
+   * trip→route par stop_time), puis on dérive les modes (route_type) et les
+   * noms de ligne depuis routesById.
+   *
+   * Hiérarchie IDFM : les stop_times référencent les quais (location_type=0),
+   * pas la gare parente (location_type=1). Un quay peut n'avoir aucun
+   * stop_time (ex. variantes d'arrêts) : on agrège donc aussi les modes/lignes
+   * vers la gare parente (parent_station), afin que getStopModes puisse
+   * retomber sur elle quand le quay cherché est muet.
+   */
+  private buildStopModes(index: GtfsIndex): void {
+    // 1. route_ids desservant chaque arrêt (quai)
+    const stopRoutesByStop = new Map<string, Set<string>>();
+    for (const [stopId, times] of index.stopTimesByStop) {
+      const routeSet = new Set<string>();
+      for (const st of times) {
+        const trip = index.tripsById.get(st.trip_id);
+        if (trip) routeSet.add(trip.route_id);
+      }
+      if (routeSet.size) stopRoutesByStop.set(stopId, routeSet);
+    }
+
+    // 2. Dériver modes + lignes par arrêt, et agréger vers la gare parente.
+    const addRoute = (key: string, route: GtfsRoute): void => {
+      let modeArr = index.stopModesByStop.get(key);
+      if (!modeArr) {
+        modeArr = [];
+        index.stopModesByStop.set(key, modeArr);
+      }
+      if (!modeArr.includes(route.route_type)) modeArr.push(route.route_type);
+
+      let lineArr = index.stopLinesByStop.get(key);
+      if (!lineArr) {
+        lineArr = [];
+        index.stopLinesByStop.set(key, lineArr);
+      }
+      const name = route.route_short_name || route.route_long_name;
+      if (!lineArr.some((l) => l.mode === route.route_type && l.name === name)) {
+        lineArr.push({ mode: route.route_type, name });
+      }
+    };
+
+    for (const [stopId, routeSet] of stopRoutesByStop) {
+      const parent = index.stopsById.get(stopId)?.parent_station;
+      for (const routeId of routeSet) {
+        const route = index.routesById.get(routeId);
+        if (!route) continue;
+        addRoute(stopId, route); // le quai lui-même (précis : ses propres lignes)
+        if (parent) addRoute(parent, route); // agrégation vers la gare parente
+      }
+    }
   }
 
   // ─── Méthodes de recherche ───────────────────────────────────────────
@@ -958,22 +1099,96 @@ export class GtfsParserService implements OnModuleInit {
   }
 
   /**
-   * Recherche des arrêts par nom (recherche floue insensible à la casse)
+   * Normalise une chaîne pour la recherche : minuscules + retrait des
+   * diacritiques (accents) + collapsage des espaces multiples.
+   * « Châtelet » → « chatelet », « Café  de la  Mairie » → « cafe de la mairie ».
+   * Permet à un utilisateur tapant sans accent de matcher les noms GTFS accentués.
+   */
+  private normalizeForSearch(value: string): string {
+    // NFD décompose les accents (ex. é → e + ́), puis on retire les
+    // combining marks (U+0300–U+036F) → comparaison insensible aux accents.
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Recherche des arrêts par nom (recherche floue insensible à la casse ET aux accents).
+   *
+   * Les quais (location_type=0) sont regroupés sous leur gare parente
+   * (parent_station) : on renvoie UN résultat par station (la gare parente
+   * lorsqu'elle est indexée), de façon à présenter une entrée « Châtelet »
+   * unique avec tous ses modes agrégés (métro + train + bus…) plutôt qu'une
+   * liste de quais fragmentée. Les modes/lignes agrégés par gare parente sont
+   * précalculés par buildStopModes().
    */
   searchStopsByName(query: string, limit = 20): GtfsStop[] {
     if (!this.index) return [];
 
-    const normalizedQuery = query.toLowerCase().trim();
+    const normalizedQuery = this.normalizeForSearch(query);
+    if (!normalizedQuery) return [];
+
     const results: GtfsStop[] = [];
+    const seenStations = new Set<string>();
 
     for (const [, stop] of this.index.stopsById) {
-      if (stop.stop_name.toLowerCase().includes(normalizedQuery)) {
-        results.push(stop);
-        if (results.length >= limit) break;
+      if (!this.normalizeForSearch(stop.stop_name).includes(normalizedQuery)) {
+        continue;
       }
+      // Clé de station = gare parente si le quai en a une, sinon lui-même.
+      const stationId = stop.parent_station || stop.stop_id;
+      if (seenStations.has(stationId)) continue;
+      seenStations.add(stationId);
+      // Représentant = la gare parente (StopPlace) quand elle est indexée,
+      // pour que getStopModes(stationId) renvoie les modes agrégés.
+      const representative = stop.parent_station
+        ? this.index.stopsById.get(stop.parent_station) ?? stop
+        : stop;
+      results.push(representative);
+      if (results.length >= limit) break;
     }
 
     return results;
+  }
+
+  /**
+   * Modes (route_type GTFS) desservant un arrêt, triés par priorité
+   * (train > métro > tram > bus > autres). Tableau vide si arrêt inconnu.
+   * Utilisé pour préciser la nature d'un arrêt (train/métro/bus/tram).
+   */
+  getStopModes(stopId: string): number[] {
+    if (!this.index) return [];
+    let modes = this.index.stopModesByStop.get(stopId);
+    // Fallback : le quay cherché n'a pas de stop_times propres (ex. point
+    // d'arrêt sans horaire) → on retombe sur les modes agrégés de sa gare
+    // parente (parent_station), précalculés par buildStopModes.
+    if (!modes || !modes.length) {
+      const parent = this.index.stopsById.get(stopId)?.parent_station;
+      if (parent) modes = this.index.stopModesByStop.get(parent);
+    }
+    if (!modes || !modes.length) return [];
+    return [...modes].sort(routeTypePriority);
+  }
+
+  /**
+   * Lignes desservant un arrêt, triées par priorité de mode puis par nom.
+   * Chaque entrée : { mode: route_type, name: route_short_name|long_name }.
+   * Même fallback parent_station que getStopModes pour les quais sans horaire.
+   */
+  getStopLines(stopId: string): { mode: number; name: string }[] {
+    if (!this.index) return [];
+    let lines = this.index.stopLinesByStop.get(stopId);
+    if (!lines || !lines.length) {
+      const parent = this.index.stopsById.get(stopId)?.parent_station;
+      if (parent) lines = this.index.stopLinesByStop.get(parent);
+    }
+    if (!lines || !lines.length) return [];
+    return [...lines].sort(
+      (a, b) => routeTypePriority(a.mode, b.mode) || a.name.localeCompare(b.name),
+    );
   }
 
   /**

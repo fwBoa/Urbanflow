@@ -55,7 +55,6 @@ urbanflow/
 │           ├── gtfs-parser.service.ts  # Parsing GTFS statiques (streaming, index optimisé)
 │           ├── journey.service.ts      # Calcul d'itinéraires (RAPTOR + fallback)
 │           ├── gtfs-rt.service.ts      # GTFS-RT temps réel (alertes, perturbations)
-│           ├── gbfs.service.ts         # GBFS trottinettes/vélos partagés
 │           ├── osrm.service.ts         # Routing OSRM (polyline réelle)
 │           ├── carbon.service.ts       # Empreinte CO2 (ADEME)
 │           ├── transport.controller.ts # Endpoints REST (20+ routes)
@@ -85,7 +84,7 @@ urbanflow/
 | `GET /api/transport/traffic` | Perturbations / infos trafic |
 | `GET /api/transport/velib` | Stations Vélib' temps réel |
 | `GET /api/transport/velib-nearby?lat=...&lon=...` | Stations Vélib' proches (Open Data Paris) |
-| `GET /api/transport/shared-vehicles?lat=...&lon=...` | Trottinettes/vélos libres (GBFS) |
+| `GET /api/transport/gtfs-stops/search?q=...` | Recherche d'arrêts GTFS (avec modes train/métro/bus/tram) |
 | `GET /api/transport/elevators` | État des ascenseurs |
 | `GET /api/transport/gtfs-url` | URLs de téléchargement GTFS |
 | `GET /api/transport/gtfs-status` | Statut du chargement GTFS (loaded, stats) |
@@ -158,7 +157,6 @@ Les calculs CO2 utilisent les **facteurs d'emission ADEME Base Carbone v2024** (
 | Marche | 0 |
 | Voiture (1 passager, moyenne IDF) | 170.0 |
 | Covoiturage (2 passagers) | 85.0 |
-| Trottinette électrique | 35.0 |
 | Funiculaire | 10.0 |
 | Navette fluviale | 15.0 |
 
