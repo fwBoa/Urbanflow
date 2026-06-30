@@ -11,6 +11,7 @@ Plateforme intelligente de mobilité multimodale pour Paris et son agglomératio
 | Base de données | PostgreSQL 16 |
 | Cartographie | Leaflet + OpenStreetMap |
 | Données transport | PRIM (Île-de-France Mobilités) — Open Data |
+| Données GTFS statiques | PostgreSQL (tables `gtfs_*`, chargement atomique par `gtfs-db.service.ts`) |
 | Conteneurisation | Docker + Docker Compose |
 
 ## Structure du projet
@@ -52,7 +53,8 @@ urbanflow/
 │   └── backend/           # NestJS (port 4000)
 │       └── src/transport/ # Module Transport PRIM
 │           ├── prim.service.ts        # Appels API PRIM + geocoding + reverse-geocoding data.gouv.fr
-│           ├── gtfs-parser.service.ts  # Parsing GTFS statiques (streaming, index optimisé)
+│           ├── gtfs-parser.service.ts  # Téléchargement/parsing GTFS statiques → chargement PostgreSQL (atomic staging/swap)
+│           ├── gtfs-db.service.ts      # Accès GTFS statiques dans PostgreSQL (pool pg + COPY FROM STDIN, RAPTOR lit via GtfsDbService)
 │           ├── journey.service.ts      # Calcul d'itinéraires (RAPTOR + fallback)
 │           ├── gtfs-rt.service.ts      # GTFS-RT temps réel (alertes, perturbations)
 │           ├── osrm.service.ts         # Routing OSRM (polyline réelle)
@@ -88,7 +90,8 @@ urbanflow/
 | `GET /api/transport/elevators` | État des ascenseurs |
 | `GET /api/transport/gtfs-url` | URLs de téléchargement GTFS |
 | `GET /api/transport/gtfs-status` | Statut du chargement GTFS (loaded, stats) |
-| `POST /api/transport/gtfs-reload` | Rechargement manuel du GTFS |
+| `POST /api/transport/gtfs-reload` | Rechargement GTFS (skip si déjà chargé — pas de force) |
+| `POST /api/admin/gtfs/reload` | Rechargement GTFS atomique zero-downtime (JWT + rôle admin, `force=true`) |
 | `GET /api/transport/geocode?q=...&limit=N` | Recherche d'adresses (Paris uniquement) + arrêts GTFS |
 | `GET /api/transport/reverse-geocode?lat=...&lon=...` | Géocodage inverse — coordonnées → adresse lisible |
 | `GET /api/transport/realtime-alerts` | Alertes et perturbations temps réel |
@@ -130,7 +133,10 @@ docker compose up -d
 ### 4. Base de données
 
 La base est initialisée automatiquement via `docker/init-db.sql` avec les tables :
-- `users`, `favorites`, `trips`, `routes`, `stops`, `notifications`, `transport_feeds`
+- `users`, `favorites`, `history`, `routes`, `stops`, `notifications`, `transport_feeds`
+- `gtfs_*` (10 tables : `gtfs_agencies`, `gtfs_routes`, `gtfs_stops`, `gtfs_trips`,
+  `gtfs_stop_times`, `gtfs_calendar`, `gtfs_calendar_dates`, `gtfs_transfers`,
+  `gtfs_stop_modes`, `gtfs_stop_lines`) + `gtfs_load_meta` — ~6,8 M lignes dans `gtfs_stop_times`
 
 ## Ports
 
