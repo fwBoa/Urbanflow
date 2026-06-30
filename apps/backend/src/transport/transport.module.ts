@@ -9,6 +9,7 @@ import { CarbonService } from './carbon.service';
 
 import { OsrmService } from './osrm.service';
 import { GtfsRtService } from './gtfs-rt.service';
+import { GtfsDbService } from './gtfs-db.service';
 
 /**
  * Module Transport — Intégration PRIM (Île-de-France Mobilités)
@@ -24,7 +25,24 @@ import { GtfsRtService } from './gtfs-rt.service';
 @Module({
   imports: [HttpModule, ScheduleModule.forRoot()],
   controllers: [TransportController],
-  providers: [PrimService, GtfsParserService, JourneyService, CarbonService, OsrmService, GtfsRtService],
-  exports: [HttpModule, PrimService, GtfsParserService, JourneyService, CarbonService, OsrmService, GtfsRtService],
+  providers: [
+    PrimService,
+    GtfsParserService,
+    JourneyService,
+    CarbonService,
+    OsrmService,
+    GtfsRtService,
+    GtfsDbService,
+  ],
+  exports: [
+    HttpModule,
+    PrimService,
+    GtfsParserService,
+    JourneyService,
+    CarbonService,
+    OsrmService,
+    GtfsRtService,
+    GtfsDbService,
+  ],
 })
 export class TransportModule {}

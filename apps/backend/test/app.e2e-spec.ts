@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, CanActivate, ExecutionContext } from '@nestjs/common';
+import {
+  INestApplication,
+  CanActivate,
+  ExecutionContext,
+} from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -9,6 +13,7 @@ import { GtfsParserService } from './../src/transport/gtfs-parser.service';
 import { PrimService } from './../src/transport/prim.service';
 import { GtfsRtService } from './../src/transport/gtfs-rt.service';
 import { OsrmService } from './../src/transport/osrm.service';
+import { GtfsDbService } from './../src/transport/gtfs-db.service';
 
 /**
  * Tests e2e — UrbanFlow API.
@@ -29,6 +34,8 @@ import { OsrmService } from './../src/transport/osrm.service';
  */
 
 // ─── Mocks des services réseau (aucun OnModuleInit → aucun IO asynchrone) ───
+// Méthodes synchrones retournant des valeurs : le contrôleur les `await`
+// (await sur une valeur non-Promise résout à la valeur elle-même).
 const gtfsParserMock = {
   isLoaded: () => true,
   getLastLoadTime: () => '2026-06-29T09:35:43.309Z',
@@ -40,6 +47,20 @@ const gtfsParserMock = {
   getStopTimesForStop: () => [],
   getNearbyStops: () => [],
   getLinesByMode: () => [],
+  findStopsNearby: () => [],
+  getRoutesForStop: () => [],
+  getStopDepartures: () => [],
+  getActiveServiceIds: () => new Set<string>(),
+  getTripStopTimes: () => [],
+  getTransfersFrom: () => [],
+  getStopCoordsByIds: () => new Map(),
+  getNextDepartures: () => [],
+};
+
+// GtfsDbService : no-op (pas de connexion PG pendant les tests e2e sur mocks).
+const gtfsDbMock = {
+  onModuleInit: () => undefined,
+  onModuleDestroy: () => undefined,
 };
 
 const primServiceMock = {
@@ -72,6 +93,8 @@ describe('UrbanFlow API (e2e)', () => {
       .useValue(gtfsRtMock)
       .overrideProvider(OsrmService)
       .useValue(osrmMock)
+      .overrideProvider(GtfsDbService)
+      .useValue(gtfsDbMock)
       .overrideProvider(APP_GUARD)
       .useValue(NoopGuard)
       .compile();
@@ -96,7 +119,7 @@ describe('UrbanFlow API (e2e)', () => {
       .expect('Hello World!');
   });
 
-  it("GET /api/transport/gtfs-status → état du GTFS (mocké)", () => {
+  it('GET /api/transport/gtfs-status → état du GTFS (mocké)', () => {
     return request(app.getHttpServer())
       .get('/api/transport/gtfs-status')
       .expect(200)
