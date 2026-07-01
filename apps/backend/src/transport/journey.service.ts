@@ -240,13 +240,13 @@ export class JourneyService {
         query.origin.lat,
         query.origin.lon,
         this.WALK_RADIUS_KM,
-        5,
+        30,
       ),
       this.gtfsParser.findStopsNearby(
         query.destination.lat,
         query.destination.lon,
         this.WALK_RADIUS_KM,
-        5,
+        30,
       ),
     ]);
 

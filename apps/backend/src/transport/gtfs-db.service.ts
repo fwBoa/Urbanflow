@@ -731,6 +731,31 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
     return res.rows.map((r) => this.rowToStop(r));
   }
 
+  /**
+   * Renvoie tous les quais embarquables (location_type=0 avec stop_times)
+   * des stations parentes données. Sert à l'expansion par gare dans
+   * findStopsNearby : une fois la gare la plus proche identifiée, on expose
+   * au RAPTOR tous ses quais (métro, RER, bus…), pas seulement les N plus
+   * proches par coordonnées — sinon une ligne dont le quai est noyé sous
+   * les entrées/alias sans stop_times (ex. métro 4 à Gare du Nord) n'est
+   * jamais interrogée. Utilise idx_gtfs_stops_parent.
+   */
+  async findPlatformsByParentStations(
+    parentStationIds: string[],
+  ): Promise<GtfsStop[]> {
+    if (parentStationIds.length === 0) return [];
+    const res = await this.query<QueryResultRow>(
+      `SELECT stop_id, stop_code, stop_name, stop_desc, stop_lat, stop_lon,
+              location_type, parent_station, stop_timezone, wheelchair_boarding, platform_code
+       FROM gtfs_stops
+       WHERE location_type = 0
+         AND parent_station = ANY($1::text[])
+         AND EXISTS (SELECT 1 FROM gtfs_stop_times WHERE stop_id = gtfs_stops.stop_id);`,
+      [parentStationIds],
+    );
+    return res.rows.map((r) => this.rowToStop(r));
+  }
+
   /** Lignes desservant un arrêt (distinct sur route). */
   async getRoutesForStop(stopId: string): Promise<GtfsRoute[]> {
     const res = await this.query<QueryResultRow>(

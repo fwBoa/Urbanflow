@@ -914,15 +914,46 @@ export class GtfsParserService implements OnModuleInit {
       lon + lonDeg,
     );
 
-    const results: { stop: GtfsStop; distance: number }[] = [];
+    // 1. Quais embarquables (location_type=0) dans le rayon, par distance.
+    //    On ignore les stations parentes (1) et les entrées/sorties (2) qui
+    //    n'ont aucun stop_time et saturent inutilement le limit.
+    const nearbyPlatforms: { stop: GtfsStop; distance: number }[] = [];
     for (const stop of candidates) {
+      if (stop.location_type !== 0) continue;
       const distance = this.haversineKm(lat, lon, stop.stop_lat, stop.stop_lon);
-      if (distance <= radiusKm) {
-        results.push({ stop, distance });
-      }
+      if (distance <= radiusKm) nearbyPlatforms.push({ stop, distance });
     }
-    results.sort((a, b) => a.distance - b.distance);
-    return results.slice(0, limit).map((r) => r.stop);
+    nearbyPlatforms.sort((a, b) => a.distance - b.distance);
+
+    // 2. Expansion par gare : pour chaque station parente représentée dans le
+    //    rayon, exposer TOUS ses quais (métro/RER/bus) — sinon le limit coupe
+    //    les quais d'une ligne dont le quai est au-delà des N plus proches.
+    //    Ex : à Gare du Nord, le quai métro 4 (IDFM:22149) est noyé sous les
+    //    entrées/alias sans stop_times ; sans expansion, RAPTOR ne voit que le
+    //    bus. L'expansion garantit que toutes les lignes de la gare snapée
+    //    sont interrogées.
+    const parentIds = new Set<string>();
+    for (const p of nearbyPlatforms) {
+      if (p.stop.parent_station) parentIds.add(p.stop.parent_station);
+    }
+    const expanded = await this.gtfsDb.findPlatformsByParentStations([
+      ...parentIds,
+    ]);
+
+    // 3. Union : quais expandés + quais standalone (bus de rue sans parent).
+    const result = new Map<string, GtfsStop>();
+    for (const p of nearbyPlatforms) {
+      if (!p.stop.parent_station) result.set(p.stop.stop_id, p.stop);
+    }
+    for (const s of expanded) result.set(s.stop_id, s);
+
+    // 4. Tri par distance au point demandé, puis limite.
+    const all = [...result.values()].map((stop) => ({
+      stop,
+      distance: this.haversineKm(lat, lon, stop.stop_lat, stop.stop_lon),
+    }));
+    all.sort((a, b) => a.distance - b.distance);
+    return all.slice(0, limit).map((r) => r.stop);
   }
 
   /** Lignes desservant un arrêt (distinct sur route). */
