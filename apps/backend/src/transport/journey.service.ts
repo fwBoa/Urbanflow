@@ -326,37 +326,6 @@ export class JourneyService {
       }
     >();
 
-    // Mémo par requête : un même trip / transfert peut être revisité sur plusieurs rounds.
-    // Borné (LRU 200) pour se prémunir d'un parcours pathologique.
-    const tripCache = new Map<string, GtfsStopTime[]>();
-    const transferCache = new Map<
-      string,
-      { to_stop_id: string; min_transfer_time: number | null }[]
-    >();
-    const TRIP_CACHE_MAX = 200;
-    const getTripStopTimes = async (
-      tripId: string,
-    ): Promise<GtfsStopTime[]> => {
-      let t = tripCache.get(tripId);
-      if (!t) {
-        t = await this.gtfsParser.getTripStopTimes(tripId);
-        if (tripCache.size >= TRIP_CACHE_MAX) {
-          const k = tripCache.keys().next().value;
-          if (k !== undefined) tripCache.delete(k);
-        }
-        tripCache.set(tripId, t);
-      }
-      return t;
-    };
-    const getTransfers = async (stopId: string) => {
-      let t = transferCache.get(stopId);
-      if (!t) {
-        t = await this.gtfsParser.getTransfersFrom(stopId);
-        transferCache.set(stopId, t);
-      }
-      return t;
-    };
-
     // Initialize: origin stops are reachable at departure time
     const markedStops = new Set<string>();
     for (const stop of originStops) {
@@ -366,40 +335,87 @@ export class JourneyService {
 
     const results: JourneyResult[] = [];
 
+    // Nombre de prochains départs récupérés par arrêt (batch LATERAL + LIMIT).
+    // Reprend l'overfetch historique (fetchN = max(limit*overfetch, 50) = 50) :
+    // ~50 départs/arrêt couvrent toutes les routes d'un arrêt majeur sur ~1-2 h,
+    // puis dédup "1er départ par route" côté Node.
+    const DEPARTURE_FETCH = parseInt(
+      process.env.RAPTOR_DEPARTURE_FETCH || '50',
+      10,
+    );
+    const activeServiceArr = [...activeServiceIds];
+
     // RAPTOR rounds: round k means k-1 transfers
     for (let k = 0; k <= maxTransfers; k++) {
       const newMarkedStops = new Set<string>();
+      if (markedStops.size === 0) break;
 
-      // For each marked stop, find routes serving it
-      for (const stopId of markedStops) {
+      const markedArr = [...markedStops];
+      // Seuil per-stop : chaque arrêt ne considère que les départs >= son propre
+      // bestArrival (sémantique RAPTOR originelle). Passé au batch via unnest 2-col.
+      const minDepArr = markedArr.map((id) => bestArrival.get(id) ?? Infinity);
+
+      // ── A. Batch departures : 1 requête LATERAL pour tous les stops marqués.
+      //    Renvoie, par stop, les `DEPARTURE_FETCH` prochains départs triés par
+      //    departure_seconds croissant (ORDER BY dans la LATERAL).
+      const departuresByStop = await this.gtfsParser.getNextDeparturesBatch(
+        markedArr,
+        minDepArr,
+        activeServiceArr,
+        DEPARTURE_FETCH,
+      );
+
+      // ── B. Dedup "1er départ par route" par stop (0 DB) AVANT de fetcher les
+      //    stop_times. Évite de récupérer les stop_times de TOUS les départs
+      //    sur-fetchés (DEPARTURE_FETCH par stop) : on ne garde que le 1er départ
+      //    de chaque route respectant le seuil per-stop, ce qui réduit drastiquement
+      //    le nombre de courses à charger (les trips sont partagés entre stops d'une
+      //    même ligne). Map<stopId, dep[]> = départs retenus, triés par departure.
+      const keptByStop = new Map<
+        string,
+        { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]
+      >();
+      const uniqueTripIds = new Set<string>();
+      for (const stopId of markedArr) {
         const currentArrival = bestArrival.get(stopId) ?? Infinity;
-
-        // Get departures from this stop after current arrival time
-        const departures = await this.gtfsParser.getNextDepartures(
-          stopId,
-          this.secondsToTime(currentArrival),
-          5,
-        );
-
-        // Éviter de traverser la même route plusieurs fois — ne garder que le 1er départ par route
+        const departures = (departuresByStop.get(stopId) ?? [])
+          .slice()
+          .sort(
+            (a, b) =>
+              this.timeToSeconds(a.stopTime.departure_time) -
+              this.timeToSeconds(b.stopTime.departure_time),
+          );
         const seenRoutes = new Set<string>();
+        const kept: typeof departures = [];
         for (const dep of departures) {
           if (seenRoutes.has(dep.route.route_id)) continue;
-          seenRoutes.add(dep.route.route_id);
-          // Filter by active service
-          if (
-            activeServiceIds.size > 0 &&
-            !activeServiceIds.has(dep.trip.service_id)
-          ) {
-            continue;
-          }
-
-          const tripStopTimes = await getTripStopTimes(dep.trip.trip_id);
-          const originSeq = tripStopTimes.find((st) => st.stop_id === stopId);
-          if (!originSeq) continue;
-
-          const originDeparture = this.timeToSeconds(originSeq.departure_time);
+          const originDeparture = this.timeToSeconds(dep.stopTime.departure_time);
           if (originDeparture < currentArrival) continue;
+          seenRoutes.add(dep.route.route_id);
+          kept.push(dep);
+          uniqueTripIds.add(dep.trip.trip_id);
+        }
+        if (kept.length > 0) keptByStop.set(stopId, kept);
+      }
+
+      // ── C. Batch trip stop_times : 1 requête pour les courses retenues
+      //    (déjà dédoublonnées par route). Peuple le cache trip long-vie côté
+      //    gtfsDb (invalidé au reload atomique).
+      const tripStopTimesMap =
+        uniqueTripIds.size > 0
+          ? await this.gtfsParser.getTripStopTimesBatch([...uniqueTripIds])
+          : new Map<string, GtfsStopTime[]>();
+
+      // ── D. Traverse : 0 requête DB, on lit stop_times depuis le Map batché.
+      for (const [stopId, kept] of keptByStop) {
+        for (const dep of kept) {
+          // dep.stopTime porte déjà stop_sequence + departure_time (séquence
+          // d'arrêt d'origine), inutile de retrouver originSeq dans tripStopTimes.
+          const originSeq = dep.stopTime;
+          const originDeparture = this.timeToSeconds(originSeq.departure_time);
+
+          const tripStopTimes = tripStopTimesMap.get(dep.trip.trip_id);
+          if (!tripStopTimes || tripStopTimes.length === 0) continue;
 
           // Traverse remaining stops on this trip
           for (const st of tripStopTimes) {
@@ -447,18 +463,24 @@ export class JourneyService {
         }
       }
 
-      // Foot-path transfers : correspondances GTFS (lookup SQL, mémo par requête).
-      for (const stopId of newMarkedStops) {
-        const transfers = await getTransfers(stopId);
-        for (const transfer of transfers) {
-          const walkTimeSeconds = transfer.min_transfer_time ?? 120; // default 2 min = 120s
-          const arrivalViaWalk =
-            (bestArrival.get(stopId) ?? Infinity) + walkTimeSeconds;
-          const previousBest = bestArrival.get(transfer.to_stop_id) ?? Infinity;
+      // ── D. Batch foot-path transfers : 1 requête pour tous les stops nouvellement marqués.
+      if (newMarkedStops.size > 0) {
+        const newMarkedArr = [...newMarkedStops];
+        const transfersByStop =
+          await this.gtfsParser.getTransfersFromBatch(newMarkedArr);
+        for (const stopId of newMarkedArr) {
+          const transfers = transfersByStop.get(stopId) ?? [];
+          for (const transfer of transfers) {
+            const walkTimeSeconds = transfer.min_transfer_time ?? 120; // default 2 min = 120s
+            const arrivalViaWalk =
+              (bestArrival.get(stopId) ?? Infinity) + walkTimeSeconds;
+            const previousBest =
+              bestArrival.get(transfer.to_stop_id) ?? Infinity;
 
-          if (arrivalViaWalk < previousBest) {
-            bestArrival.set(transfer.to_stop_id, arrivalViaWalk);
-            newMarkedStops.add(transfer.to_stop_id);
+            if (arrivalViaWalk < previousBest) {
+              bestArrival.set(transfer.to_stop_id, arrivalViaWalk);
+              newMarkedStops.add(transfer.to_stop_id);
+            }
           }
         }
       }

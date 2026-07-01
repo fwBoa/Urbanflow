@@ -125,10 +125,54 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
         this.logger.log('PostgreSQL connection OK for GTFS store.');
       }
       await this.ensureSchema();
+      // Préchauffe fire-and-forget : charge gtfs_stop_times (+ index) en
+      // shared_buffers si le GTFS est déjà chargé. Évite que le 1er journey
+      // ne lise la table (~923 Mo) depuis le disque. Sans effet si non chargé
+      // (le chargement complet préchauffera de lui-même via ses COPY/RENAME).
+      if (await this.isLoaded()) {
+        void this.prewarmHotTables();
+      }
     } catch (err) {
       this.logger.error(
         `GTFS PG pool init failed: ${err instanceof Error ? err.message : err}. ` +
           `Les endpoints GTFS resteront indisponibles tant que PG ne répond pas.`,
+      );
+    }
+  }
+
+  /**
+   * Préchauffe les tables chaudes du RAPTOR (gtfs_stop_times + index trip) dans
+   * shared_buffers via l'extension pg_prewarm. Idempotent. Sans effet si
+   * l'extension n'est pas disponible (logging seul). Appelé au démarrage si le
+   * GTFS est déjà chargé, et après chaque reload atomique (swapAndFinalize).
+   */
+  async prewarmHotTables(): Promise<void> {
+    if (!this.pool) return;
+    try {
+      await this.query('CREATE EXTENSION IF NOT EXISTS pg_prewarm;');
+      // Heap (main fork) + indexes chauds du RAPTOR. Sans préchauffer les index,
+      // le 1er journey paie les lectures aléatoires d'index (LATERAL par stop +
+      // bitmap trip) depuis le disque (~14 s sur le round 2 à 6074 stops).
+      const targets = [
+        'gtfs_stop_times',
+        'idx_gtfs_st_stop_departure',
+        'idx_gtfs_st_trip_sequence',
+      ];
+      let totalBlocks = 0;
+      for (const rel of targets) {
+        const r = await this.query<{ p: string }>(
+          `SELECT pg_prewarm($1::regclass, 'buffer', 'main') AS p;`,
+          [rel],
+        );
+        totalBlocks += parseInt(r.rows[0]?.p ?? '0', 10);
+      }
+      this.logger.log(
+        `Préchauffé ${targets.length} relations RAPTOR en shared_buffers (${totalBlocks} blocs, ~${Math.round((totalBlocks * 8) / 1024)} Mo).`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `pg_prewarm indisponible ou échec préchauffage : ${err instanceof Error ? err.message : err}. ` +
+          `Le 1er journey sera plus lent (lecture disque).`,
       );
     }
   }
@@ -394,6 +438,8 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
       );
       await client.query('COMMIT');
       this.invalidateLoadedCache();
+      // Re-préchauffera la nouvelle table (swap RENAME → nouveau gtfs_stop_times).
+      void this.prewarmHotTables();
     } catch (err) {
       try {
         await client.query('ROLLBACK');
@@ -525,6 +571,15 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
   private loadedCache: { value: boolean; ts: number } | null = null;
   private readonly LOADED_CACHE_MS = 5000;
 
+  // ─── Cache long-vie des stop_times par trip (marche RAPTOR) ───
+  // La séquence d'arrêts d'une course est immuable entre deux rechargements
+  // GTFS. La cacher en process évite de re-lire les mêmes trips à chaque
+  // recherche d'itinéraire (le RAPTOR_considère des centaines de trips).
+  // Invalidé par invalidateLoadedCache(), lui-même appelé à chaque swap
+  // atomique (swapAndFinalize) et au load initial → zéro staleness.
+  private tripStopTimesCache = new Map<string, GtfsStopTime[]>();
+  private readonly TRIP_CACHE_MAX = 20000;
+
   async isLoaded(): Promise<boolean> {
     const now = Date.now();
     if (this.loadedCache && now - this.loadedCache.ts < this.LOADED_CACHE_MS) {
@@ -550,6 +605,9 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
 
   invalidateLoadedCache(): void {
     this.loadedCache = null;
+    // Le swap atomique a remplacé les tables live : les séquences de trips
+    // qu'on avait cachées ne sont plus garanties cohérentes → on vide.
+    this.tripStopTimesCache.clear();
   }
 
   async getMeta(): Promise<{
@@ -805,6 +863,71 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
+  /**
+   * Prochains départs pour un ensemble d'arrêts en UNE requête (batch RAPTOR),
+   * avec un seuil horaire **per-stop** : `minDepSecondsArr[i]` = bestArrival du
+   * stop `stopIds[i]`. On utilise `unnest(...) JOIN LATERAL (… ORDER BY
+   * departure_seconds LIMIT $4)` pour récupérer les `limit` prochains départs de
+   * chaque arrêt après son propre seuil — équivalent exact de l'ancienne boucle
+   * par-stop (`getNextDepartures(stopId, currentArrival, 5)` + overfetch), mais
+   * en UNE seule requête. Le dédup "1er départ par route" reste côté Node.
+   *
+   * Le `LIMIT $4` par stop (index `idx_gtfs_st_stop_departure` sur
+   * (stop_id, departure_seconds)) borne le scan : ~50 départs/stop contre tous
+   * les départs de la journée qu'imposerait une window function sur 6,8 M de
+   * lignes. Filtre service appliqué avant le LIMIT (sinon un trip inactif occupe
+   * un slot). Retourne Map<stopId, {trip, route, stopTime}[]>.
+   */
+  async getNextDeparturesBatch(
+    stopIds: string[],
+    minDepSecondsArr: number[],
+    activeServiceIds: string[],
+    limit: number,
+  ): Promise<Map<string, { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]>> {
+    const result = new Map<string, { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]>();
+    if (stopIds.length === 0) return result;
+    for (const id of stopIds) result.set(id, []);
+    const res = await this.query<QueryResultRow & { stop_id: string }>(
+      `SELECT d.trip_id, d.arrival_time, d.departure_time, d.stop_id,
+              d.stop_sequence, d.stop_headsign, d.pickup_type, d.drop_off_type,
+              d.shape_dist_traveled, d.timepoint,
+              d.route_id, d.service_id, d.trip_headsign, d.trip_short_name,
+              d.direction_id, d.shape_id, d.wheelchair_accessible, d.bikes_allowed,
+              d.agency_id, d.route_short_name, d.route_long_name, d.route_desc,
+              d.route_type, d.route_url, d.route_color, d.route_text_color, d.route_sort_order
+       FROM unnest($1::text[], $2::int[]) AS s(stop_id, min_dep)
+       JOIN LATERAL (
+         SELECT st.trip_id, st.arrival_time, st.departure_time, st.stop_id,
+                st.stop_sequence, st.stop_headsign, st.pickup_type, st.drop_off_type,
+                st.shape_dist_traveled, st.timepoint,
+                t.route_id, t.service_id, t.trip_headsign, t.trip_short_name,
+                t.direction_id, t.shape_id, t.wheelchair_accessible, t.bikes_allowed,
+                r.agency_id, r.route_short_name, r.route_long_name, r.route_desc,
+                r.route_type, r.route_url, r.route_color, r.route_text_color, r.route_sort_order
+         FROM gtfs_stop_times st
+         JOIN gtfs_trips t ON t.trip_id = st.trip_id
+         JOIN gtfs_routes r ON r.route_id = t.route_id
+         WHERE st.stop_id = s.stop_id
+           AND st.departure_seconds >= s.min_dep
+           AND (cardinality($3::text[]) = 0 OR t.service_id = ANY($3::text[]))
+         ORDER BY st.departure_seconds
+         LIMIT $4
+       ) d ON true;`,
+      [stopIds, minDepSecondsArr, activeServiceIds, limit],
+    );
+    for (const r of res.rows) {
+      const arr = result.get(r.stop_id);
+      if (arr) {
+        arr.push({
+          trip: this.rowToTrip(r),
+          route: this.rowToRoute(r),
+          stopTime: this.rowToStopTime(r),
+        });
+      }
+    }
+    return result;
+  }
+
   /** Prochains départs pour aujourd'hui, filtrés par services actifs. */
   async getStopDepartures(
     stopId: string,
@@ -896,13 +1019,101 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
 
   /** Horaires d'une course, triés par séquence (marche de trip RAPTOR). */
   async getTripStopTimes(tripId: string): Promise<GtfsStopTime[]> {
+    const cached = this.tripStopTimesCache.get(tripId);
+    if (cached) return cached;
     const res = await this.query<QueryResultRow>(
       `SELECT trip_id, arrival_time, departure_time, stop_id, stop_sequence,
               stop_headsign, pickup_type, drop_off_type, shape_dist_traveled, timepoint
        FROM gtfs_stop_times WHERE trip_id = $1 ORDER BY stop_sequence;`,
       [tripId],
     );
-    return res.rows.map((r) => this.rowToStopTime(r));
+    const rows = res.rows.map((r) => this.rowToStopTime(r));
+    this.cacheTripStopTimes(tripId, rows);
+    return rows;
+  }
+
+  /** Éviction LRU du cache trip long-vie. */
+  private cacheTripStopTimes(tripId: string, rows: GtfsStopTime[]): void {
+    if (this.tripStopTimesCache.size >= this.TRIP_CACHE_MAX) {
+      const oldest = this.tripStopTimesCache.keys().next().value;
+      if (oldest !== undefined) this.tripStopTimesCache.delete(oldest);
+    }
+    this.tripStopTimesCache.set(tripId, rows);
+  }
+
+  /**
+   * Stop_times d'un ensemble de courses en UNE requête (batch RAPTOR).
+   * Retourne un Map<tripId, GtfsStopTime[]> trié par stop_sequence. Les trips
+   * déjà en cache long-vie ne sont pas re-demandés ; les trips demandés mais
+   * absents de la base sont cachés comme [] pour éviter de re-requêter.
+   */
+  async getTripStopTimesBatch(
+    tripIds: string[],
+  ): Promise<Map<string, GtfsStopTime[]>> {
+    const result = new Map<string, GtfsStopTime[]>();
+    if (tripIds.length === 0) return result;
+    const missing = new Set<string>();
+    for (const id of tripIds) {
+      const cached = this.tripStopTimesCache.get(id);
+      if (cached) result.set(id, cached);
+      else missing.add(id);
+    }
+    if (missing.size === 0) return result;
+    const ids = [...missing];
+    const res = await this.query<QueryResultRow>(
+      `SELECT trip_id, arrival_time, departure_time, stop_id, stop_sequence,
+              stop_headsign, pickup_type, drop_off_type, shape_dist_traveled, timepoint
+       FROM gtfs_stop_times WHERE trip_id = ANY($1::text[])
+       ORDER BY trip_id, stop_sequence;`,
+      [ids],
+    );
+    const found = new Set<string>();
+    for (const r of res.rows) {
+      const t = r.trip_id as string;
+      const arr = result.get(t) ?? [];
+      if (!result.has(t)) result.set(t, arr);
+      arr.push(this.rowToStopTime(r));
+      found.add(t);
+    }
+    // Cache les trips trouvés (complets) et les trips absents ([]) .
+    for (const id of ids) {
+      const rows = result.get(id) ?? [];
+      if (!found.has(id)) result.set(id, rows); // []
+      this.cacheTripStopTimes(id, rows);
+    }
+    return result;
+  }
+
+  /**
+   * Correspondances à pied depuis un ensemble d'arrêts en UNE requête
+   * (batch RAPTOR). Retourne Map<stopId, {to_stop_id, min_transfer_time}[]>.
+   */
+  async getTransfersFromBatch(
+    stopIds: string[],
+  ): Promise<Map<string, { to_stop_id: string; min_transfer_time: number | null }[]>> {
+    const result = new Map<string, { to_stop_id: string; min_transfer_time: number | null }[]>();
+    if (stopIds.length === 0) return result;
+    for (const id of stopIds) result.set(id, []);
+    const res = await this.query<{
+      from_stop_id: string;
+      to_stop_id: string;
+      min_transfer_time: number | null;
+    }>(
+      `SELECT from_stop_id, to_stop_id, min_transfer_time
+       FROM gtfs_transfers WHERE from_stop_id = ANY($1::text[]);`,
+      [stopIds],
+    );
+    for (const r of res.rows) {
+      const arr = result.get(r.from_stop_id);
+      if (arr) {
+        arr.push({
+          to_stop_id: r.to_stop_id,
+          min_transfer_time:
+            r.min_transfer_time == null ? null : Number(r.min_transfer_time),
+        });
+      }
+    }
+    return result;
   }
 
   /** Correspondances à pied depuis un arrêt. */
