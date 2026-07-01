@@ -14,6 +14,15 @@ services:
     container_name: urbanflow-db
     restart: unless-stopped
     logging: *default-logging
+    # shared_buffers assez large pour cacher le « hot set » RAPTOR en RAM :
+    # heap gtfs_stop_times (~923 Mo) + idx_stop_departure (166 Mo) +
+    # idx_trip_sequence (514 Mo) ≈ 1,6 Go. Sans cela, le 1er journey lit ces
+    # blocs depuis le disque (lectures aléatoires d'index ~14 s sur le round 2).
+    command: >
+      postgres
+      -c shared_buffers=2GB
+      -c effective_cache_size=3GB
+      -c work_mem=16MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-urbanflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-urbanflow_dev}

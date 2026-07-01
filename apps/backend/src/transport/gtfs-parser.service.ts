@@ -984,7 +984,26 @@ export class GtfsParserService implements OnModuleInit {
   }
 
   /**
-   * Prochains départs d'un arrêt pour aujourd'hui, filtrés par courses actives
+   * Prochains départs pour un ensemble d'arrêts en UNE requête (batch RAPTOR),
+   * avec un seuil horaire **per-stop** (`minDepSecondsArr[i]` = bestArrival du
+   * stop `stopIds[i]`). Délègue à gtfsDb (LATERAL + LIMIT par stop).
+   */
+  async getNextDeparturesBatch(
+    stopIds: string[],
+    minDepSecondsArr: number[],
+    activeServiceIds: string[],
+    limit: number,
+  ): Promise<Map<string, { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]>> {
+    return this.gtfsDb.getNextDeparturesBatch(
+      stopIds,
+      minDepSecondsArr,
+      activeServiceIds,
+      limit,
+    );
+  }
+
+  /**
+   * Prochains départs pour aujourd'hui, filtrés par services actifs
    * (service_id valide aujourd'hui), dédoublonnés par (ligne + headsign).
    */
   async getStopDepartures(
@@ -1040,11 +1059,25 @@ export class GtfsParserService implements OnModuleInit {
     return this.gtfsDb.getTripStopTimes(tripId);
   }
 
+  /** Stop_times d'un ensemble de courses en UNE requête (batch RAPTOR). */
+  async getTripStopTimesBatch(
+    tripIds: string[],
+  ): Promise<Map<string, GtfsStopTime[]>> {
+    return this.gtfsDb.getTripStopTimesBatch(tripIds);
+  }
+
   /** Correspondances à pied depuis un arrêt (foot-paths RAPTOR). */
   async getTransfersFrom(
     stopId: string,
   ): Promise<{ to_stop_id: string; min_transfer_time: number | null }[]> {
     return this.gtfsDb.getTransfersFrom(stopId);
+  }
+
+  /** Correspondances à pied depuis un ensemble d'arrêts (batch RAPTOR). */
+  async getTransfersFromBatch(
+    stopIds: string[],
+  ): Promise<Map<string, { to_stop_id: string; min_transfer_time: number | null }[]>> {
+    return this.gtfsDb.getTransfersFromBatch(stopIds);
   }
 
   /** Coordonnées d'un ensemble d'arrêts (pour estimateTransitDistance). */
