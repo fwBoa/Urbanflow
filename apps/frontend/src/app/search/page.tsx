@@ -30,7 +30,8 @@ function getStopIcon(arrtype: string) {
   switch (arrtype) {
     case "metro": return <Train size={14} className="text-[var(--color-metro)]" />;
     case "bus": return <Bus size={14} className="text-[var(--color-bus)]" />;
-    case "rer": return <Train size={14} className="text-[var(--color-rer)]" />;
+    case "rer":
+    case "train": return <Train size={14} className="text-[var(--color-rer)]" />;
     case "tram": return <Train size={14} className="text-[var(--color-tram)]" />;
     default: return <MapPin size={14} className="text-[var(--color-primary)]" />;
   }
@@ -367,6 +368,7 @@ function SearchPageContent() {
   const renderSuggestion = (item: SuggestionItem, index: number, onSelect: (item: SuggestionItem) => void, iconColor: string) => {
     if (item.type === "stop") {
       const stop = item.data;
+      const modesText = stop.arrmodes?.length ? stop.arrmodes.join(" · ") : "Arrêt";
       return (
         <button
           key={`stop-${stop.arrid}-${index}`}
@@ -376,7 +378,9 @@ function SearchPageContent() {
           {getStopIcon(stop.arrtype)}
           <div className="flex-1 min-w-0">
             <span className="truncate block">{stop.arrname}</span>
-            <span className="text-[var(--color-text-tertiary)] text-xs">{stop.arrtown} · Arrêt</span>
+            <span className="text-[var(--color-text-tertiary)] text-xs truncate block">
+              {stop.arrmodes?.length ? `${modesText} · ${stop.arrtown}` : `${stop.arrtown} · Arrêt`}
+            </span>
           </div>
         </button>
       );
@@ -693,7 +697,7 @@ function SearchPageContent() {
           <div className="bg-red-50 border border-red-200 rounded-[var(--card-radius)] p-4 flex items-start gap-3" role="alert">
             <AlertOctagon size={20} className="text-red-500 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm font-semibold text-red-800">Impossible de calculer l'itinéraire</p>
+              <p className="text-sm font-semibold text-red-800">Impossible de calculer l&apos;itinéraire</p>
               <p className="text-xs text-red-700 mt-0.5">
                 {journeysError || "Le service est temporairement indisponible. Réessayez dans quelques instants."}
               </p>
@@ -714,7 +718,7 @@ function SearchPageContent() {
               <p className="text-sm font-semibold text-amber-800">Aucun itinéraire trouvé</p>
               <p className="text-xs text-amber-700 mt-0.5">
                 Vérifiez que vos points sont bien à Paris ou en proche banlieue (≤ 30 km du centre).
-                Pour les longues distances, essayez d'autres modes (train, marche).
+                Pour les longues distances, essayez d&apos;autres modes (train, marche).
               </p>
             </div>
           </div>

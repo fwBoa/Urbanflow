@@ -11,8 +11,6 @@ export const MODE_COLORS: Record<string, string> = {
   tram: "#7C2880",
   velib: "#7CB342",
   velib_electrique: "#7CB342",
-  trottinette: "#F57C00",
-  trottinette_electrique: "#F57C00",
   train: "#6E6E6E",
   transilien: "#6E6E6E",
   ferry: "#0099CC",

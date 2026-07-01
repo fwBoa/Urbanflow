@@ -355,32 +355,35 @@ export class PrimService implements OnModuleInit {
     };
 
     try {
-      // 1) Essai avec city=Paris (privilégie les adresses parisiennes)
-      let response = await firstValueFrom(
-        this.httpService.get(url, {
-          params: { ...baseParams, city: 'Paris' },
-          timeout: 5000,
-        }),
-      );
-      let features = response.data?.features || [];
-
-      // 2) Si pas assez de résultats parisiens, essayer sans filtre city
-      // mais ne garder que les résultats en Île-de-France (postcode 75/92/93/94/77/78/91/95)
-      const parisFeatures = features.filter(isParisResult);
-      if (parisFeatures.length < limit) {
-        response = await firstValueFrom(
+      // Lance les deux requêtes en parallèle plutôt qu'en séquentiel :
+      //  (a) city=Paris  → privilégie les adresses parisiennes
+      //  (b) sans filtre → ratisse plus large (lieux, rues) en Île-de-France
+      // On évite ainsi la somme des latences (~1.2s) → on paie seulement
+      // la plus lente des deux (~600ms). api-adresse est gratuit/sans clé.
+      const [parisRes, broadRes] = await Promise.all([
+        firstValueFrom(
+          this.httpService.get(url, {
+            params: { ...baseParams, city: 'Paris' },
+            timeout: 5000,
+          }),
+        ).catch(() => null),
+        firstValueFrom(
           this.httpService.get(url, {
             params: baseParams,
             timeout: 5000,
           }),
-        );
-        const allFeatures = response.data?.features || [];
-        // Fusionner et dédupliquer par id
-        const seen = new Set(parisFeatures.map((f: any) => f.properties?.id));
-        for (const f of allFeatures) {
-          if (!seen.has(f.properties?.id) && isParisResult(f)) {
-            parisFeatures.push(f);
-          }
+        ).catch(() => null),
+      ]);
+
+      const parisFeatures = (parisRes?.data?.features || []).filter(isParisResult);
+      const broadFeatures = broadRes?.data?.features || [];
+
+      // Fusionner (a) puis (b), en dédupliquant par id et en ne gardant que Paris
+      const seen = new Set(parisFeatures.map((f: any) => f.properties?.id));
+      for (const f of broadFeatures) {
+        if (!seen.has(f.properties?.id) && isParisResult(f)) {
+          parisFeatures.push(f);
+          seen.add(f.properties?.id);
         }
       }
 

@@ -4,12 +4,19 @@
 
 set -e
 
-DATA_DIR="/Users/daveee/Desktop/T6/urbanflow/apps/backend/data/downloads"
+# Répertoire de téléchargement — dérivé du chemin du script (portable), surchargeable
+# via la variable d'environnement GTFS_DOWNLOAD_DIR.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DATA_DIR="${GTFS_DOWNLOAD_DIR:-$SCRIPT_DIR/../apps/backend/data/downloads}"
 ZIP_PATH="$DATA_DIR/idfm-gtfs-static.zip"
+
+# URL du backend à recharger après téléchargement (surchargeable).
+BACKEND_URL="${GTFS_RELOAD_URL:-http://localhost:4000}"
 
 mkdir -p "$DATA_DIR"
 
 echo "Téléchargement du GTFS IDFM..."
+echo "Destination: $ZIP_PATH"
 
 # Essayer plusieurs sources
 SOURCES=(
@@ -41,4 +48,4 @@ fi
 
 echo ""
 echo "Pour recharger le GTFS dans le backend:"
-echo "curl -X POST http://localhost:4000/api/transport/gtfs-reload"
+echo "curl -X POST $BACKEND_URL/api/transport/gtfs-reload"

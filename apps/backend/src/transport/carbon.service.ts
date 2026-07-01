@@ -34,8 +34,6 @@ const ADEME_EMISSION_FACTORS: Record<string, number> = {
   voiture: 170.0,
   // Covoiturage (2 passagers)
   covoiturage: 85.0,
-  // Trottinette électrique en libre-service
-  trottinette_electrique: 35.0,
   // Funiviaire
   funiculaire: 10.0,
   // Navette fluviale

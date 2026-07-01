@@ -8,7 +8,7 @@ import { JourneyService } from './journey.service';
 import { GtfsParserService } from './gtfs-parser.service';
 import { GtfsRtService } from './gtfs-rt.service';
 import { OsrmService } from './osrm.service';
-import { GbfsService } from './gbfs.service';
+import { GtfsDbService } from './gtfs-db.service';
 
 describe('TransportController', () => {
   let controller: TransportController;
@@ -26,12 +26,23 @@ describe('TransportController', () => {
         GtfsParserService,
         GtfsRtService,
         OsrmService,
-        GbfsService,
+        {
+          provide: GtfsDbService,
+          useValue: {
+            onModuleInit: jest.fn(),
+            onModuleDestroy: jest.fn(),
+            getPool: jest.fn(),
+            getClient: jest.fn(),
+            query: jest.fn(),
+            ensureSchema: jest.fn(),
+          },
+        },
         {
           provide: ConfigService,
           useValue: {
             get: (key: string, defaultValue?: string) => {
-              if (key === 'PRIM_API_URL') return 'https://prim.iledefrance-mobilites.fr';
+              if (key === 'PRIM_API_URL')
+                return 'https://prim.iledefrance-mobilites.fr';
               if (key === 'PRIM_API_KEY') return 'test-key';
               if (key === 'IDFM_DATA_API_URL')
                 return 'https://data.iledefrance-mobilites.fr/api/explore/v2.1';

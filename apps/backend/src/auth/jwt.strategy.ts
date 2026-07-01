@@ -34,6 +34,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException();
     }
-    return { id: payload.sub, email: payload.email };
+    // `role` est requis par RolesGuard (endpoints admin @Roles('admin')).
+    // Sans lui, request.user ne porte que { id, email } → 403 systématique
+    // sur toute route administrée, bien que l'utilisateur soit authentifié.
+    return { id: payload.sub, email: payload.email, role: user.role };
   }
 }
