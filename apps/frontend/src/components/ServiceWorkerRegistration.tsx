@@ -56,14 +56,25 @@ export default function ServiceWorkerRegistration() {
   if (!updateAvailable) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-[var(--color-primary)] text-white p-4 rounded-xl shadow-lg z-50 flex items-center justify-between">
-      <p className="text-sm">Une mise à jour est disponible.</p>
-      <button
-        onClick={() => window.location.reload()}
-        className="ml-2 px-3 py-1 bg-white text-[var(--color-primary)] rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors"
-      >
-        Mettre à jour
-      </button>
+    <div className="fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-[var(--color-primary)] text-white p-4 rounded-xl shadow-lg z-50 flex flex-col gap-3">
+      <p className="text-sm">
+        Nouvelle version d’Urban Flow disponible. Rechargez pour appliquer les
+        dernières améliorations.
+      </p>
+      <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={() => setUpdateAvailable(false)}
+          className="px-3 py-1.5 text-sm font-medium text-white/90 hover:text-white transition-colors"
+        >
+          Plus tard
+        </button>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-3 py-1.5 bg-white text-[var(--color-primary)] rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors"
+        >
+          Mettre à jour
+        </button>
+      </div>
     </div>
   );
 }
