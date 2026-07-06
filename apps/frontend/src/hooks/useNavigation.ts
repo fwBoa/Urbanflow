@@ -31,7 +31,7 @@ export interface NavigationInstruction {
   /** Instruction textuelle (ex: "Tournez à droite sur Rue de Rivoli") */
   text: string;
   /** Icône de direction */
-  icon: "straight" | "left" | "right" | "slight-left" | "slight-right" | "arrive" | "depart";
+  icon: "straight" | "left" | "right" | "slight-left" | "slight-right" | "arrive" | "depart" | "board" | "alight";
   /** Distance jusqu'à la prochaine instruction en mètres */
   distanceToNext: number;
   /** Temps estimé jusqu'à la prochaine instruction en minutes */
@@ -68,6 +68,37 @@ function bearing(
     Math.cos((lat1 * Math.PI) / 180) * Math.sin((lat2 * Math.PI) / 180) -
     Math.sin((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.cos(dLon);
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+// ─── Normalisation d'un delta de cap à [-180, 180] ───────────────────
+function normalizeBearingDelta(delta: number): number {
+  return ((delta % 360) + 540) % 360 - 180;
+}
+
+// ─── Échantillonnage d'une polyline à un ratio (0..1) ────────────────
+function samplePolyline(points: [number, number][], ratio: number): [number, number] | null {
+  if (points.length === 0) return null;
+  if (points.length === 1) return points[0];
+  let total = 0;
+  const segs: number[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const d = haversineDistance(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1]);
+    segs.push(d);
+    total += d;
+  }
+  if (total === 0) return points[0];
+  let target = Math.max(0, Math.min(1, ratio)) * total;
+  for (let i = 0; i < segs.length; i++) {
+    if (target <= segs[i] || i === segs.length - 1) {
+      const t = segs[i] === 0 ? 0 : target / segs[i];
+      return [
+        points[i][0] + t * (points[i + 1][0] - points[i][0]),
+        points[i][1] + t * (points[i + 1][1] - points[i][1]),
+      ];
+    }
+    target -= segs[i];
+  }
+  return points[points.length - 1];
 }
 
 // ─── Point le plus proche sur une polyline ────────────────────────────
@@ -318,6 +349,49 @@ export function useNavigation(
     }
   }, [navState.offRoute, isNavigating]);
 
+  // ─── Point de manœuvre (extrémité du segment actif) ──────────────────
+  // Source privilégiée : dernier point du geojson du segment actif (présent côté
+  // Navitia). Replis : originPos / destPos aux extrémités du trajet, sinon
+  // échantillonnage de la polyline OSRM au ratio de durée cumulée.
+  const nextManeuverPoint = useMemo<{ lat: number; lon: number } | null>(() => {
+    const idx = navState.activeSegment;
+    const seg = segments[idx];
+    if (!seg) return null;
+
+    // Dernier segment → destination.
+    if (idx === segments.length - 1 && destination) return { lat: destination.lat, lon: destination.lon };
+    // Premier segment avant tout transit → origine.
+    if (idx === 0 && origin) return { lat: origin.lat, lon: origin.lon };
+
+    // Dernier point du geojson embarqué (déjà [lon, lat] → [lat, lon]).
+    if (seg.geojson && seg.geojson.length >= 1) {
+      const last = seg.geojson[seg.geojson.length - 1];
+      if (Number.isFinite(last[0]) && Number.isFinite(last[1])) {
+        return { lat: last[1], lon: last[0] };
+      }
+    }
+
+    // Repli : échantillonnage de la polyline au ratio durée fin du segment.
+    if (routePoints.length >= 2) {
+      const totalDuration = segments.reduce((acc, s) => acc + s.durationMinutes, 0);
+      let cum = 0;
+      for (let i = 0; i <= idx; i++) cum += segments[i]?.durationMinutes ?? 0;
+      const ratio = totalDuration > 0 ? cum / totalDuration : 1;
+      const p = samplePolyline(routePoints, ratio);
+      if (p) return { lat: p[0], lon: p[1] };
+    }
+    return null;
+  }, [segments, navState.activeSegment, origin, destination, routePoints]);
+
+  // Distance réelle jusqu'au prochain manœuvre (m).
+  const distanceToManeuver = useMemo(() => {
+    const userPos = navState.userPosition;
+    if (!userPos || !nextManeuverPoint) return navState.remainingDistance;
+    return Math.round(
+      haversineDistance(userPos.lat, userPos.lon, nextManeuverPoint.lat, nextManeuverPoint.lon),
+    );
+  }, [navState.userPosition, nextManeuverPoint, navState.remainingDistance]);
+
   // ─── Instruction de direction ──────────────────────────────────────
   const instruction = useMemo<NavigationInstruction>(() => {
     const seg = segments[navState.activeSegment];
@@ -330,25 +404,45 @@ export function useNavigation(
       };
     }
 
-    // Déterminer l'icône de direction
+    // Icône par défaut selon le type de segment et la position dans le trajet.
     let icon: NavigationInstruction["icon"] = "straight";
     if (navState.activeSegment === 0) {
-      icon = "depart";
+      icon = seg.type === "transit" ? "board" : "depart";
     } else if (navState.activeSegment === segments.length - 1) {
       icon = "arrive";
+    } else if (seg.type === "transit") {
+      // Transit en cours : on est à bord. "board" au début, "alight" indiqué
+      // quand on se rapproche de la fin du segment (distance au manœuvre faible).
+      icon = distanceToManeuver < 200 ? "alight" : "board";
     } else if (seg.type === "walking") {
-      icon = "straight";
-    } else {
-      icon = "straight";
+      // Détection gauche/droite réelle : delta entre le cap device (heading) et
+      // le bearing vers le prochain point de la route. Uniquement si l'utilisateur
+      // avance (GPS speed) et qu'on a un heading fiable.
+      const speed = navState.currentSpeed;
+      if (heading != null && heading >= 0 && speed > 0.5 && navState.nextBearing != null) {
+        const delta = normalizeBearingDelta(navState.nextBearing - heading);
+        if (delta >= -22.5 && delta < 22.5) icon = "straight";
+        else if (delta >= 22.5 && delta < 67.5) icon = "slight-right";
+        else if (delta >= 67.5 && delta < 157.5) icon = "right";
+        else if (delta >= 157.5 || delta < -157.5) icon = "straight"; // demi-tour ~ continue
+        else if (delta >= -157.5 && delta < -67.5) icon = "left";
+        else icon = "slight-left"; // [-67.5, -22.5)
+      } else {
+        icon = "straight";
+      }
     }
+
+    // ETA jusqu'au manœuvre (basé sur vitesse réelle ou marche 5 km/h par défaut).
+    const avgSpeedMs = navState.currentSpeed > 0.5 ? navState.currentSpeed / 3.6 : 1.4;
+    const timeToManeuver = distanceToManeuver / avgSpeedMs / 60;
 
     return {
       text: seg.instruction,
       icon,
-      distanceToNext: navState.remainingDistance,
-      timeToNext: navState.remainingTime,
+      distanceToNext: distanceToManeuver,
+      timeToNext: Math.round(timeToManeuver * 10) / 10,
     };
-  }, [segments, navState.activeSegment, navState.remainingDistance, navState.remainingTime]);
+  }, [segments, navState.activeSegment, navState.nextBearing, navState.currentSpeed, heading, distanceToManeuver]);
 
   // ─── Arrêt automatique si arrivé ────────────────────────────────────
   useEffect(() => {
@@ -376,6 +470,8 @@ export function useNavigation(
 
     // Instruction de direction
     instruction,
+    /** Prochain point de manœuvre (extrémité du segment actif) pour zoom/fit */
+    nextManeuverPoint,
 
     // Contrôles
     startNavigation,
