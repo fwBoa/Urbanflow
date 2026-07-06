@@ -2,6 +2,8 @@
 
 API REST pour la plateforme de mobilité multimodale Urban Flow Mobility.
 
+> **État au 2026-07-06** : NestJS 11 + TypeORM + PostgreSQL 16, **PWA offline + Web Push VAPID** (`ea42742`, Bloc 44) : `PushService` (`web-push@^3.6.7`), entité `push_subscriptions`, 3 endpoints `/api/notifications/push/*` (subscribe / unsubscribe / send-test), opt-in `marketingConsent` dans `ConsentBanner`.
+
 ## Architecture
 
 ### Modules NestJS
@@ -292,6 +294,9 @@ inter-conteneurs). Sémantique RAPTOR identique à l'implémentation per-stop d'
 | POST | `/api/notifications/mark-all-read` | Tout marquer lu |
 | DELETE | `/api/notifications/:id` | Supprimer une notification |
 | DELETE | `/api/notifications` | Tout supprimer |
+| POST | `/api/notifications/push/subscribe` | ⭐ Enregistrer une subscription Web Push (VAPID) — body `{ endpoint, keys: { p256dh, auth } }` |
+| DELETE | `/api/notifications/push/subscribe` | ⭐ Désabonner l'endpoint courant de l'utilisateur |
+| POST | `/api/notifications/push/send-test` | ⭐ Envoi d'une notification push test à l'utilisateur courant (debug) |
 
 ### Admin — `/api/admin/*` (JWT + rôle admin)
 
@@ -322,6 +327,9 @@ inter-conteneurs). Sémantique RAPTOR identique à l'implémentation per-stop d'
 | `GTFS_RADIUS_KM` | Rayon par défaut pour `/nearby` et `/velib-nearby` (km) | `1` |
 | `GTFS_DEPARTURE_OVERFETCH` | Overfetch historique par arrêt (fallback compat) | `5` |
 | `RAPTOR_DEPARTURE_FETCH` | Limite LATERAL par arrêt marqué dans le batch departures | `50` |
+| `VAPID_PUBLIC_KEY` | ⭐ Clé publique VAPID (base64url, ~88 chars) — exposée au front, sert à `applicationServerKey` côté `pushManager.subscribe` | — |
+| `VAPID_PRIVATE_KEY` | ⭐ Clé privée VAPID (base64url) — sert à signer les push côté `web-push.sendNotification` | — |
+| `VAPID_SUBJECT` | ⭐ Sujet de contact VAPID (mailto: ou https://) — exigé par la spec RFC 8292 | `mailto:contact@urbanflow.fr` |
 
 ## Installation
 
@@ -340,10 +348,10 @@ npm run start:dev
 ```bash
 npm run test           # alias jest
 npx jest --verbose     # détaillé
-npx jest --listTests   # 11 suites
+npx jest --listTests   # 12 suites
 ```
 
-11 suites — **101 tests** (transport, auth, admin, carbon, prim, RAPTOR, JWT, GDPR) :
+12 suites — **110 tests** (transport, auth, admin, carbon, prim, RAPTOR, JWT, GDPR, **Web Push**) :
 
 | Fichier | Couverture |
 |---|---|
@@ -358,6 +366,7 @@ npx jest --listTests   # 11 suites
 | `auth/jwt-secret.spec.ts` | Signature/verify, secret dev/prod |
 | `app.controller.spec.ts` | Scaffold NestJS / health |
 | `all-exceptions.filter.spec.ts` | Filtre HTTP global, format erreur |
+| `notifications/push.service.spec.ts` | ⭐ PushService VAPID — `subscribe()`, `unsubscribe()`, `removeAllForUser()`, `sendToUser()`, normalisation payload, gestion 410 Gone |
 
 ## CORS
 
