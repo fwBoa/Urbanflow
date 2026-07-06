@@ -4,9 +4,9 @@ import {
   Post,
   Query,
   Param,
-  ParseIntPipe,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { PrimService } from './prim.service';
 import {
@@ -17,6 +17,7 @@ import {
 import { JourneyService, JourneyQuery, JourneyResult } from './journey.service';
 import { OsrmService } from './osrm.service';
 import { GtfsRtService, RealtimeAlert } from './gtfs-rt.service';
+import { NavitiaService } from './navitia.service';
 
 /**
  * Contrôleur Transport — Expose les données PRIM (Île-de-France Mobilités)
@@ -36,12 +37,15 @@ import { GtfsRtService, RealtimeAlert } from './gtfs-rt.service';
  */
 @Controller('transport')
 export class TransportController {
+  private readonly logger = new Logger(TransportController.name);
+
   constructor(
     private readonly primService: PrimService,
     private readonly gtfsParser: GtfsParserService,
     private readonly journeyService: JourneyService,
     private readonly osrmService: OsrmService,
     private readonly gtfsRtService: GtfsRtService,
+    private readonly navitiaService: NavitiaService,
   ) {}
 
   /**
@@ -380,10 +384,18 @@ export class TransportController {
 
   /**
    * Alertes/perturbations temps réel (PRIM Navitia disruptions).
+   * Navitia est primaire (gtfs-rt échouait en 401 avec une clé non abonnée) ;
+   * gtfs-rt reste en repli si Navitia ne répond rien.
    * Ces alertes sont également injectées dans les journeys via matchAlertsForJourney.
    */
   @Get('realtime-alerts')
   async getRealtimeAlerts() {
+    try {
+      const alerts = await this.navitiaService.getAlerts();
+      if (alerts.length > 0) return alerts;
+    } catch {
+      // best-effort
+    }
     return this.gtfsRtService.getAlerts();
   }
 
@@ -399,7 +411,6 @@ export class TransportController {
     @Query('modes') modes?: string,
     @Query('maxTransfers') maxTransfers?: string,
   ) {
-    await this.requireGtfsLoaded();
     if (!originLat || !originLon || !destLat || !destLon) {
       throw new HttpException(
         'originLat, originLon, destLat, destLon are required',
@@ -421,23 +432,85 @@ export class TransportController {
       maxTransfers: maxTransfers ? parseInt(maxTransfers, 10) : undefined,
     };
 
-    // Parallélisation : on lance RAPTOR et la récup des alertes en parallèle
-    // (gain ~200-400ms sur le temps de réponse global)
-    const [journeys, alerts] = await Promise.all([
-      this.journeyService.findJourney(query),
-      this.gtfsRtService.getAlerts(),
-    ]);
+    // ─── Garde périmètre : 10 km autour de Paris (scope produit) ───────
+    // Au-delà, on ne propose que la marche / Vélib (fallback) — hors scope
+    // transports IDF dense. Remplace l'ancien garde 30 km de journey.service.
+    const PARIS = { lat: 48.8566, lon: 2.3522 };
+    const originDistKm =
+      this.haversineDistance(
+        query.origin.lat,
+        query.origin.lon,
+        PARIS.lat,
+        PARIS.lon,
+      ) / 1000;
+    const destDistKm =
+      this.haversineDistance(
+        query.destination.lat,
+        query.destination.lon,
+        PARIS.lat,
+        PARIS.lon,
+      ) / 1000;
+    if (originDistKm > 10 || destDistKm > 10) {
+      return this.computeFallbackJourney(query);
+    }
 
-    const enrichedJourneys = journeys.map((j) => ({
+    // ─── Navitia PRIMAIRE (routing temps réel + géométrie embarquée) ────
+    let journeys: JourneyResult[] = [];
+    let usedNavitia = false;
+    if (this.navitiaService.isAvailable()) {
+      try {
+        journeys = await this.navitiaService.findJourneys(
+          query.origin,
+          query.destination,
+          query.departureTime,
+          query.modes,
+          query.maxTransfers,
+        );
+        usedNavitia = journeys.length > 0;
+      } catch (error) {
+        // Unauthorized / quota / réseau → repli GTFS silencieux.
+        this.logger.warn(
+          `Navitia journeys failed, fallback to GTFS RAPTOR: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+    }
+
+    // ─── GTFS RAPTOR — filet hors-ligne (Postgres déjà chargé) ──────────
+    if (journeys.length === 0 && (await this.gtfsParser.isLoaded())) {
+      try {
+        journeys = await this.journeyService.findJourney(query);
+      } catch (error) {
+        this.logger.warn(
+          `GTFS RAPTOR failed: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+    }
+
+    // ─── Smart fallback (arrêts réels proches + marche + Vélib) ─────────
+    if (journeys.length === 0) {
+      return this.computeFallbackJourney(query);
+    }
+
+    // ─── Alertes : Navitia (remplace gtfs-rt mort en 401) ───────────────
+    let alerts: RealtimeAlert[] = [];
+    try {
+      alerts = await this.navitiaService.getAlerts();
+    } catch {
+      // best-effort
+    }
+    // Repli gtfs-rt si Navitia n'a rien renvoyé ET qu'on a servi du GTFS.
+    if (alerts.length === 0 && !usedNavitia) {
+      try {
+        alerts = await this.gtfsRtService.getAlerts();
+      } catch {
+        // best-effort
+      }
+    }
+
+    return journeys.map((j) => ({
       ...j,
       alerts: this.matchAlertsForJourney(j, alerts),
     }));
-
-    // If GTFS data not loaded, return a fallback mock journey
-    if (enrichedJourneys.length === 0) {
-      return this.computeFallbackJourney(query);
-    }
-    return enrichedJourneys;
   }
 
   // ─── Routing réel OSRM — Géométrie suivant les rues ──────────────────

@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { JourneySegmentForMap } from "./journey-helpers";
 
 let iconsFixed = false;
 

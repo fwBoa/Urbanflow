@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import {
-  User,
   Bell,
   Leaf,
   Accessibility,
@@ -10,7 +9,6 @@ import {
   Sun,
   Trash2,
   Zap,
-  Wallet,
   Pencil,
   Check,
   Award,
@@ -23,6 +21,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
+import Switch from "@/components/Switch";
 import {
   getStats,
   getPreferences,
@@ -39,22 +38,20 @@ import { updateProfile as updateRemoteProfile } from "@/services/auth";
 import { apiService } from "@/services/api";
 import { useDarkMode } from "@/hooks/useDarkMode";
 
-// ─── Mapping mode de mobilité : UI (fast|eco|cheap) ↔ backend (rapide|eco|economique) ───
+// ─── Mapping mode de mobilité : UI (fast|eco) ↔ backend (rapide|eco|economique) ───
 const MODE_UI_TO_BACKEND: Record<string, string> = {
   fast: "rapide",
   eco: "eco",
-  cheap: "economique",
 };
-const MODE_BACKEND_TO_UI: Record<string, "fast" | "eco" | "cheap"> = {
+const MODE_BACKEND_TO_UI: Record<string, "fast" | "eco"> = {
   rapide: "fast",
   eco: "eco",
-  economique: "cheap",
+  economique: "fast", // fallback for legacy account data
 };
 
 const modeOptions = [
   { key: "fast" as const, label: "Rapide", icon: <Zap size={14} /> },
   { key: "eco" as const, label: "Éco", icon: <Leaf size={14} /> },
-  { key: "cheap" as const, label: "Économique", icon: <Wallet size={14} /> },
 ];
 
 const avatarOptions = ["🚇", "🚲", "🚊", "🚈", "🚍", "🚶", "🌍", "⚡"];
@@ -63,18 +60,11 @@ export default function ProfilePage() {
   const { user, isAuthenticated, logout } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState<UserStats>({ totalTrips: 0, co2Saved: 0, favoriteCount: 0 });
-  const [prefs, setPrefs] = useState<UserPreferences>({
-    defaultMode: "fast",
-    notifications: true,
-    accessibility: false,
-    darkMode: false,
-  });
+  const [prefs, setPrefs] = useState<UserPreferences>(() => getPreferences());
   const [profile, setProfile] = useState<UserProfile>({ name: "Utilisateur", email: "", avatar: "🚇" });
   const [badges, setBadges] = useState<Badge[]>([]);
   const [editingName, setEditingName] = useState(false);
-  const [editingEmail, setEditingEmail] = useState(false);
   const [nameInput, setNameInput] = useState("");
-  const [emailInput, setEmailInput] = useState("");
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
   const { isDark, toggleDarkMode } = useDarkMode();
@@ -85,7 +75,7 @@ export default function ProfilePage() {
       setStats(s);
       setBadges(b);
     }
-    setPrefs(getPreferences());
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (isAuthenticated && user) {
       // Use backend profile when authenticated
       setProfile({
@@ -102,6 +92,7 @@ export default function ProfilePage() {
       // Anonymous: default profile (no persistence)
       setProfile({ name: "Utilisateur", email: "", avatar: "🚇" });
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
     loadData();
   }, [isAuthenticated, user]);
 
@@ -132,7 +123,7 @@ export default function ProfilePage() {
     }
   };
 
-  const handleModeChange = (mode: "fast" | "eco" | "cheap") => {
+  const handleModeChange = (mode: "fast" | "eco") => {
     const updated = savePreferences({ defaultMode: mode });
     setPrefs(updated);
     // Persiste le mode côté backend (mapping UI → backend) quand authentifié
@@ -152,11 +143,6 @@ export default function ProfilePage() {
     }
     setProfile((p) => ({ ...p, name: newName }));
     setEditingName(false);
-  };
-
-  const handleSaveEmail = async () => {
-    // Email is read-only (always comes from auth)
-    setEditingEmail(false);
   };
 
   const handleAvatarChange = async (avatar: string) => {
@@ -194,14 +180,14 @@ export default function ProfilePage() {
             <>
               <button
                 onClick={() => setShowAvatarPicker(!showAvatarPicker)}
-                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white border-2 border-[var(--color-primary)] flex items-center justify-center shadow-md hover:scale-110 transition-transform"
+                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-background border-2 border-[var(--color-primary)] flex items-center justify-center shadow-md hover:scale-110 transition-transform"
                 aria-label="Changer l'avatar"
               >
                 <Pencil size={12} className="text-[var(--color-primary)]" />
               </button>
               {/* Avatar picker */}
               {showAvatarPicker && (
-                <div className="absolute top-full mt-2 flex gap-2 flex-wrap justify-center bg-white rounded-xl shadow-lg p-2 border border-[var(--color-border)] z-10">
+                <div className="absolute top-full mt-2 flex gap-2 flex-wrap justify-center bg-background rounded-xl shadow-lg p-2 border border-[var(--color-border)] z-10">
                   {avatarOptions.map((emoji) => (
                     <button
                       key={emoji}
@@ -380,68 +366,36 @@ export default function ProfilePage() {
 
       {/* Settings */}
       <div className="bg-[var(--color-surface)] rounded-[var(--card-radius)] border border-[var(--color-border)] overflow-hidden">
-        <button
-          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--color-border)]/50 transition-colors text-left border-b border-[var(--color-border)]"
-          onClick={() => handleToggle("notifications")}
-        >
-          <Bell size={18} className="text-[var(--color-text-tertiary)]" />
-          <span className="flex-1 text-sm text-[var(--color-text-primary)]">
+        <div className="border-b border-[var(--color-border)]">
+          <Switch
+            checked={prefs.notifications}
+            onChange={() => handleToggle("notifications")}
+            icon={<Bell size={18} />}
+          >
             Notifications
-          </span>
-          <div
-            className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${
-              prefs.notifications ? "bg-[var(--color-primary)]" : "bg-[var(--color-border)]"
-            }`}
-          >
-            <div
-              className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
-                prefs.notifications ? "translate-x-4" : "translate-x-0"
-              }`}
-            />
-          </div>
-        </button>
+          </Switch>
+        </div>
 
-        <button
-          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--color-border)]/50 transition-colors text-left border-b border-[var(--color-border)]"
-          onClick={() => handleToggle("accessibility")}
-        >
-          <Accessibility size={18} className="text-[var(--color-text-tertiary)]" />
-          <span className="flex-1 text-sm text-[var(--color-text-primary)]">
+        <div className="border-b border-[var(--color-border)]">
+          <Switch
+            checked={prefs.accessibility}
+            onChange={() => handleToggle("accessibility")}
+            icon={<Accessibility size={18} />}
+          >
             Accessibilité
-          </span>
-          <div
-            className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${
-              prefs.accessibility ? "bg-[var(--color-primary)]" : "bg-[var(--color-border)]"
-            }`}
-          >
-            <div
-              className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
-                prefs.accessibility ? "translate-x-4" : "translate-x-0"
-              }`}
-            />
-          </div>
-        </button>
+            <span className="block text-xs text-[var(--color-text-tertiary)] font-normal">
+              Réduit les animations et augmente le contraste
+            </span>
+          </Switch>
+        </div>
 
-        <button
-          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--color-border)]/50 transition-colors text-left"
-          onClick={() => handleToggle("darkMode")}
+        <Switch
+          checked={isDark}
+          onChange={() => handleToggle("darkMode")}
+          icon={isDark ? <Sun size={18} /> : <Moon size={18} />}
         >
-          {isDark ? <Sun size={18} className="text-[var(--color-text-tertiary)]" /> : <Moon size={18} className="text-[var(--color-text-tertiary)]" />}
-          <span className="flex-1 text-sm text-[var(--color-text-primary)]">
-            {isDark ? "Mode clair" : "Mode sombre"}
-          </span>
-          <div
-            className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${
-              isDark ? "bg-[var(--color-primary)]" : "bg-[var(--color-border)]"
-            }`}
-          >
-            <div
-              className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
-                isDark ? "translate-x-4" : "translate-x-0"
-              }`}
-            />
-          </div>
-        </button>
+          {isDark ? "Mode clair" : "Mode sombre"}
+        </Switch>
       </div>
 
       {/* Auth section */}

@@ -11,7 +11,7 @@ export function VelibStationCard({ station }: { station: NearbyVelibStation }) {
       : `${(station.distance / 1000).toFixed(1)} km`;
 
   return (
-    <div className="flex items-center gap-3 bg-white rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-sm transition-all">
+    <div className="flex items-center gap-3 bg-surface rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-md transition-all">
       {/* Distance badge */}
       <div className="flex flex-col items-center min-w-[48px]">
         <span className="text-[13px] font-bold text-[var(--color-primary)]">{distText}</span>

@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import ConsentBanner from "@/components/ConsentBanner";
 import "./globals.css";
 
@@ -49,14 +51,38 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
-      <body className="min-h-full flex flex-col font-sans bg-white text-[var(--color-text-primary)]" suppressHydrationWarning>
+      <body className="min-h-full flex flex-col font-sans bg-background text-[var(--color-text-primary)]" suppressHydrationWarning>
         <AuthProvider>
-          {children}
-          <ConsentBanner />
+          <ThemeProvider>
+            {children}
+            <ConsentBanner />
+          </ThemeProvider>
         </AuthProvider>
         <ServiceWorkerRegistration />
         <PwaInstallBanner />
       </body>
+      {/*
+        No-FOUC dark-mode : inline script injecté côté serveur dans <head> et
+        exécuté avant tout paint/hydratation. next/script (avec id + strategy
+        beforeInteractive) est le moyen officiellement supporté en App Router —
+        un <script dangerouslySetInnerHTML> brut n'est pas exécuté par React 19.
+      */}
+      <Script id="theme-init" strategy="beforeInteractive">
+        {`(function() {
+          try {
+            var prefs = JSON.parse(localStorage.getItem('urbanflow_preferences') || '{}');
+            var isDark = prefs.darkMode;
+            if (isDark === undefined) {
+              isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            }
+            if (isDark) {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          } catch (e) {}
+        })();`}
+      </Script>
     </html>
   );
 }

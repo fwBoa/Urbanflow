@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Shield, MapPin, Cookie, BarChart3, X } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Shield, MapPin, Cookie, BarChart3 } from "lucide-react";
 
 const CONSENT_KEY = "urbanflow_consent";
 const CONSENT_VERSION = "1.0";
@@ -56,17 +56,9 @@ export function hasConsentBeenAsked(): boolean {
 }
 
 export default function ConsentBanner() {
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(() => !getConsent().date);
   const [showDetails, setShowDetails] = useState(false);
-  const [consent, setConsent] = useState<ConsentState>(defaultConsent);
-
-  useEffect(() => {
-    const current = getConsent();
-    if (!current.date) {
-      setVisible(true);
-    }
-    setConsent(current);
-  }, []);
+  const [consent, setConsent] = useState<ConsentState>(() => getConsent());
 
   const acceptAll = useCallback(() => {
     const all: ConsentState = {
@@ -113,23 +105,23 @@ export default function ConsentBanner() {
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-black/50 flex items-end sm:items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="consent-title">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 space-y-4 animate-in slide-in-from-bottom-4">
+    <div
+      className="fixed inset-0 z-[1000] bg-black/50 flex items-end sm:items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="consent-title"
+      onClick={acceptNecessary}
+    >
+      <div
+        className="bg-background rounded-2xl border border-[var(--color-border)] shadow-xl max-w-md w-full p-5 space-y-4 animate-in slide-in-from-bottom-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="text-[var(--color-primary)]" size={24} />
-            <h3 id="consent-title" className="text-lg font-semibold text-[var(--color-text-primary)]">
-              Protection de vos données
-            </h3>
-          </div>
-          <button
-            onClick={() => setVisible(false)}
-            className="p-2.5 rounded-full hover:bg-[var(--color-surface)]"
-            aria-label="Fermer la bannière de consentement"
-          >
-            <X size={18} className="text-[var(--color-text-tertiary)]" />
-          </button>
+        <div className="flex items-start gap-2">
+          <Shield className="text-[var(--color-primary)] shrink-0" size={24} />
+          <h3 id="consent-title" className="text-lg font-semibold text-[var(--color-text-primary)]">
+            Protection de vos données
+          </h3>
         </div>
 
         {/* Description */}
@@ -215,28 +207,28 @@ export default function ConsentBanner() {
 
         {/* Actions */}
         <div className="flex flex-col gap-2">
-          <button
-            onClick={acceptAll}
-            className="w-full py-3 rounded-full bg-[var(--color-primary)] text-white font-semibold text-sm hover:opacity-90 transition-opacity"
-          >
-            Tout accepter
-          </button>
           <div className="flex gap-2">
             <button
               onClick={acceptNecessary}
-              className="flex-1 py-2.5 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm font-medium hover:bg-[var(--color-surface)] transition-colors"
+              className="flex-1 py-3 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm font-semibold hover:bg-[var(--color-surface)] transition-colors"
             >
               Refuser
             </button>
-            {showDetails && (
-              <button
-                onClick={acceptCustom}
-                className="flex-1 py-2.5 rounded-full border border-[var(--color-primary)] text-[var(--color-primary)] text-sm font-medium hover:bg-[var(--color-surface)] transition-colors"
-              >
-                Enregistrer mes choix
-              </button>
-            )}
+            <button
+              onClick={acceptAll}
+              className="flex-1 py-3 rounded-full bg-[var(--color-primary)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              Tout accepter
+            </button>
           </div>
+          {showDetails && (
+            <button
+              onClick={acceptCustom}
+              className="w-full py-2.5 rounded-full border border-[var(--color-primary)] text-[var(--color-primary)] text-sm font-semibold hover:bg-[var(--color-surface)] transition-colors"
+            >
+              Enregistrer mes choix
+            </button>
+          )}
         </div>
 
         {/* Legal link */}

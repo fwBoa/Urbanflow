@@ -1046,12 +1046,16 @@ export class GtfsParserService implements OnModuleInit {
       .slice(0, limit);
   }
 
-  /** Services actifs pour une date (calendrier + exceptions). */
+  /**
+   * Services actifs pour une date (calendrier + exceptions).
+   * Fuseau Europe/Paris : les GTFS IDFM (calendar + calendar_dates) sont en
+   * heure locale Paris. `date.getDay()` / `toISOString()` dépendent du TZ du
+   * conteneur (UTC par défaut en Docker) → décalage +1h/+2h qui faisait filtrer
+   * les services actifs sur le mauvais jour (surtout nuit / petit matin).
+   */
   async getActiveServiceIds(date: Date): Promise<Set<string>> {
-    const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ...
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-    const dateNum = parseInt(dateStr);
-    return this.gtfsDb.getActiveServiceIds(dateNum, dayOfWeek, dateStr);
+    const p = this.parisParts(date);
+    return this.gtfsDb.getActiveServiceIds(p.dateNum, p.dow, p.ymdCompact);
   }
 
   /** Horaires d'une course triés par séquence (marche de trip RAPTOR). */
@@ -1162,12 +1166,58 @@ export class GtfsParserService implements OnModuleInit {
       .replace(/\s+/g, ' ');
   }
 
-  /** Format a date as HH:MM:SS (heure locale). */
+  /**
+   * Composantes date/heure en fuseau Europe/Paris, indépendamment du TZ du
+   * conteneur (Docker = UTC par défaut). Les GTFS IDFM sont en heure Paris
+   * (agency_timezone) : sans cet alignement, le "maintenant" utilisé pour
+   * filtrer les départs (departure_seconds >= nowSeconds) et les services
+   * actifs (calendar day-of-week + calendar_dates) est décalé de +1h (hiver)
+   * / +2h (été) → départs et itinéraires faux, surtout en soirée / au petit
+   * matin. Utilise Intl.DateTimeFormat (TZ explicite) plutôt que getHours()/
+   * getDay() (TZ conteneur) ou toISOString() (toujours UTC).
+   */
+  private parisParts(date: Date): {
+    ymdCompact: string; // YYYYMMDD — calendar_dates.date + calendar start/end
+    dateNum: number; // parseInt(ymdCompact)
+    dow: number; // 0=dimanche … 6=samedi (convention JS getDay)
+    hhmmss: string; // HH:MM:SS Paris
+    seconds: number; // secondes depuis minuit Paris (0–86399)
+  } {
+    const ymd = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date); // en-CA → "2026-07-06"
+    const ymdCompact = ymd.replace(/-/g, '');
+    // Jour de la semaine Paris insensible au TZ conteneur.
+    const dow = new Date(`${ymd}T00:00:00Z`).getUTCDay();
+    const time = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Paris',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(date); // en-GB → "10:48:18"
+    const parts = time.split(':').map(Number);
+    let h = parts[0] ?? 0;
+    const m = parts[1] ?? 0;
+    const s = parts[2] ?? 0;
+    if (h === 24) h = 0; // certains moteurs renvoient "24" à minuit (hour12:false)
+    const hhmmss = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s || 0).padStart(2, '0')}`;
+    const seconds = (h || 0) * 3600 + (m || 0) * 60 + (s || 0);
+    return {
+      ymdCompact,
+      dateNum: parseInt(ymdCompact, 10),
+      dow,
+      hhmmss,
+      seconds,
+    };
+  }
+
+  /** Format a date as HH:MM:SS en fuseau Europe/Paris (cf. parisParts). */
   private formatTime(date: Date): string {
-    const h = String(date.getHours()).padStart(2, '0');
-    const m = String(date.getMinutes()).padStart(2, '0');
-    const s = String(date.getSeconds()).padStart(2, '0');
-    return `${h}:${m}:${s}`;
+    return this.parisParts(date).hhmmss;
   }
 
   /** Distance haversine entre deux points GPS (en km). */
