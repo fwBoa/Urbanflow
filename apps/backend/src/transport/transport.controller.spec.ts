@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TransportController } from './transport.controller';
 import { PrimService } from './prim.service';
 import { CarbonService } from './carbon.service';
@@ -58,6 +59,10 @@ describe('TransportController', () => {
             findJourneys: jest.fn().mockResolvedValue([]),
             getAlerts: jest.fn().mockResolvedValue([]),
           },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
         },
       ],
     }).compile();

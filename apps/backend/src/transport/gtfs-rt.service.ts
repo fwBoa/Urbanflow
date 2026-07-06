@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AlertsUpdatedEvent } from '../notifications/events';
 
 export interface RealtimeAlert {
   id: string;
@@ -78,8 +80,12 @@ export class GtfsRtService {
   private alertsCache: RealtimeAlert[] = [];
   private alertsLastRefresh = 0;
   private readonly ALERTS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+  private isInitialRefresh = true;
 
-  constructor(private readonly httpService: HttpService) {
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
     this.primApiKey = process.env.PRIM_API_KEY || '';
     this.primApiUrl =
       process.env.PRIM_API_URL || 'https://prim.iledefrance-mobilites.fr';
@@ -216,11 +222,33 @@ export class GtfsRtService {
   }
 
   /**
-   * Cron: refresh alerts every 5 minutes
+   * Cron: refresh alerts every 5 minutes.
+   * Émet `alerts.updated` pour les alertes nouvellement détectées afin de
+   * déclencher les notifications push de manière événementielle.
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleCronRefresh() {
     this.logger.debug('Refreshing GTFS-RT alerts (cron)...');
-    await this.getAlerts().catch(() => {});
+    const previousIds = new Set(this.alertsCache.map((a) => a.id));
+    try {
+      const alerts = await this.getAlerts();
+      if (this.isInitialRefresh) {
+        this.isInitialRefresh = false;
+        this.logger.debug('Skipping initial alerts.updated emission on boot');
+        return;
+      }
+      const newAlerts = alerts.filter((a) => !previousIds.has(a.id));
+      if (newAlerts.length > 0) {
+        this.eventEmitter.emit(
+          'alerts.updated',
+          new AlertsUpdatedEvent(newAlerts),
+        );
+        this.logger.log(
+          `Emitted alerts.updated with ${newAlerts.length} new alert(s)`,
+        );
+      }
+    } catch {
+      // getAlerts loggue déjà l'erreur ; on ne bloque pas le cron.
+    }
   }
 }

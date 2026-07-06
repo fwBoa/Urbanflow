@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { of, throwError } from 'rxjs';
 import { GtfsRtService } from './gtfs-rt.service';
 
@@ -48,6 +49,10 @@ describe('GtfsRtService', () => {
               .fn()
               .mockReturnValue(of({ data: mockDisruptionsResponse } as any)),
           },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
         },
       ],
     }).compile();
@@ -105,6 +110,10 @@ describe('GtfsRtService', () => {
           {
             provide: HttpService,
             useValue: { get: jest.fn() },
+          },
+          {
+            provide: EventEmitter2,
+            useValue: { emit: jest.fn() },
           },
         ],
       }).compile();

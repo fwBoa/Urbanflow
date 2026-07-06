@@ -55,6 +55,14 @@ export class Notification {
   @Column({ name: 'action_url', type: 'varchar', length: 500, nullable: true })
   actionUrl: string | null;
 
+  @Column({
+    name: 'external_alert_id',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  externalAlertId: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

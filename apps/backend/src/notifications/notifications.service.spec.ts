@@ -21,6 +21,7 @@ describe('NotificationsService', () => {
     relatedLine: 'M1',
     relatedStop: null,
     actionUrl: null,
+    externalAlertId: null,
     createdAt: new Date(),
     user: undefined as any,
   };

@@ -1,11 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { User } from '../auth/user.entity';
 import { History } from '../favorites/history.entity';
 import { Notification } from '../notifications/notification.entity';
 import { GtfsParserService } from '../transport/gtfs-parser.service';
 import { PrimService } from '../transport/prim.service';
+import { BroadcastNotificationEvent } from '../notifications/events';
 
 @Injectable()
 export class AdminService {
@@ -18,6 +20,7 @@ export class AdminService {
     private readonly notifRepo: Repository<Notification>,
     private readonly gtfsParser: GtfsParserService,
     private readonly primService: PrimService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ─── Dashboard stats ────────────────────────────────────────────────────
@@ -193,23 +196,23 @@ export class AdminService {
       select: ['id'],
     });
 
-    const notifications = users.map((user) =>
-      this.notifRepo.create({
-        userId: user.id,
-        type: (body.type || 'info') as
+    if (users.length === 0) return 0;
+
+    this.eventEmitter.emit(
+      'broadcast.notification',
+      new BroadcastNotificationEvent(
+        body.title,
+        body.message,
+        (body.type || 'info') as
           | 'disruption'
           | 'delay'
           | 'info'
           | 'favorite_alert'
           | 'system',
-        title: body.title,
-        message: body.message,
-        relatedLine: body.lineId || null,
-        isRead: false,
-      }),
+        body.lineId,
+      ),
     );
 
-    await this.notifRepo.save(notifications);
     return users.length;
   }
 

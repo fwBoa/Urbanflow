@@ -2,12 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AdminService } from './admin.service';
 import { User } from '../auth/user.entity';
 import { History } from '../favorites/history.entity';
 import { Notification } from '../notifications/notification.entity';
 import { GtfsParserService } from '../transport/gtfs-parser.service';
 import { PrimService } from '../transport/prim.service';
+import { BroadcastNotificationEvent } from '../notifications/events';
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -15,6 +17,7 @@ describe('AdminService', () => {
   let historyRepo: Repository<History>;
   let notifRepo: Repository<Notification>;
   let gtfsParser: GtfsParserService;
+  let eventEmitter: EventEmitter2;
 
   const mockUser: Partial<User> = {
     id: 'user-123',
@@ -95,6 +98,10 @@ describe('AdminService', () => {
           provide: PrimService,
           useValue: mockPrimService,
         },
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -105,6 +112,7 @@ describe('AdminService', () => {
       getRepositoryToken(Notification),
     );
     gtfsParser = module.get<GtfsParserService>(GtfsParserService);
+    eventEmitter = module.get<EventEmitter2>(EventEmitter2);
   });
 
   afterEach(() => {
@@ -242,11 +250,9 @@ describe('AdminService', () => {
   });
 
   describe('broadcastNotification', () => {
-    it('should create notifications for all users with notifications enabled', async () => {
+    it('should emit broadcast.notification event for enabled users', async () => {
       const users = [{ id: 'user-1' }, { id: 'user-2' }] as User[];
       (userRepo.find as jest.Mock).mockResolvedValue(users);
-      (notifRepo.create as jest.Mock).mockImplementation((data) => data);
-      (notifRepo.save as jest.Mock).mockResolvedValue([]);
 
       const body = {
         title: 'Alert',
@@ -260,8 +266,20 @@ describe('AdminService', () => {
         where: { notificationsEnabled: true },
         select: ['id'],
       });
-      expect(notifRepo.create).toHaveBeenCalledTimes(2);
-      expect(notifRepo.save).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'broadcast.notification',
+        new BroadcastNotificationEvent(
+          body.title,
+          body.message,
+          body.type as
+            | 'disruption'
+            | 'delay'
+            | 'info'
+            | 'favorite_alert'
+            | 'system',
+          body.lineId,
+        ),
+      );
       expect(result).toBe(2);
     });
   });
