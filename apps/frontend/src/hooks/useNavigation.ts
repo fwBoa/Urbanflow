@@ -105,10 +105,7 @@ export function useNavigation(
   origin: { lat: number; lon: number } | null,
   destination: { lat: number; lon: number } | null,
 ) {
-  const { lat, lon, accuracy, heading, speed, startWatch, stopWatch, watching } = useGeolocation();
-  const [activeSegment, setActiveSegment] = useState(0);
-  const [arrived, setArrived] = useState(false);
-  const [offRoute, setOffRoute] = useState(false);
+  const { lat, lon, accuracy, heading, speed, startWatch, stopWatch } = useGeolocation();
   const [isNavigating, setIsNavigating] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -120,10 +117,7 @@ export function useNavigation(
   const startNavigation = useCallback(() => {
     setIsNavigating(true);
     setIsPaused(false);
-    setActiveSegment(0);
     setElapsedSeconds(0);
-    setArrived(false);
-    setOffRoute(false);
     lastSpokenRef.current = -1;
     startWatch(); // Activer le GPS continu
   }, [startWatch]);
@@ -135,9 +129,6 @@ export function useNavigation(
     setIsNavigating(false);
     setIsPaused(false);
     setElapsedSeconds(0);
-    setActiveSegment(0);
-    setArrived(false);
-    setOffRoute(false);
     lastSpokenRef.current = -1;
     stopWatch(); // Désactiver le GPS
     if (timerRef.current) clearInterval(timerRef.current);
@@ -192,7 +183,7 @@ export function useNavigation(
 
     if (!userPos || !origin || !destination || routePoints.length < 2) {
       return {
-        activeSegment,
+        activeSegment: 0,
         remainingDistance: 0,
         remainingTime: 0,
         currentSpeed: 0,
@@ -296,44 +287,36 @@ export function useNavigation(
       offRoute: isOffRoute,
       userPosition: userPos,
     };
-  }, [lat, lon, speed, routePoints, origin, destination, segments, activeSegment]);
-
-  // ─── Mettre à jour le segment actif et l'état arrivé ──────────────
-  useEffect(() => {
-    if (isNavigating && !isPaused) {
-      setActiveSegment(navState.activeSegment);
-      setArrived(navState.arrived);
-      setOffRoute(navState.offRoute);
-    }
-  }, [isNavigating, isPaused, navState.activeSegment, navState.arrived, navState.offRoute]);
+  }, [lat, lon, speed, routePoints, origin, destination, segments]);
 
   // ─── Vibration + Annonce vocale à chaque changement d'étape ────────
   useEffect(() => {
     if (!isNavigating || isPaused) return;
-    if (activeSegment !== lastSpokenRef.current && segments[activeSegment]) {
-      lastSpokenRef.current = activeSegment;
-      const seg = segments[activeSegment];
+    const segIdx = navState.activeSegment;
+    if (segIdx !== lastSpokenRef.current && segments[segIdx]) {
+      lastSpokenRef.current = segIdx;
+      const seg = segments[segIdx];
       const text =
         seg.type === "walking"
-          ? `Étape ${activeSegment + 1} : ${seg.instruction}`
+          ? `Étape ${segIdx + 1} : ${seg.instruction}`
           : `Montez dans le ${seg.mode || "transit"} direction ${seg.direction || seg.toStop || ""}`;
       Immersion.segmentChange(text);
     }
-  }, [activeSegment, isNavigating, isPaused, segments]);
+  }, [navState.activeSegment, isNavigating, isPaused, segments]);
 
   // ─── Annonce arrivée ─────────────────────────────────────────────
   useEffect(() => {
-    if (arrived && isNavigating) {
+    if (navState.arrived && isNavigating) {
       Immersion.arrived();
     }
-  }, [arrived, isNavigating]);
+  }, [navState.arrived, isNavigating]);
 
   // ─── Alerte hors trajet ──────────────────────────────────────────
   useEffect(() => {
-    if (offRoute && isNavigating) {
+    if (navState.offRoute && isNavigating) {
       Immersion.offRoute();
     }
-  }, [offRoute, isNavigating]);
+  }, [navState.offRoute, isNavigating]);
 
   // ─── Instruction de direction ──────────────────────────────────────
   const instruction = useMemo<NavigationInstruction>(() => {
@@ -369,10 +352,10 @@ export function useNavigation(
 
   // ─── Arrêt automatique si arrivé ────────────────────────────────────
   useEffect(() => {
-    if (arrived && isNavigating) {
+    if (navState.arrived && isNavigating) {
       // On ne stoppe pas automatiquement, on laisse l'utilisateur confirmer
     }
-  }, [arrived, isNavigating]);
+  }, [navState.arrived, isNavigating]);
 
   return {
     // État de navigation
@@ -405,3 +388,4 @@ export function useNavigation(
     heading,
   };
 }
+

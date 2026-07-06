@@ -101,6 +101,13 @@ export interface JourneySegment {
   headsign?: string;
   /** Temps d'attente estimé en minutes */
   waitTimeMinutes?: number;
+  /**
+   * Géométrie réelle du segment (paires [lon, lat]) — embarquée par Navitia
+   * dans chaque section (geojson LineString). Présente → la carte trace la
+   * vraie trajectoire sans lazy-load /shape/:id. Absente (itinéraire GTFS) →
+   * le frontend retombe sur shapeId.
+   */
+  geojson?: Array<[number, number]>;
 }
 
 /**

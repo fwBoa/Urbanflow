@@ -38,14 +38,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     // Check if user is already logged in on mount (cookie-based auth)
-    // The httpOnly cookie is sent automatically; we just check our session flag
+    // The httpOnly cookie is sent automatically; we just check our session flag.
+    // Synchronous loading update is part of the initialization flow.
     const authFlag = sessionStorage.getItem("urbanflow_authenticated");
     if (authFlag === "true") {
       refreshProfile().finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [refreshProfile]);
 
   const login = async (email: string, password: string) => {

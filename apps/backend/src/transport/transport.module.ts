@@ -10,17 +10,19 @@ import { CarbonService } from './carbon.service';
 import { OsrmService } from './osrm.service';
 import { GtfsRtService } from './gtfs-rt.service';
 import { GtfsDbService } from './gtfs-db.service';
+import { NavitiaService } from './navitia.service';
 
 /**
  * Module Transport — Intégration PRIM (Île-de-France Mobilités)
  *
- * Services :
- * - PrimService : Appels API PRIM (référentiels, temps réel, GTFS)
- * - GtfsParserService : Parsing des fichiers GTFS statiques
- * - JourneyService : Calcul d'itinéraires (algorithme RAPTOR-like)
- * - CarbonService : Calcul empreinte carbone (facteurs ADEME)
- * - OsrmService : Routing réel via OpenStreetMap (OSRM)
- * - GtfsRtService : Données temps réel GTFS-RT (alertes, retards)
+ * Architecture hybride :
+ * - NavitiaService : PRIMAIRE — itinéraires + alertes temps réel (PRIM Navitia v2)
+ * - JourneyService : REPLI hors-ligne — RAPTOR sur GTFS chargé en PostgreSQL
+ * - PrimService : Référentiels (lignes), Vélib, géocoding (IDFM Data API keyless)
+ * - GtfsParserService / GtfsDbService : Chargement + lectures GTFS (filet offline)
+ * - CarbonService : Empreinte carbone (facteurs ADEME)
+ * - OsrmService : Routing marche/vélo via OSRM
+ * - GtfsRtService : Conservé pour rétro-compat (supplanté par NavitiaService pour les alertes)
  */
 @Module({
   imports: [HttpModule, ScheduleModule.forRoot()],
@@ -33,6 +35,7 @@ import { GtfsDbService } from './gtfs-db.service';
     OsrmService,
     GtfsRtService,
     GtfsDbService,
+    NavitiaService,
   ],
   exports: [
     HttpModule,
@@ -43,6 +46,7 @@ import { GtfsDbService } from './gtfs-db.service';
     OsrmService,
     GtfsRtService,
     GtfsDbService,
+    NavitiaService,
   ],
 })
 export class TransportModule {}

@@ -3,19 +3,9 @@
  * Ce fichier ne doit PAS importer Leaflet pour éviter les erreurs SSR.
  */
 
-export const MODE_COLORS: Record<string, string> = {
-  marche: "#9E9E9E",
-  metro: "#003CA0",
-  rer: "#E2231A",
-  bus: "#FFBE00",
-  tram: "#7C2880",
-  velib: "#7CB342",
-  velib_electrique: "#7CB342",
-  train: "#6E6E6E",
-  transilien: "#6E6E6E",
-  ferry: "#0099CC",
-  car: "#333333",
-};
+import { MAP_MODE_COLORS } from "@/constants/mode-colors";
+
+export const MODE_COLORS = MAP_MODE_COLORS;
 
 export interface JourneySegmentForMap {
   mode: string;
@@ -42,6 +32,8 @@ export function journeyToSegments(
       toLon?: number;
       fromStop?: string;
       toStop?: string;
+      /** Géométrie réelle [lon, lat] embarquée par Navitia (sinon lignes droites). */
+      geojson?: Array<[number, number]>;
     }>;
   },
   originLat: number,
@@ -54,6 +46,24 @@ export function journeyToSegments(
   journey.segments.forEach((seg) => {
     const mode = (seg.mode || seg.type || "marche").toLowerCase();
     const color = seg.lineColor || MODE_COLORS[mode] || "#2E7D9B";
+
+    // Géométrie réelle embarquée (Navitia geojson [lon, lat]) : on trace la vraie
+    // trajectoire et on court-circuite le repli lignes droites / lazy-load /shape.
+    if (seg.geojson && seg.geojson.length >= 2) {
+      const points = seg.geojson
+        .map((c) => [c[1], c[0]] as [number, number]) // [lon, lat] → [lat, lon]
+        .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+      if (points.length >= 2) {
+        segments.push({
+          mode,
+          label: seg.lineName,
+          color,
+          points,
+          dashed: mode === "marche",
+        });
+      }
+      return;
+    }
 
     let fromLat: number;
     let fromLon: number;

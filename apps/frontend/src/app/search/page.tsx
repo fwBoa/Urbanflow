@@ -2,40 +2,26 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Zap, Leaf, MapPin, Navigation, Clock, Loader2, Building2, Train, Bus, Bike, AlertTriangle, AlertOctagon, X, ChevronRight } from "lucide-react";
+import { Zap, Leaf, MapPin, Loader2, Train, Bus, Bike, AlertTriangle, AlertOctagon } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import SearchBar from "@/components/SearchBar";
+import SearchAutocomplete from "@/components/SearchAutocomplete";
 import FilterChip from "@/components/FilterChip";
 import TripCard from "@/components/TripCard";
 import DynamicMap from "@/components/DynamicMap";
+import NearbyStopDrawer from "@/components/NearbyStopDrawer";
 import { journeyToSegments } from "@/components/journey-helpers";
 import JourneyLineLazy from "@/components/JourneyLineLoader";
+import { UI_MODE_COLORS } from "@/constants/mode-colors";
 import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute, useNearbyStops, useStopTimes } from "@/hooks/useTransport";
 import { useGeolocation } from "@/hooks/useGeolocation";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { addToHistory } from "@/services/favorites";
-import type { PrimStop, GeocodeResult } from "@/services/api";
-
-// ─── Types pour l'autocomplete fusionné ────────────────────────────────
-type SuggestionItem =
-  | { type: "stop"; data: PrimStop }
-  | { type: "address"; data: GeocodeResult };
+import type { SuggestionItem } from "@/components/SearchAutocomplete";
 
 const filters = [
   { key: "fast", label: "Rapide", icon: <Zap size={14} /> },
   { key: "eco", label: "Éco", icon: <Leaf size={14} /> },
 ];
-
-// Mode de transport icône selon le type d'arrêt
-function getStopIcon(arrtype: string) {
-  switch (arrtype) {
-    case "metro": return <Train size={14} className="text-[var(--color-metro)]" />;
-    case "bus": return <Bus size={14} className="text-[var(--color-bus)]" />;
-    case "rer":
-    case "train": return <Train size={14} className="text-[var(--color-rer)]" />;
-    case "tram": return <Train size={14} className="text-[var(--color-tram)]" />;
-    default: return <MapPin size={14} className="text-[var(--color-primary)]" />;
-  }
-}
 
 const DEFAULT_MAP_CENTER: [number, number] = [48.8566, 2.3522];
 
@@ -89,12 +75,12 @@ function SearchPageContent() {
   };
 
   // ─── Géolocalisation ─────────────────────────────────────────────────
-  const { lat: userLat, lon: userLon, accuracy: userAccuracy, loading: geoLoading, error: geoError, watching: isWatching, locate, startWatch, stopWatch } = useGeolocation();
+  const { lat: userLat, lon: userLon, accuracy: userAccuracy, watching: isWatching, locate, startWatch, stopWatch } = useGeolocation();
   const [followUser, setFollowUser] = useState(false);
   const { reverseGeocode } = useReverseGeocode();
   const { stops: nearbyStops, loading: nearbyLoading } = useNearbyStops(userLat, userLon, 0.5, 6);
-  const { geometry: routeGeometry, fetchRoute } = useRoute();
-  const [clickTarget, setClickTarget] = useState<"origin" | "destination" | null>(null);
+  const { fetchRoute } = useRoute();
+  const reducedMotion = usePrefersReducedMotion();
 
   // Erreur si la position GPS est hors de la zone couverte
   const [positionError, setPositionError] = useState<string | null>(null);
@@ -196,20 +182,6 @@ function SearchPageContent() {
     selectedModes.length > 0 ? selectedModes : undefined,
   );
 
-  // ─── Fusionner les suggestions : arrêts en premier, puis adresses ────
-  const originSuggestions: SuggestionItem[] = useMemo(() => {
-    const items: SuggestionItem[] = [];
-    originStops.slice(0, 3).forEach((s) => items.push({ type: "stop", data: s }));
-    originAddresses.slice(0, 3).forEach((a) => items.push({ type: "address", data: a }));
-    return items;
-  }, [originStops, originAddresses]);
-
-  const destSuggestions: SuggestionItem[] = useMemo(() => {
-    const items: SuggestionItem[] = [];
-    destStops.slice(0, 3).forEach((s) => items.push({ type: "stop", data: s }));
-    destAddresses.slice(0, 3).forEach((a) => items.push({ type: "address", data: a }));
-    return items;
-  }, [destStops, destAddresses]);
 
   // Build map markers from search results
   const mapMarkers = useMemo(() => {
@@ -244,28 +216,32 @@ function SearchPageContent() {
   }, [selectedOrigin, selectedDest, originStops, destStops, origin, destination]);
 
   // Build polyline from OSRM route (real geometry) or fallback to straight line
-  const [mapPolyline, setMapPolyline] = useState<[number, number][]>([]);
+  const [routePolyline, setRoutePolyline] = useState<[number, number][]>([]);
+
+  const fallbackPolyline = useMemo(() => {
+    if (mapMarkers.length >= 2) return mapMarkers.map((m) => m.position);
+    return [];
+  }, [mapMarkers]);
 
   useEffect(() => {
-    if (selectedOrigin && selectedDest) {
-      fetchRoute(selectedOrigin.lat, selectedOrigin.lon, selectedDest.lat, selectedDest.lon, 'foot')
-        .then((coords) => {
-          if (coords.length > 0) {
-            setMapPolyline(coords);
-          } else {
-            setMapPolyline([
-              [selectedOrigin.lat, selectedOrigin.lon],
-              [selectedDest.lat, selectedDest.lon],
-            ]);
-          }
-        });
-    } else if (mapMarkers.length >= 2) {
-      setMapPolyline(mapMarkers.map((m) => m.position));
-    } else {
-      setMapPolyline([]);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedOrigin, selectedDest]);
+    if (!selectedOrigin || !selectedDest) return;
+    let cancelled = false;
+    fetchRoute(selectedOrigin.lat, selectedOrigin.lon, selectedDest.lat, selectedDest.lon, 'foot')
+      .then((coords) => {
+        if (cancelled) return;
+        if (coords.length > 0) {
+          setRoutePolyline(coords);
+        } else {
+          setRoutePolyline([
+            [selectedOrigin.lat, selectedOrigin.lon],
+            [selectedDest.lat, selectedDest.lon],
+          ]);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [selectedOrigin, selectedDest, fetchRoute]);
+
+  const mapPolyline = routePolyline.length > 0 ? routePolyline : fallbackPolyline;
 
   // Sort journeys based on active filter
   const sortedJourneys = useMemo(() => {
@@ -318,9 +294,6 @@ function SearchPageContent() {
     }
   };
 
-  // ─── Réinitialiser un champ ─────────────────────────────────────────
-  const clearOrigin = () => { setOrigin(""); setSelectedOrigin(null); };
-  const clearDest = () => { setDestination(""); setSelectedDest(null); };
 
   // Get mode label from segments
   const getModeLabel = (journey: typeof journeys[0]) => {
@@ -334,9 +307,9 @@ function SearchPageContent() {
   const getModeColor = (journey: typeof journeys[0]) => {
     const transitSegments = journey.segments.filter((s) => s.type === "transit");
     const velibSegments = journey.segments.filter((s) => s.type === "velib");
-    if (velibSegments.length > 0 && transitSegments.length === 0) return "#7CB342";
-    if (transitSegments.length === 0) return "#9E9E9E";
-    return transitSegments[0]?.lineColor || "#2E7D9B";
+    if (velibSegments.length > 0 && transitSegments.length === 0) return UI_MODE_COLORS.velib;
+    if (transitSegments.length === 0) return UI_MODE_COLORS.marche;
+    return transitSegments[0]?.lineColor || UI_MODE_COLORS.metro;
   };
 
   // Handle trip click — save to history and navigate
@@ -362,43 +335,6 @@ function SearchPageContent() {
       query.set("destLon", String(selectedDest.lon));
     }
     router.push(`/trip/${index}?${query.toString()}`);
-  };
-
-  // ─── Rendu d'une suggestion ────────────────────────────────────────
-  const renderSuggestion = (item: SuggestionItem, index: number, onSelect: (item: SuggestionItem) => void, iconColor: string) => {
-    if (item.type === "stop") {
-      const stop = item.data;
-      const modesText = stop.arrmodes?.length ? stop.arrmodes.join(" · ") : "Arrêt";
-      return (
-        <button
-          key={`stop-${stop.arrid}-${index}`}
-          className="w-full text-left px-3 py-2 hover:bg-[var(--color-surface)] text-sm flex items-center gap-2"
-          onClick={() => onSelect(item)}
-        >
-          {getStopIcon(stop.arrtype)}
-          <div className="flex-1 min-w-0">
-            <span className="truncate block">{stop.arrname}</span>
-            <span className="text-[var(--color-text-tertiary)] text-xs truncate block">
-              {stop.arrmodes?.length ? `${modesText} · ${stop.arrtown}` : `${stop.arrtown} · Arrêt`}
-            </span>
-          </div>
-        </button>
-      );
-    }
-    const addr = item.data;
-    return (
-      <button
-        key={`addr-${addr.label}-${index}`}
-        className="w-full text-left px-3 py-2 hover:bg-[var(--color-surface)] text-sm flex items-center gap-2"
-        onClick={() => onSelect(item)}
-      >
-        <Building2 size={14} style={{ color: iconColor }} />
-        <div className="flex-1 min-w-0">
-          <span className="truncate block">{addr.label}</span>
-          <span className="text-[var(--color-text-tertiary)] text-xs">{addr.postcode} {addr.city} · Adresse</span>
-        </div>
-      </button>
-    );
   };
 
   return (
@@ -464,18 +400,21 @@ function SearchPageContent() {
       {/* Search inputs */}
       <div className="space-y-3 mb-4">
         {/* Origin */}
-        <div className="relative">
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <SearchBar
-                placeholder={isVelibMode ? "Station Vélib' proche de…" : modeTitle ? `Arrêt ${modeTitle} proche de…` : "D'où partez-vous ? (arrêt ou adresse)"}
-                value={origin}
-                onChange={(v) => { setOrigin(v); if (selectedOrigin) setSelectedOrigin(null); }}
-              />
-            </div>
+        <SearchAutocomplete
+          placeholder={isVelibMode ? "Station Vélib' proche de…" : modeTitle ? `Arrêt ${modeTitle} proche de…` : "D'où partez-vous ? (arrêt ou adresse)"}
+          value={origin}
+          onChange={(v) => { setOrigin(v); if (selectedOrigin) setSelectedOrigin(null); }}
+          onSelect={handleOriginSelect}
+          onSubmit={() => {}}
+          stopSuggestions={originStops}
+          addressSuggestions={originAddresses}
+          addressIconColor="#2E7D9B"
+          isLoading={false}
+          rightElement={
             <button
+              type="button"
               onClick={useMyPosition}
-              className="shrink-0 w-10 h-10 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center hover:bg-[var(--color-primary)]/10 transition-colors"
+              className="shrink-0 w-10 h-10 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center hover:bg-[var(--color-primary)]/10 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-colors"
               aria-label="Utiliser ma position"
               title="Utiliser ma position"
             >
@@ -484,105 +423,39 @@ function SearchPageContent() {
                 <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
               </svg>
             </button>
-            {/* Message d'erreur si position hors zone */}
-            {positionError && (
-              <div className="col-span-full mt-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
-                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                {positionError}
-              </div>
-            )}
-            {selectedOrigin && (
-              <button
-                onClick={clearOrigin}
-                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] px-1"
-                aria-label="Effacer le départ"
-              >
-                ✕
-              </button>
-            )}
+          }
+        />
+
+        {/* Message d'erreur si position hors zone */}
+        {positionError && (
+          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            {positionError}
           </div>
-          {/* Origin suggestions — fusionné arrêts + adresses */}
-          {origin && !selectedOrigin && (
-            <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-[var(--color-border)] max-h-52 overflow-y-auto">
-              {originSuggestions.length > 0 ? (
-                <>
-                  {originStops.length > 0 && (
-                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
-                      🚉 Arrêts
-                    </div>
-                  )}
-                  {originSuggestions.filter(s => s.type === "stop").map((s, i) => renderSuggestion(s, i, handleOriginSelect, "#2E7D9B"))}
-                  {originAddresses.length > 0 && (
-                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider border-t border-[var(--color-border)]">
-                      📍 Adresses
-                    </div>
-                  )}
-                  {originSuggestions.filter(s => s.type === "address").map((s, i) => renderSuggestion(s, i, handleOriginSelect, "#2E7D9B"))}
-                </>
-              ) : (
-                <div className="px-3 py-3 text-xs text-[var(--color-text-tertiary)] text-center">
-                  Aucun résultat à Paris. UrbanFlow couvre uniquement Paris et ses arrêts de transport.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Destination */}
-        <div className="relative">
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <SearchBar
-                placeholder={isVelibMode ? "Où voulez-vous aller en Vélib' ?" : modeTitle ? `Où allez-vous en ${modeTitle} ?` : "Où allez-vous ? (arrêt ou adresse)"}
-                value={destination}
-                onChange={(v) => { setDestination(v); if (selectedDest) setSelectedDest(null); }}
-              />
-            </div>
-            {selectedDest && (
-              <button
-                onClick={clearDest}
-                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] px-1"
-                aria-label="Effacer la destination"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          {/* Destination suggestions — fusionné arrêts + adresses */}
-          {destination && !selectedDest && (
-            <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-[var(--color-border)] max-h-52 overflow-y-auto">
-              {destSuggestions.length > 0 ? (
-                <>
-                  {destStops.length > 0 && (
-                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
-                      🚉 Arrêts
-                    </div>
-                  )}
-                  {destSuggestions.filter(s => s.type === "stop").map((s, i) => renderSuggestion(s, i, handleDestSelect, "#FF6B35"))}
-                  {destAddresses.length > 0 && (
-                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider border-t border-[var(--color-border)]">
-                      📍 Adresses
-                    </div>
-                  )}
-                  {destSuggestions.filter(s => s.type === "address").map((s, i) => renderSuggestion(s, i, handleDestSelect, "#FF6B35"))}
-                </>
-              ) : (
-                <div className="px-3 py-3 text-xs text-[var(--color-text-tertiary)] text-center">
-                  Aucun résultat à Paris. UrbanFlow couvre uniquement Paris et ses arrêts de transport.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <SearchAutocomplete
+          placeholder={isVelibMode ? "Où voulez-vous aller en Vélib' ?" : modeTitle ? `Où allez-vous en ${modeTitle} ?` : "Où allez-vous ? (arrêt ou adresse)"}
+          value={destination}
+          onChange={(v) => { setDestination(v); if (selectedDest) setSelectedDest(null); }}
+          onSelect={handleDestSelect}
+          onSubmit={() => {}}
+          stopSuggestions={destStops}
+          addressSuggestions={destAddresses}
+          addressIconColor="#FF6B35"
+          isLoading={false}
+        />
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1" role="group" aria-label="Trier les résultats">
         {filters.map((f) => (
           <FilterChip
             key={f.key}
             label={f.label}
             icon={f.icon}
+            variant="filter"
             active={activeFilter === f.key}
             onClick={() => setActiveFilter(f.key)}
           />
@@ -590,12 +463,13 @@ function SearchPageContent() {
       </div>
 
       {/* Transport mode selection */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1" role="group" aria-label="Filtrer par mode de transport">
         {transportModes.map((m) => (
           <FilterChip
             key={m.key}
             label={m.label}
             icon={m.icon}
+            variant="mode"
             active={selectedModes.includes(m.key)}
             onClick={() => toggleMode(m.key)}
           />
@@ -623,7 +497,12 @@ function SearchPageContent() {
       </div>
       {/* Tracé animé multi-segments (au-dessus de la carte) */}
       {journeySegments.length > 0 && (
-        <JourneyLineLazy map={mapInstance} segments={journeySegments} />
+        <JourneyLineLazy
+          map={mapInstance}
+          segments={journeySegments}
+          animateDash={!reducedMotion}
+          duration={reducedMotion ? 0 : 1.4}
+        />
       )}
       {/* Click-on-map hint */}
       {(!selectedOrigin || !selectedDest) && (
@@ -733,100 +612,17 @@ function SearchPageContent() {
       </div>
 
       {/* ─── Drawer prochains départs ────────────────────────────────── */}
-      {selectedNearbyStop && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/40 z-40"
-            onClick={() => setSelectedNearbyStop(null)}
-          />
-          {/* Sheet */}
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[var(--card-radius)] shadow-2xl border-t border-[var(--color-border)] max-h-[70vh] overflow-y-auto">
-            <div className="p-4">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">{selectedNearbyStop.name}</p>
-                  <p className="text-[11px] text-[var(--color-text-tertiary)]">
-                    Prochains départs
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSelectedNearbyStop(null)}
-                  className="w-8 h-8 rounded-full bg-[var(--color-surface)] flex items-center justify-center hover:bg-gray-100"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {/* Action : utiliser comme départ */}
-              <button
-                onClick={() => {
-                  setOrigin(selectedNearbyStop.name);
-                  setSelectedOrigin({ lat: selectedNearbyStop.lat, lon: selectedNearbyStop.lon });
-                  setSelectedNearbyStop(null);
-                }}
-                className="w-full mb-4 h-10 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary-dark)] transition-colors flex items-center justify-center gap-2"
-              >
-                <MapPin size={14} />
-                Définir comme départ
-              </button>
-
-              {/* Liste des départs */}
-              <div className="space-y-2">
-                {stopTimesLoading && (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 size={20} className="animate-spin text-[var(--color-primary)]" />
-                  </div>
-                )}
-                {!stopTimesLoading && stopDepartures.length === 0 && (
-                  <div className="text-center py-4 text-sm text-[var(--color-text-tertiary)]">
-                    Aucun départ prévu prochainement
-                  </div>
-                )}
-                {!stopTimesLoading && stopDepartures.map((dep) => (
-                  <div
-                    key={`${dep.tripId}-${dep.departureTime}`}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]"
-                  >
-                    {/* Badge ligne */}
-                    <span
-                      className="shrink-0 inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-bold text-white min-w-[3rem]"
-                      style={{ backgroundColor: dep.lineColor }}
-                    >
-                      {dep.lineName}
-                    </span>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-                        {dep.headsign}
-                      </p>
-                      {dep.platform && (
-                        <p className="text-[11px] text-[var(--color-text-tertiary)]">
-                          Voie {dep.platform}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-[var(--color-primary)]">
-                        {dep.departureTime.slice(0, 5)}
-                      </p>
-                      <p className="text-[11px] text-[var(--color-text-tertiary)]">
-                        {dep.waitMinutes <= 0
-                          ? "À l'approche"
-                          : dep.waitMinutes === 1
-                            ? "1 min"
-                            : `${dep.waitMinutes} min`}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+      <NearbyStopDrawer
+        stop={selectedNearbyStop}
+        departures={stopDepartures}
+        loading={stopTimesLoading}
+        onClose={() => setSelectedNearbyStop(null)}
+        onUseAsOrigin={(s) => {
+          setOrigin(s.name);
+          setSelectedOrigin({ lat: s.lat, lon: s.lon });
+          setSelectedNearbyStop(null);
+        }}
+      />
     </AppShell>
   );
 }
