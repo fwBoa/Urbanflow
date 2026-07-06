@@ -531,7 +531,7 @@ export class TransportController {
     if (lineNames.length === 0 || alerts.length === 0) return [];
 
     const normalize = (s: string) =>
-      s.toUpperCase().replace(/\s+/g, ' ').trim().replace(/[\-_]/g, ' ');
+      s.toUpperCase().replace(/\s+/g, ' ').trim().replace(/[-_]/g, ' ');
 
     return alerts.filter((alert) =>
       alert.affectedRoutes.some((route) => {
@@ -559,12 +559,14 @@ export class TransportController {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const validProfile: 'foot' | 'bike' | 'car' =
+      profile === 'bike' || profile === 'car' ? profile : 'foot';
     const result = await this.osrmService.getRoute(
       parseFloat(originLat),
       parseFloat(originLon),
       parseFloat(destLat),
       parseFloat(destLon),
-      (profile as any) || 'foot',
+      validProfile,
     );
     if (!result) {
       throw new HttpException(
@@ -686,7 +688,7 @@ export class TransportController {
     const bikeMinutes = Math.round((distanceKm / 15) * 60);
     const walkMinutes = Math.round((distanceKm / 4.5) * 60);
 
-    const journeys: any[] = [];
+    const journeys: JourneyResult[] = [];
 
     // ─── 1. Trajet transit (si on a trouvé une ligne) ─────────────────
     if (lineName) {

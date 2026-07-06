@@ -1,10 +1,20 @@
-import { Injectable, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { User } from './user.entity';
-import { RegisterDto, LoginDto, UpdateProfileDto, ConsentDto } from './auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  UpdateProfileDto,
+  ConsentDto,
+} from './auth.dto';
 import { FavoritesService } from '../favorites/favorites.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -32,7 +42,9 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
-    const existing = await this.userRepo.findOne({ where: { email: dto.email } });
+    const existing = await this.userRepo.findOne({
+      where: { email: dto.email },
+    });
     if (existing) {
       throw new ConflictException('Un compte avec cet email existe déjà');
     }
@@ -57,7 +69,10 @@ export class AuthService {
       throw new UnauthorizedException('Email ou mot de passe incorrect');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      user.passwordHash,
+    );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Email ou mot de passe incorrect');
     }
@@ -77,7 +92,10 @@ export class AuthService {
     return this.sanitizeUser(user);
   }
 
-  async updateProfile(userId: string, dto: UpdateProfileDto): Promise<AuthResponse['user']> {
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+  ): Promise<AuthResponse['user']> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) {
       throw new UnauthorizedException('Utilisateur non trouvé');
@@ -86,7 +104,8 @@ export class AuthService {
     if (dto.displayName !== undefined) user.displayName = dto.displayName;
     if (dto.avatar !== undefined) user.avatar = dto.avatar;
     if (dto.preferredMode !== undefined) user.preferredMode = dto.preferredMode;
-    if (dto.accessibilityNeeds !== undefined) user.accessibilityNeeds = dto.accessibilityNeeds;
+    if (dto.accessibilityNeeds !== undefined)
+      user.accessibilityNeeds = dto.accessibilityNeeds;
 
     const saved = await this.userRepo.save(user);
     return this.sanitizeUser(saved);
@@ -104,7 +123,10 @@ export class AuthService {
     }
     // Soft-delete: TypeORM DeleteDateColumn sets deletedAt
     await this.userRepo.softDelete(userId);
-    return { message: 'Compte supprimé. Vos données seront définitivement effacées sous 30 jours.' };
+    return {
+      message:
+        'Compte supprimé. Vos données seront définitivement effacées sous 30 jours.',
+    };
   }
 
   // ─── RGPD: Droit à la portabilité (Art. 20) ───
@@ -140,7 +162,10 @@ export class AuthService {
   }
 
   // ─── RGPD: Gestion du consentement (§9.2) ───
-  async updateConsent(userId: string, dto: ConsentDto): Promise<AuthResponse['user']> {
+  async updateConsent(
+    userId: string,
+    dto: ConsentDto,
+  ): Promise<AuthResponse['user']> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('Utilisateur non trouvé');
@@ -155,7 +180,12 @@ export class AuthService {
   }
 
   // ─── RGPD: Vérifier le consentement géoloc ───
-  async getConsent(userId: string): Promise<{ consentGeoloc: boolean; consentCookies: boolean; consentHistory: boolean; consentDate: Date | null }> {
+  async getConsent(userId: string): Promise<{
+    consentGeoloc: boolean;
+    consentCookies: boolean;
+    consentHistory: boolean;
+    consentDate: Date | null;
+  }> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('Utilisateur non trouvé');
@@ -189,7 +219,10 @@ export class AuthService {
   }
 
   // ─── Notification preferences ───
-  async updateNotificationsPreference(userId: string, enabled: boolean): Promise<{ enabled: boolean }> {
+  async updateNotificationsPreference(
+    userId: string,
+    enabled: boolean,
+  ): Promise<{ enabled: boolean }> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('Utilisateur non trouvé');

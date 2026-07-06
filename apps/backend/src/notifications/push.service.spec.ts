@@ -125,7 +125,10 @@ describe('PushService', () => {
     });
 
     it('updates existing subscription when endpoint already registered', async () => {
-      const existing = { ...mockPushSubscription, userId: 'old-user' } as PushSubscription;
+      const existing = {
+        ...mockPushSubscription,
+        userId: 'old-user',
+      };
       jest.spyOn(repo, 'findOne').mockResolvedValue(existing);
       jest.spyOn(repo, 'save').mockResolvedValue(existing);
 
@@ -141,7 +144,10 @@ describe('PushService', () => {
   describe('unsubscribe', () => {
     it('deletes subscription belonging to user and endpoint', async () => {
       jest.spyOn(repo, 'delete').mockResolvedValue({ affected: 1, raw: [] });
-      const result = await service.unsubscribe('user-123', mockSubscription.endpoint);
+      const result = await service.unsubscribe(
+        'user-123',
+        mockSubscription.endpoint,
+      );
       expect(result).toBe(true);
       expect(repo.delete).toHaveBeenCalledWith({
         userId: 'user-123',
@@ -165,7 +171,9 @@ describe('PushService', () => {
 
     it('sends push to all subscriptions', async () => {
       jest.spyOn(repo, 'find').mockResolvedValue([mockPushSubscription]);
-      (webpush.sendNotification as jest.Mock).mockResolvedValue({ statusCode: 201 });
+      (webpush.sendNotification as jest.Mock).mockResolvedValue({
+        statusCode: 201,
+      });
 
       await service.sendToUser('user-123', { title: 'T', body: 'B' });
 
@@ -174,14 +182,25 @@ describe('PushService', () => {
           endpoint: mockSubscription.endpoint,
           keys: mockSubscription.keys,
         },
-        JSON.stringify({ title: 'T', body: 'B', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png' }),
+        JSON.stringify({
+          title: 'T',
+          body: 'B',
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+        }),
       );
     });
 
     it('removes expired subscriptions (410) and keeps others', async () => {
-      const sub2 = { ...mockPushSubscription, id: 'sub-2', endpoint: 'endpoint-2' } as PushSubscription;
+      const sub2 = {
+        ...mockPushSubscription,
+        id: 'sub-2',
+        endpoint: 'endpoint-2',
+      };
       jest.spyOn(repo, 'find').mockResolvedValue([mockPushSubscription, sub2]);
-      const removeSpy = jest.spyOn(repo, 'remove').mockResolvedValue(mockPushSubscription);
+      const removeSpy = jest
+        .spyOn(repo, 'remove')
+        .mockResolvedValue(mockPushSubscription);
 
       (webpush.sendNotification as jest.Mock)
         .mockRejectedValueOnce({ statusCode: 410, message: 'Gone' })

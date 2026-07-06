@@ -3,14 +3,11 @@ import { Cron } from '@nestjs/schedule';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
-import * as AdmZip from 'adm-zip';
+import AdmZip from 'adm-zip';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { GtfsDbService } from './gtfs-db.service';
-
-// Workaround: adm-zip default export needs .default in ESM/TS contexts
-const AdmZipClass = (AdmZip as any).default || AdmZip;
 
 /**
  * Types GTFS — Structures de données pour les fichiers GTFS statiques
@@ -151,7 +148,7 @@ export class GtfsParserService implements OnModuleInit {
    * Auto-load GTFS data at startup
    * Downloads the PRIM GTFS ZIP if not cached, then loads it into PostgreSQL.
    */
-  async onModuleInit() {
+  onModuleInit() {
     this.logger.log(
       'GtfsParserService initializing — GTFS auto-load lancé en arrière-plan (non bloquant).',
     );
@@ -247,7 +244,7 @@ export class GtfsParserService implements OnModuleInit {
         const maxAgeMs = 8 * 60 * 60 * 1000; // 8 hours
         if (ageMs < maxAgeMs && stats.size > 1000000) {
           // Validation structurelle : tous les fichiers requis présents et de taille cohérente
-          const validation = await this.validateGtfsZip(zipPath);
+          const validation = this.validateGtfsZip(zipPath);
           if (validation.valid) {
             this.logger.log(
               `Using cached GTFS ZIP (${Math.round(ageMs / 60000)} minutes old, ${(validation.size / 1024 / 1024).toFixed(1)} MB)`,
@@ -277,7 +274,7 @@ export class GtfsParserService implements OnModuleInit {
         try {
           this.logger.log(`Trying GTFS source: ${source.name}...`);
           const response = await firstValueFrom(
-            this.httpService.get(source.url, {
+            this.httpService.get<ArrayBuffer>(source.url, {
               responseType: 'arraybuffer',
               headers: source.headers,
               timeout: 180000, // 3 minutes timeout (GTFS files can be large)
@@ -325,9 +322,11 @@ export class GtfsParserService implements OnModuleInit {
    * Valide qu'un fichier GTFS ZIP contient les fichiers requis
    * @returns true si tous les fichiers essentiels sont présents
    */
-  private async validateGtfsZip(
-    zipPath: string,
-  ): Promise<{ valid: boolean; missing: string[]; size: number }> {
+  private validateGtfsZip(zipPath: string): {
+    valid: boolean;
+    missing: string[];
+    size: number;
+  } {
     const REQUIRED_FILES = [
       'stops.txt',
       'routes.txt',
@@ -352,8 +351,8 @@ export class GtfsParserService implements OnModuleInit {
       if (stats.size < 1_000_000) {
         return { valid: false, missing: REQUIRED_FILES, size: stats.size };
       }
-      const zip = new AdmZipClass(zipPath);
-      const entries = zip.getEntries().map((e: any) => e.entryName);
+      const zip = new AdmZip(zipPath);
+      const entries = zip.getEntries().map((e) => e.entryName);
       const missing: string[] = [];
       for (const req of REQUIRED_FILES) {
         if (!entries.includes(req)) {
@@ -375,7 +374,7 @@ export class GtfsParserService implements OnModuleInit {
       }
       void OPTIONAL_FILES; // conservé pour lisibilité (shapes = lazy disque)
       return { valid: missing.length === 0, missing, size: stats.size };
-    } catch (e) {
+    } catch {
       return { valid: false, missing: REQUIRED_FILES, size: 0 };
     }
   }
@@ -524,7 +523,7 @@ export class GtfsParserService implements OnModuleInit {
         );
       } else {
         this.logger.log('Extracting GTFS ZIP…');
-        const zip = new AdmZipClass(zipPath);
+        const zip = new AdmZip(zipPath);
         zip.extractAllTo(extractDir, true);
         try {
           const zipStat = fs.statSync(zipPath);
@@ -662,10 +661,11 @@ export class GtfsParserService implements OnModuleInit {
       } finally {
         client.release();
       }
-    } catch (error) {
+    } catch (error: unknown) {
       // Rechargement atomique échoué : on nettoie le staging résiduel. Les
       // tables live restent intactes (la bascule a été roulée back ou n'a jamais
       // eu lieu) et loaded reste TRUE → aucun 503, aucune perte de données.
+      const err = error instanceof Error ? error : new Error(String(error));
       try {
         await this.gtfsDb.cleanupStaging();
       } catch (cleanupErr) {
@@ -673,11 +673,8 @@ export class GtfsParserService implements OnModuleInit {
           `cleanupStaging failed (ignored): ${cleanupErr instanceof Error ? cleanupErr.message : cleanupErr}`,
         );
       }
-      this.logger.error(
-        `Failed to load GTFS data: ${error.message}`,
-        error.stack,
-      );
-      throw error;
+      this.logger.error(`Failed to load GTFS data: ${err.message}`, err.stack);
+      throw err;
     }
   }
 
@@ -711,7 +708,7 @@ export class GtfsParserService implements OnModuleInit {
     // écriture en backpressure) au-delà du seuil de 10 → warning fuite. Les
     // listeners 'once' se retirent seuls après déclenchement (pas de vraie
     // fuite), on relève juste le seuil pour couvrir les grosses tables.
-    (ingest as any).setMaxListeners?.(0);
+    ingest.setMaxListeners?.(0);
 
     const headerIdx: Record<string, number> = {};
     let headerParsed = false;
@@ -721,64 +718,64 @@ export class GtfsParserService implements OnModuleInit {
     let lastDrain = 0;
 
     const writeLine = async (line: string): Promise<void> => {
-      const ok = (ingest as any).write(line + '\n');
+      const ok = ingest.write(line + '\n');
       if (!ok) {
-        await new Promise<void>((resolve) =>
-          (ingest as any).once('drain', resolve),
-        );
+        await new Promise<void>((resolve) => ingest.once('drain', resolve));
         lastDrain = scanned;
       }
     };
 
     await new Promise<void>((resolve, reject) => {
-      (ingest as any).on('error', reject);
-      (ingest as any).on('finish', resolve);
+      ingest.on('error', reject);
+      ingest.on('finish', resolve);
 
       const rl = readline.createInterface({
         input: fs.createReadStream(filePath, { encoding: 'utf-8' }),
         crlfDelay: Infinity,
       });
 
-      rl.on('line', async (rawLine: string) => {
-        const line = rawLine.trim();
-        if (!line) return;
+      rl.on('line', (rawLine: string) => {
+        void (async () => {
+          const line = rawLine.trim();
+          if (!line) return;
 
-        if (!headerParsed) {
-          headerParsed = true;
-          const headers = line
-            .split(',')
-            .map((h) => h.trim().replace(/"/g, ''));
-          headers.forEach((h, i) => (headerIdx[h] = i));
-          return;
-        }
+          if (!headerParsed) {
+            headerParsed = true;
+            const headers = line
+              .split(',')
+              .map((h) => h.trim().replace(/"/g, ''));
+            headers.forEach((h, i) => (headerIdx[h] = i));
+            return;
+          }
 
-        scanned++;
-        const cols = this.parseCsvLine(line);
-        const out = pickRow(cols, headerIdx);
-        if (out) {
-          kept++;
-          const csvLine = out.map((v) => this.csvEscape(v)).join(',');
-          void writeLine(csvLine);
-        }
+          scanned++;
+          const cols = this.parseCsvLine(line);
+          const out = pickRow(cols, headerIdx);
+          if (out) {
+            kept++;
+            const csvLine = out.map((v) => this.csvEscape(v)).join(',');
+            await writeLine(csvLine);
+          }
 
-        // Progression + cession de l'event loop (fichiers massifs).
-        if (progressName && scanned - lastProgress >= 1_000_000) {
-          lastProgress = scanned;
-          this.logger.log(
-            `${progressName}: ${scanned.toLocaleString('fr-FR')} lignes parcourues, ` +
-              `${kept.toLocaleString('fr-FR')} conservées…`,
-          );
-        }
-        if (scanned - lastDrain >= 50_000) {
-          lastDrain = scanned;
-          // Cède la main pour ne pas bloquer l'event loop (API + app.listen)
-          // et laisser PG drainer le flux COPY.
-          await new Promise<void>((r) => setImmediate(r));
-        }
+          // Progression + cession de l'event loop (fichiers massifs).
+          if (progressName && scanned - lastProgress >= 1_000_000) {
+            lastProgress = scanned;
+            this.logger.log(
+              `${progressName}: ${scanned.toLocaleString('fr-FR')} lignes parcourues, ` +
+                `${kept.toLocaleString('fr-FR')} conservées…`,
+            );
+          }
+          if (scanned - lastDrain >= 50_000) {
+            lastDrain = scanned;
+            // Cède la main pour ne pas bloquer l'event loop (API + app.listen)
+            // et laisser PG drainer le flux COPY.
+            await new Promise<void>((r) => setImmediate(r));
+          }
+        })();
       });
 
       rl.on('close', () => {
-        (ingest as any).end();
+        ingest.end();
         if (progressName) {
           this.logger.log(
             `${progressName}: ${scanned.toLocaleString('fr-FR')} lignes parcourues, ` +
@@ -993,7 +990,9 @@ export class GtfsParserService implements OnModuleInit {
     minDepSecondsArr: number[],
     activeServiceIds: string[],
     limit: number,
-  ): Promise<Map<string, { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]>> {
+  ): Promise<
+    Map<string, { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]>
+  > {
     return this.gtfsDb.getNextDeparturesBatch(
       stopIds,
       minDepSecondsArr,
@@ -1080,7 +1079,9 @@ export class GtfsParserService implements OnModuleInit {
   /** Correspondances à pied depuis un ensemble d'arrêts (batch RAPTOR). */
   async getTransfersFromBatch(
     stopIds: string[],
-  ): Promise<Map<string, { to_stop_id: string; min_transfer_time: number | null }[]>> {
+  ): Promise<
+    Map<string, { to_stop_id: string; min_transfer_time: number | null }[]>
+  > {
     return this.gtfsDb.getTransfersFromBatch(stopIds);
   }
 
@@ -1140,7 +1141,7 @@ export class GtfsParserService implements OnModuleInit {
     this.shapeCache.set(shapeId, points);
     // LRU : éviction de l'entrée la plus ancienne si la borne est dépassée
     if (this.shapeCache.size > this.SHAPE_CACHE_MAX) {
-      const oldest = this.shapeCache.keys().next().value;
+      const oldest = this.shapeCache.keys().next().value as string | undefined;
       if (oldest !== undefined) this.shapeCache.delete(oldest);
     }
     this.logger.log(`Lazy-loaded shape ${shapeId}: ${points.length} points`);

@@ -38,22 +38,24 @@ export class AdminService {
         .select('user.role', 'role')
         .addSelect('COUNT(user.id)', 'count')
         .groupBy('user.role')
-        .getRawMany(),
+        .getRawMany<{ role: string; count: string }>(),
       this.historyRepo
         .createQueryBuilder('history')
         .select('history.mode', 'mode')
         .addSelect('COUNT(history.id)', 'count')
         .groupBy('history.mode')
-        .getRawMany(),
+        .getRawMany<{ mode: string; count: string }>(),
     ]);
 
     // Calculate CO2 saved (sum of all trips)
     const co2Result = await this.historyRepo
       .createQueryBuilder('history')
       .select('SUM(history.co2)', 'total')
-      .getRawOne();
+      .getRawOne<{ total: string | number | null }>();
 
-    const co2SavedGrams = co2Result?.total ? Math.round(co2Result.total) : 0;
+    const co2SavedGrams = co2Result?.total
+      ? Math.round(Number(co2Result.total))
+      : 0;
 
     // Recent activity (last 7 days)
     const sevenDaysAgo = new Date();

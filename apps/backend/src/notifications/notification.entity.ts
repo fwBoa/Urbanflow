@@ -36,10 +36,20 @@ export class Notification {
   @Column({ name: 'is_read', default: false })
   isRead: boolean;
 
-  @Column({ name: 'related_line', type: 'varchar', length: 100, nullable: true })
+  @Column({
+    name: 'related_line',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
   relatedLine: string | null;
 
-  @Column({ name: 'related_stop', type: 'varchar', length: 100, nullable: true })
+  @Column({
+    name: 'related_stop',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
   relatedStop: string | null;
 
   @Column({ name: 'action_url', type: 'varchar', length: 500, nullable: true })

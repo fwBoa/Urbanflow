@@ -69,17 +69,53 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
     table: string;
     expr: string;
   }> = [
-    { name: 'idx_gtfs_st_stop_departure', table: 'gtfs_stop_times', expr: 'stop_id, departure_seconds' },
-    { name: 'idx_gtfs_st_stop_arrival', table: 'gtfs_stop_times', expr: 'stop_id, arrival_seconds' },
-    { name: 'idx_gtfs_st_trip_sequence', table: 'gtfs_stop_times', expr: 'trip_id, stop_sequence' },
+    {
+      name: 'idx_gtfs_st_stop_departure',
+      table: 'gtfs_stop_times',
+      expr: 'stop_id, departure_seconds',
+    },
+    {
+      name: 'idx_gtfs_st_stop_arrival',
+      table: 'gtfs_stop_times',
+      expr: 'stop_id, arrival_seconds',
+    },
+    {
+      name: 'idx_gtfs_st_trip_sequence',
+      table: 'gtfs_stop_times',
+      expr: 'trip_id, stop_sequence',
+    },
     { name: 'idx_gtfs_trips_route', table: 'gtfs_trips', expr: 'route_id' },
     { name: 'idx_gtfs_trips_service', table: 'gtfs_trips', expr: 'service_id' },
-    { name: 'idx_gtfs_stops_parent', table: 'gtfs_stops', expr: 'parent_station' },
-    { name: 'idx_gtfs_stops_coords', table: 'gtfs_stops', expr: 'stop_lat, stop_lon' },
-    { name: 'idx_gtfs_stops_name_norm', table: 'gtfs_stops', expr: 'stop_name_norm' },
-    { name: 'idx_gtfs_transfers_from', table: 'gtfs_transfers', expr: 'from_stop_id' },
-    { name: 'idx_gtfs_caldates_date', table: 'gtfs_calendar_dates', expr: 'date' },
-    { name: 'idx_gtfs_caldates_service', table: 'gtfs_calendar_dates', expr: 'service_id' },
+    {
+      name: 'idx_gtfs_stops_parent',
+      table: 'gtfs_stops',
+      expr: 'parent_station',
+    },
+    {
+      name: 'idx_gtfs_stops_coords',
+      table: 'gtfs_stops',
+      expr: 'stop_lat, stop_lon',
+    },
+    {
+      name: 'idx_gtfs_stops_name_norm',
+      table: 'gtfs_stops',
+      expr: 'stop_name_norm',
+    },
+    {
+      name: 'idx_gtfs_transfers_from',
+      table: 'gtfs_transfers',
+      expr: 'from_stop_id',
+    },
+    {
+      name: 'idx_gtfs_caldates_date',
+      table: 'gtfs_calendar_dates',
+      expr: 'date',
+    },
+    {
+      name: 'idx_gtfs_caldates_service',
+      table: 'gtfs_calendar_dates',
+      expr: 'service_id',
+    },
   ];
 
   /**
@@ -104,9 +140,21 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
     { table: 'gtfs_stops', cols: 'stop_id', name: 'gtfs_stops_pkey' },
     { table: 'gtfs_trips', cols: 'trip_id', name: 'gtfs_trips_pkey' },
     { table: 'gtfs_calendar', cols: 'service_id', name: 'gtfs_calendar_pkey' },
-    { table: 'gtfs_calendar_dates', cols: 'service_id, date', name: 'gtfs_calendar_dates_pkey' },
-    { table: 'gtfs_stop_modes', cols: 'stop_id, mode', name: 'gtfs_stop_modes_pkey' },
-    { table: 'gtfs_stop_lines', cols: 'stop_id, mode, name', name: 'gtfs_stop_lines_pkey' },
+    {
+      table: 'gtfs_calendar_dates',
+      cols: 'service_id, date',
+      name: 'gtfs_calendar_dates_pkey',
+    },
+    {
+      table: 'gtfs_stop_modes',
+      cols: 'stop_id, mode',
+      name: 'gtfs_stop_modes_pkey',
+    },
+    {
+      table: 'gtfs_stop_lines',
+      cols: 'stop_id, mode, name',
+      name: 'gtfs_stop_lines_pkey',
+    },
   ];
 
   constructor(private readonly configService: ConfigService) {}
@@ -120,7 +168,7 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
       max: parseInt(process.env.GTFS_PG_POOL_MAX || '20', 10),
     });
     try {
-      const res = await this.pool.query('SELECT 1 AS ok');
+      const res = await this.pool.query<{ ok: number }>('SELECT 1 AS ok');
       if (res.rows[0]?.ok === 1) {
         this.logger.log('PostgreSQL connection OK for GTFS store.');
       }
@@ -414,7 +462,9 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
       }
       // 3. Index staging (noms `_next`) → noms canoniques (instantané, métadonnée).
       for (const idx of GtfsDbService.GTFS_INDEXES) {
-        await client.query(`ALTER INDEX ${idx.name}_next RENAME TO ${idx.name};`);
+        await client.query(
+          `ALTER INDEX ${idx.name}_next RENAME TO ${idx.name};`,
+        );
       }
       // 3bis. PK staging (contraintes `${name}_next`) → noms canoniques.
       for (const pk of GtfsDbService.GTFS_PK) {
@@ -518,12 +568,8 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
     const trips = `gtfs_trips${suffix}`;
     const routes = `gtfs_routes${suffix}`;
     const stops = `gtfs_stops${suffix}`;
-    const stopsQ = await this.query(
-      `SELECT count(*)::int AS n FROM ${stops}`,
-    );
-    const stQ = await this.query(
-      `SELECT count(*)::int AS n FROM ${stt}`,
-    );
+    const stopsQ = await this.query(`SELECT count(*)::int AS n FROM ${stops}`);
+    const stQ = await this.query(`SELECT count(*)::int AS n FROM ${stt}`);
     const tripsQ = await this.query(
       `SELECT count(DISTINCT t.trip_id)::int AS n
        FROM ${stt} st JOIN ${trips} t ON t.trip_id = st.trip_id`,
@@ -539,11 +585,11 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
        JOIN ${routes} r ON r.route_id = t.route_id`,
     );
     return {
-      stops: stopsQ.rows[0]?.n ?? 0,
-      stop_times: stQ.rows[0]?.n ?? 0,
-      trips: tripsQ.rows[0]?.n ?? 0,
-      routes: routesQ.rows[0]?.n ?? 0,
-      agencies: agenciesQ.rows[0]?.n ?? 0,
+      stops: Number(stopsQ.rows[0]?.n ?? 0),
+      stop_times: Number(stQ.rows[0]?.n ?? 0),
+      trips: Number(tripsQ.rows[0]?.n ?? 0),
+      routes: Number(routesQ.rows[0]?.n ?? 0),
+      agencies: Number(agenciesQ.rows[0]?.n ?? 0),
     };
   }
 
@@ -635,76 +681,82 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
 
   // ─── Lectures paramétrées (consommées par GtfsParserService) ───
 
+  private static asString(value: unknown): string {
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
+    return String(value ?? '');
+  }
+
+  private static optString(value: unknown): string | undefined {
+    if (value == null) return undefined;
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
+    return String(value);
+  }
+
+  private static asNumber(value: unknown): number {
+    return Number(value);
+  }
+
+  private static optNumber(value: unknown): number | undefined {
+    return value == null ? undefined : Number(value);
+  }
+
   private rowToStop(r: QueryResultRow): GtfsStop {
     return {
-      stop_id: r.stop_id,
-      stop_code: r.stop_code ?? undefined,
-      stop_name: r.stop_name,
-      stop_desc: r.stop_desc ?? undefined,
-      stop_lat: Number(r.stop_lat),
-      stop_lon: Number(r.stop_lon),
-      location_type:
-        r.location_type == null ? undefined : Number(r.location_type),
-      parent_station: r.parent_station ?? undefined,
-      stop_timezone: r.stop_timezone ?? undefined,
-      wheelchair_boarding:
-        r.wheelchair_boarding == null
-          ? undefined
-          : Number(r.wheelchair_boarding),
-      platform_code: r.platform_code ?? undefined,
+      stop_id: GtfsDbService.asString(r.stop_id),
+      stop_code: GtfsDbService.optString(r.stop_code),
+      stop_name: GtfsDbService.asString(r.stop_name),
+      stop_desc: GtfsDbService.optString(r.stop_desc),
+      stop_lat: GtfsDbService.asNumber(r.stop_lat),
+      stop_lon: GtfsDbService.asNumber(r.stop_lon),
+      location_type: GtfsDbService.optNumber(r.location_type),
+      parent_station: GtfsDbService.optString(r.parent_station),
+      stop_timezone: GtfsDbService.optString(r.stop_timezone),
+      wheelchair_boarding: GtfsDbService.optNumber(r.wheelchair_boarding),
+      platform_code: GtfsDbService.optString(r.platform_code),
     };
   }
 
   private rowToRoute(r: QueryResultRow): GtfsRoute {
     return {
-      route_id: r.route_id,
-      agency_id: r.agency_id ?? undefined,
-      route_short_name: r.route_short_name ?? '',
-      route_long_name: r.route_long_name ?? '',
-      route_desc: r.route_desc ?? undefined,
-      route_type: Number(r.route_type),
-      route_url: r.route_url ?? undefined,
-      route_color: r.route_color ?? undefined,
-      route_text_color: r.route_text_color ?? undefined,
-      route_sort_order:
-        r.route_sort_order == null ? undefined : Number(r.route_sort_order),
+      route_id: GtfsDbService.asString(r.route_id),
+      agency_id: GtfsDbService.optString(r.agency_id),
+      route_short_name: GtfsDbService.asString(r.route_short_name),
+      route_long_name: GtfsDbService.asString(r.route_long_name),
+      route_desc: GtfsDbService.optString(r.route_desc),
+      route_type: GtfsDbService.asNumber(r.route_type),
+      route_url: GtfsDbService.optString(r.route_url),
+      route_color: GtfsDbService.optString(r.route_color),
+      route_text_color: GtfsDbService.optString(r.route_text_color),
+      route_sort_order: GtfsDbService.optNumber(r.route_sort_order),
     };
   }
 
   private rowToTrip(r: QueryResultRow): GtfsTrip {
     return {
-      route_id: r.route_id,
-      service_id: r.service_id,
-      trip_id: r.trip_id,
-      trip_headsign: r.trip_headsign ?? undefined,
-      trip_short_name: r.trip_short_name ?? undefined,
-      direction_id: r.direction_id == null ? undefined : Number(r.direction_id),
-      shape_id: r.shape_id ?? undefined,
-      wheelchair_accessible:
-        r.wheelchair_accessible == null
-          ? undefined
-          : Number(r.wheelchair_accessible),
-      bikes_allowed:
-        r.bikes_allowed == null ? undefined : Number(r.bikes_allowed),
+      route_id: GtfsDbService.asString(r.route_id),
+      service_id: GtfsDbService.asString(r.service_id),
+      trip_id: GtfsDbService.asString(r.trip_id),
+      trip_headsign: GtfsDbService.optString(r.trip_headsign),
+      trip_short_name: GtfsDbService.optString(r.trip_short_name),
+      direction_id: GtfsDbService.optNumber(r.direction_id),
+      shape_id: GtfsDbService.optString(r.shape_id),
+      wheelchair_accessible: GtfsDbService.optNumber(r.wheelchair_accessible),
+      bikes_allowed: GtfsDbService.optNumber(r.bikes_allowed),
     };
   }
 
   private rowToStopTime(r: QueryResultRow): GtfsStopTime {
     return {
-      trip_id: r.trip_id,
-      arrival_time: r.arrival_time,
-      departure_time: r.departure_time,
-      stop_id: r.stop_id,
-      stop_sequence: Number(r.stop_sequence),
-      stop_headsign: r.stop_headsign ?? undefined,
-      pickup_type: r.pickup_type == null ? undefined : Number(r.pickup_type),
-      drop_off_type:
-        r.drop_off_type == null ? undefined : Number(r.drop_off_type),
-      shape_dist_traveled:
-        r.shape_dist_traveled == null
-          ? undefined
-          : Number(r.shape_dist_traveled),
-      timepoint: r.timepoint == null ? undefined : Number(r.timepoint),
+      trip_id: GtfsDbService.asString(r.trip_id),
+      arrival_time: GtfsDbService.asString(r.arrival_time),
+      departure_time: GtfsDbService.asString(r.departure_time),
+      stop_id: GtfsDbService.asString(r.stop_id),
+      stop_sequence: GtfsDbService.asNumber(r.stop_sequence),
+      stop_headsign: GtfsDbService.optString(r.stop_headsign),
+      pickup_type: GtfsDbService.optNumber(r.pickup_type),
+      drop_off_type: GtfsDbService.optNumber(r.drop_off_type),
+      shape_dist_traveled: GtfsDbService.optNumber(r.shape_dist_traveled),
+      timepoint: GtfsDbService.optNumber(r.timepoint),
     };
   }
 
@@ -883,8 +935,13 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
     minDepSecondsArr: number[],
     activeServiceIds: string[],
     limit: number,
-  ): Promise<Map<string, { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]>> {
-    const result = new Map<string, { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]>();
+  ): Promise<
+    Map<string, { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]>
+  > {
+    const result = new Map<
+      string,
+      { trip: GtfsTrip; route: GtfsRoute; stopTime: GtfsStopTime }[]
+    >();
     if (stopIds.length === 0) return result;
     for (const id of stopIds) result.set(id, []);
     const res = await this.query<QueryResultRow & { stop_id: string }>(
@@ -962,18 +1019,18 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
       [stopId, nowSeconds, activeServiceIds, limit * 3],
     );
     return res.rows.map((r) => {
-      const departureSeconds = this.timeToSeconds(r.departure_time);
+      const departureSeconds = this.timeToSeconds(String(r.departure_time));
       return {
-        tripId: r.trip_id,
-        routeId: r.route_id,
-        lineName: r.route_short_name || r.route_long_name,
-        lineColor: r.route_color ? `#${r.route_color}` : '#999',
+        tripId: String(r.trip_id),
+        routeId: String(r.route_id),
+        lineName: String(r.route_short_name || r.route_long_name),
+        lineColor: r.route_color ? `#${String(r.route_color)}` : '#999',
         routeType: Number(r.route_type),
-        headsign: r.trip_headsign || r.route_long_name || '',
-        departureTime: r.departure_time,
-        arrivalTime: r.arrival_time,
+        headsign: String(r.trip_headsign || r.route_long_name || ''),
+        departureTime: String(r.departure_time),
+        arrivalTime: String(r.arrival_time),
         waitMinutes: Math.round((departureSeconds - nowSeconds) / 60),
-        platform: r.stop_headsign || undefined,
+        platform: r.stop_headsign ? String(r.stop_headsign) : undefined,
       };
     });
   }
@@ -1035,7 +1092,9 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
   /** Éviction LRU du cache trip long-vie. */
   private cacheTripStopTimes(tripId: string, rows: GtfsStopTime[]): void {
     if (this.tripStopTimesCache.size >= this.TRIP_CACHE_MAX) {
-      const oldest = this.tripStopTimesCache.keys().next().value;
+      const oldest = this.tripStopTimesCache.keys().next().value as
+        | string
+        | undefined;
       if (oldest !== undefined) this.tripStopTimesCache.delete(oldest);
     }
     this.tripStopTimesCache.set(tripId, rows);
@@ -1090,8 +1149,13 @@ export class GtfsDbService implements OnModuleInit, OnModuleDestroy {
    */
   async getTransfersFromBatch(
     stopIds: string[],
-  ): Promise<Map<string, { to_stop_id: string; min_transfer_time: number | null }[]>> {
-    const result = new Map<string, { to_stop_id: string; min_transfer_time: number | null }[]>();
+  ): Promise<
+    Map<string, { to_stop_id: string; min_transfer_time: number | null }[]>
+  > {
+    const result = new Map<
+      string,
+      { to_stop_id: string; min_transfer_time: number | null }[]
+    >();
     if (stopIds.length === 0) return result;
     for (const id of stopIds) result.set(id, []);
     const res = await this.query<{

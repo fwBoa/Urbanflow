@@ -1,13 +1,14 @@
+import { ArgumentsHost, HttpException } from '@nestjs/common';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
 describe('AllExceptionsFilter', () => {
-  const req = { method: 'GET', url: '/api/x' } as any;
+  const req = { method: 'GET', url: '/api/x' };
   const json = jest.fn();
   const status = jest.fn(() => ({ json }));
-  const res = { status } as any;
+  const res = { status };
   const host = {
     switchToHttp: () => ({ getResponse: () => res, getRequest: () => req }),
-  } as any;
+  } as unknown as ArgumentsHost;
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -16,7 +17,10 @@ describe('AllExceptionsFilter', () => {
     process.env.NODE_ENV = 'production';
     try {
       const filter = new AllExceptionsFilter();
-      filter.catch(new Error('DB connection leaked: postgres://user:pass@h'), host);
+      filter.catch(
+        new Error('DB connection leaked: postgres://user:pass@h'),
+        host,
+      );
       expect(status).toHaveBeenCalledWith(500);
       expect(json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -35,7 +39,10 @@ describe('AllExceptionsFilter', () => {
     process.env.NODE_ENV = 'staging';
     try {
       const filter = new AllExceptionsFilter();
-      filter.catch(new Error('DB connection leaked: postgres://user:pass@h'), host);
+      filter.catch(
+        new Error('DB connection leaked: postgres://user:pass@h'),
+        host,
+      );
       expect(json).toHaveBeenCalledWith(
         expect.objectContaining({
           statusCode: 500,
@@ -50,7 +57,6 @@ describe('AllExceptionsFilter', () => {
   it('passes HttpException status + message through', () => {
     const prev = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
-    const { HttpException } = require('@nestjs/common');
     try {
       const filter = new AllExceptionsFilter();
       filter.catch(new HttpException('Not found', 404), host);

@@ -29,7 +29,9 @@ import { AdminModule } from './admin/admin.module';
     TypeOrmModule.forRootAsync({
       useFactory: () => ({
         type: 'postgres' as const,
-        url: process.env.DATABASE_URL || 'postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow',
+        url:
+          process.env.DATABASE_URL ||
+          'postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow',
         entities: [User, Favorite, History, Notification, PushSubscription],
         // AdminModule entities are loaded via TypeOrmModule.forFeature()
         // ─── Never auto-mutate the schema in production (data-loss risk). ───

@@ -45,13 +45,13 @@ const ADEME_EMISSION_FACTORS: Record<string, number> = {
  * Référence GTFS : https://gtfs.org/documentation/schedule/reference/#routestxt
  */
 const GTFS_ROUTE_TYPE_TO_MODE: Record<number, string> = {
-  0: 'tram',        // Tramway
-  1: 'metro',       // Subway/Metro
-  2: 'train',       // Rail (RER/Transilien)
-  3: 'bus',         // Bus
+  0: 'tram', // Tramway
+  1: 'metro', // Subway/Metro
+  2: 'train', // Rail (RER/Transilien)
+  3: 'bus', // Bus
   4: 'navette_fluviale', // Ferry
-  5: 'trolleybus',  // Cable tram
-  6: 'trolleybus',  // Gondola
+  5: 'trolleybus', // Cable tram
+  6: 'trolleybus', // Gondola
   7: 'funiculaire', // Funicular
 };
 
@@ -106,10 +106,7 @@ export class CarbonService {
   /**
    * Calcule l'empreinte carbone d'un trajet
    */
-  calculateEmissions(
-    mode: string,
-    distanceKm: number,
-  ): CarbonResult {
+  calculateEmissions(mode: string, distanceKm: number): CarbonResult {
     const factor = this.getEmissionFactor(mode);
 
     return {
@@ -152,9 +149,7 @@ export class CarbonService {
     // Équivalence en km de voiture
     const carFactor = ADEME_EMISSION_FACTORS['voiture'] || 170;
     const carKmEquivalent =
-      carFactor > 0
-        ? Math.round((savedGco2 / carFactor) * 100) / 100
-        : 0;
+      carFactor > 0 ? Math.round((savedGco2 / carFactor) * 100) / 100 : 0;
 
     return {
       referenceMode,
@@ -168,9 +163,7 @@ export class CarbonService {
   /**
    * Génère un résumé carbone pour un trajet multimodal
    */
-  summarizeMultimodalTrip(
-    segments: { mode: string; distanceKm: number }[],
-  ): {
+  summarizeMultimodalTrip(segments: { mode: string; distanceKm: number }[]): {
     totalEmissionsGco2: number;
     segments: CarbonResult[];
     comparisonWithCar: CarbonComparison | null;
@@ -220,15 +213,23 @@ export class CarbonService {
     }
 
     // Fallback : bus (mode le plus courant en IDF si inconnu)
-    this.logger.warn(`Unknown transport mode "${mode}", using bus emission factor as fallback`);
+    this.logger.warn(
+      `Unknown transport mode "${mode}", using bus emission factor as fallback`,
+    );
     return ADEME_EMISSION_FACTORS['bus'];
   }
 
   /**
    * Retourne tous les facteurs d'émission disponibles
    */
-  getAllFactors(): Record<string, { factor: number; unit: string; source: string }> {
-    const result: Record<string, { factor: number; unit: string; source: string }> = {};
+  getAllFactors(): Record<
+    string,
+    { factor: number; unit: string; source: string }
+  > {
+    const result: Record<
+      string,
+      { factor: number; unit: string; source: string }
+    > = {};
     for (const [mode, factor] of Object.entries(ADEME_EMISSION_FACTORS)) {
       result[mode] = {
         factor,

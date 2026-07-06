@@ -63,14 +63,20 @@ describe('JwtStrategy', () => {
       const result = await strategy.validate(payload);
 
       expect(authService.validateUser).toHaveBeenCalledWith('user-123');
-      expect(result).toEqual({ id: 'user-123', email: 'test@example.com', role: 'user' });
+      expect(result).toEqual({
+        id: 'user-123',
+        email: 'test@example.com',
+        role: 'user',
+      });
     });
 
     it('should throw UnauthorizedException if user not found', async () => {
       authService.validateUser.mockResolvedValue(null);
       const payload = { sub: 'unknown', email: 'unknown@example.com' };
 
-      await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
+      await expect(strategy.validate(payload)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 });

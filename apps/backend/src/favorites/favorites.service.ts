@@ -59,7 +59,12 @@ export class FavoritesService {
     }
   }
 
-  async isFavorite(userId: string, from: string, to: string, mode: string): Promise<boolean> {
+  async isFavorite(
+    userId: string,
+    from: string,
+    to: string,
+    mode: string,
+  ): Promise<boolean> {
     return !!(await this.favRepo.findOne({
       where: { userId, from, to, mode },
     }));
@@ -77,7 +82,12 @@ export class FavoritesService {
 
   async addToHistory(userId: string, dto: CreateHistoryDto): Promise<History> {
     // Remove duplicate if same route was just searched
-    await this.histRepo.delete({ userId, from: dto.from, to: dto.to, mode: dto.mode });
+    await this.histRepo.delete({
+      userId,
+      from: dto.from,
+      to: dto.to,
+      mode: dto.mode,
+    });
 
     const entry = this.histRepo.create({
       userId,
@@ -134,11 +144,15 @@ export class FavoritesService {
     };
   }
 
-  async incrementTrips(userId: string, co2: number): Promise<{
+  async incrementTrips(
+    userId: string,
+    co2: number,
+  ): Promise<{
     totalTrips: number;
     co2Saved: number;
     favoriteCount: number;
   }> {
+    void co2;
     return this.getStats(userId);
   }
 

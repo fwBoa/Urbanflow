@@ -52,7 +52,9 @@ describe('AdminService', () => {
               addSelect: jest.fn().mockReturnThis(),
               groupBy: jest.fn().mockReturnThis(),
               where: jest.fn().mockReturnThis(),
-              getRawMany: jest.fn().mockResolvedValue([{ role: 'user', count: '10' }]),
+              getRawMany: jest
+                .fn()
+                .mockResolvedValue([{ role: 'user', count: '10' }]),
               getRawOne: jest.fn().mockResolvedValue({ total: '5000' }),
               getCount: jest.fn().mockResolvedValue(5),
             })),
@@ -68,7 +70,9 @@ describe('AdminService', () => {
               addSelect: jest.fn().mockReturnThis(),
               groupBy: jest.fn().mockReturnThis(),
               where: jest.fn().mockReturnThis(),
-              getRawMany: jest.fn().mockResolvedValue([{ mode: 'metro', count: '20' }]),
+              getRawMany: jest
+                .fn()
+                .mockResolvedValue([{ mode: 'metro', count: '20' }]),
               getRawOne: jest.fn().mockResolvedValue({ total: '5000' }),
               getCount: jest.fn().mockResolvedValue(10),
             })),
@@ -97,7 +101,9 @@ describe('AdminService', () => {
     service = module.get<AdminService>(AdminService);
     userRepo = module.get<Repository<User>>(getRepositoryToken(User));
     historyRepo = module.get<Repository<History>>(getRepositoryToken(History));
-    notifRepo = module.get<Repository<Notification>>(getRepositoryToken(Notification));
+    notifRepo = module.get<Repository<Notification>>(
+      getRepositoryToken(Notification),
+    );
     gtfsParser = module.get<GtfsParserService>(GtfsParserService);
   });
 
@@ -108,10 +114,14 @@ describe('AdminService', () => {
   describe('getDashboardStats', () => {
     it('should return dashboard statistics', async () => {
       const qb = userRepo.createQueryBuilder('user');
-      (qb.getRawMany as jest.Mock).mockResolvedValue([{ role: 'user', count: '10' }]);
+      (qb.getRawMany as jest.Mock).mockResolvedValue([
+        { role: 'user', count: '10' },
+      ]);
 
       const histQb = historyRepo.createQueryBuilder('history');
-      (histQb.getRawMany as jest.Mock).mockResolvedValue([{ mode: 'metro', count: '20' }]);
+      (histQb.getRawMany as jest.Mock).mockResolvedValue([
+        { mode: 'metro', count: '20' },
+      ]);
       (histQb.getRawOne as jest.Mock).mockResolvedValue({ total: '5000' });
 
       (qb.getCount as jest.Mock).mockResolvedValue(3);
@@ -150,7 +160,7 @@ describe('AdminService', () => {
 
   describe('getUserById', () => {
     it('should return user with trip and notification counts', async () => {
-      (userRepo.findOne as jest.Mock).mockResolvedValue(mockUser as User);
+      (userRepo.findOne as jest.Mock).mockResolvedValue(mockUser);
       (historyRepo.count as jest.Mock).mockResolvedValue(5);
       (notifRepo.count as jest.Mock).mockResolvedValue(3);
 
@@ -175,19 +185,24 @@ describe('AdminService', () => {
 
   describe('deleteUser', () => {
     it('should soft delete user', async () => {
-      (userRepo.findOne as jest.Mock).mockResolvedValue(mockUser as User);
+      (userRepo.findOne as jest.Mock).mockResolvedValue(mockUser);
       (userRepo.softDelete as jest.Mock).mockResolvedValue({ affected: 1 });
 
       const result = await service.deleteUser('user-123');
 
       expect(userRepo.softDelete).toHaveBeenCalledWith('user-123');
-      expect(result).toHaveProperty('message', 'Utilisateur supprimé (soft delete)');
+      expect(result).toHaveProperty(
+        'message',
+        'Utilisateur supprimé (soft delete)',
+      );
     });
 
     it('should throw NotFoundException if user not found', async () => {
       (userRepo.findOne as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.deleteUser('unknown-id')).rejects.toThrow(NotFoundException);
+      await expect(service.deleteUser('unknown-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -211,7 +226,9 @@ describe('AdminService', () => {
 
   describe('getAllNotifications', () => {
     it('should return all notifications', async () => {
-      const notifications = [{ id: 'notif-1', title: 'Alert' }] as Notification[];
+      const notifications = [
+        { id: 'notif-1', title: 'Alert' },
+      ] as Notification[];
       (notifRepo.find as jest.Mock).mockResolvedValue(notifications);
 
       const result = await service.getAllNotifications();
@@ -231,7 +248,12 @@ describe('AdminService', () => {
       (notifRepo.create as jest.Mock).mockImplementation((data) => data);
       (notifRepo.save as jest.Mock).mockResolvedValue([]);
 
-      const body = { title: 'Alert', message: 'Test', type: 'info', lineId: 'metro-1' };
+      const body = {
+        title: 'Alert',
+        message: 'Test',
+        type: 'info',
+        lineId: 'metro-1',
+      };
       const result = await service.broadcastNotification(body);
 
       expect(userRepo.find).toHaveBeenCalledWith({

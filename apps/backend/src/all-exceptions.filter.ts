@@ -35,9 +35,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     // Always log the full detail server-side for operators.
     const message = isHttp
-      ? (exception.getResponse() as { message?: unknown }).message ??
-        exception.message
-      : (exception as Error)?.message ?? String(exception);
+      ? String(
+          (exception.getResponse() as { message?: string | number | null })
+            .message ?? exception.message,
+        )
+      : String((exception as Error)?.message ?? exception);
     const stack = (exception as Error)?.stack;
     this.logger.error(
       `${request.method} ${request.url} → ${status}: ${message}`,

@@ -58,7 +58,10 @@ export class NotificationsService {
 
   /** Export notifications for RGPD data export */
   async exportForUser(userId: string): Promise<Notification[]> {
-    return this.notifRepo.find({ where: { userId }, order: { createdAt: 'DESC' } });
+    return this.notifRepo.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   /**

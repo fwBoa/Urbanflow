@@ -42,16 +42,40 @@ export class Favorite {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   co2: number;
 
-  @Column({ name: 'origin_lat', type: 'decimal', precision: 9, scale: 6, nullable: true })
+  @Column({
+    name: 'origin_lat',
+    type: 'decimal',
+    precision: 9,
+    scale: 6,
+    nullable: true,
+  })
   originLat: number | null;
 
-  @Column({ name: 'origin_lon', type: 'decimal', precision: 9, scale: 6, nullable: true })
+  @Column({
+    name: 'origin_lon',
+    type: 'decimal',
+    precision: 9,
+    scale: 6,
+    nullable: true,
+  })
   originLon: number | null;
 
-  @Column({ name: 'dest_lat', type: 'decimal', precision: 9, scale: 6, nullable: true })
+  @Column({
+    name: 'dest_lat',
+    type: 'decimal',
+    precision: 9,
+    scale: 6,
+    nullable: true,
+  })
   destLat: number | null;
 
-  @Column({ name: 'dest_lon', type: 'decimal', precision: 9, scale: 6, nullable: true })
+  @Column({
+    name: 'dest_lon',
+    type: 'decimal',
+    precision: 9,
+    scale: 6,
+    nullable: true,
+  })
   destLon: number | null;
 
   @CreateDateColumn({ name: 'created_at' })

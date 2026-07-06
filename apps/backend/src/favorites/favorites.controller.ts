@@ -32,25 +32,7 @@ export class FavoritesController {
     return this.favService.addFavorite(req.user.id, dto);
   }
 
-  @Delete(':id')
-  async removeFavorite(
-    @Request() req: { user: { id: string } },
-    @Param('id') id: string,
-  ) {
-    await this.favService.removeFavorite(req.user.id, id);
-    return { message: 'Favori supprimé' };
-  }
-
-  @Get('check')
-  async checkFavorite(
-    @Request() req: { user: { id: string } },
-    @Body() body: { from: string; to: string; mode: string },
-  ) {
-    const isFav = await this.favService.isFavorite(req.user.id, body.from, body.to, body.mode);
-    return { isFavorite: isFav };
-  }
-
-  // ─── History ──────────────────────────────────────────────────
+  // ─── History (déclaré AVANT :id pour éviter que "history" soit capturé comme UUID) ─
 
   @Get('history')
   async getHistory(@Request() req: { user: { id: string } }) {
@@ -69,6 +51,29 @@ export class FavoritesController {
   async clearHistory(@Request() req: { user: { id: string } }) {
     await this.favService.clearHistory(req.user.id);
     return { message: 'Historique effacé' };
+  }
+
+  @Delete(':id')
+  async removeFavorite(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+  ) {
+    await this.favService.removeFavorite(req.user.id, id);
+    return { message: 'Favori supprimé' };
+  }
+
+  @Get('check')
+  async checkFavorite(
+    @Request() req: { user: { id: string } },
+    @Body() body: { from: string; to: string; mode: string },
+  ) {
+    const isFav = await this.favService.isFavorite(
+      req.user.id,
+      body.from,
+      body.to,
+      body.mode,
+    );
+    return { isFavorite: isFav };
   }
 
   // ─── Stats ────────────────────────────────────────────────────

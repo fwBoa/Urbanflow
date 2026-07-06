@@ -27,10 +27,25 @@ async function bootstrap() {
         directives: {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-          fontSrc: ["'self'", "https://fonts.gstatic.com"],
-          imgSrc: ["'self'", "data:", "https://*.tile.openstreetmap.org", "https://*.openstreetmap.org"],
-          connectSrc: ["'self'", "http://localhost:3001", "https://prim.iledefrance-mobilites.fr", "https://router.project-osrm.org", "https://api-adresse.data.gouv.fr"],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://fonts.googleapis.com',
+          ],
+          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          imgSrc: [
+            "'self'",
+            'data:',
+            'https://*.tile.openstreetmap.org',
+            'https://*.openstreetmap.org',
+          ],
+          connectSrc: [
+            "'self'",
+            'http://localhost:3001',
+            'https://prim.iledefrance-mobilites.fr',
+            'https://router.project-osrm.org',
+            'https://api-adresse.data.gouv.fr',
+          ],
           frameSrc: ["'none'"],
         },
       },
@@ -58,4 +73,8 @@ async function bootstrap() {
   await app.listen(port);
   logger.log(`🚀 UrbanFlow API running on http://0.0.0.0:${port} [${nodeEnv}]`);
 }
-bootstrap();
+void bootstrap().catch((error: unknown) => {
+  const err = error instanceof Error ? error : new Error(String(error));
+  console.error('Bootstrap failed:', err.message);
+  process.exit(1);
+});

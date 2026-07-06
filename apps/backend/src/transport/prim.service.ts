@@ -3,6 +3,68 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 
+interface DataApiResponse<T> {
+  results?: T[];
+  total_count?: number;
+}
+
+interface LineRecord {
+  id_line: string;
+  name_line: string;
+  shortname_line: string;
+  transportmode: string;
+  transportsubmode: string;
+  status: string;
+  colourweb_hexa?: string;
+}
+
+interface ParisVelibFields {
+  stationcode?: string;
+  name?: string;
+  coordonnees_geo?: [number, number] | number[];
+  numbikesavailable?: number;
+  ebike?: number;
+  mechanical?: number;
+  numdocksavailable?: number;
+  capacity?: number;
+  is_renting?: string;
+  is_returning?: string;
+  nom_arrondissement_communes?: string;
+}
+
+interface ParisApiRecord {
+  recordid?: string;
+  fields?: ParisVelibFields;
+}
+
+interface ParisApiResponse {
+  records?: ParisApiRecord[];
+}
+
+interface GeoProperties {
+  id?: string;
+  label?: string;
+  score?: number;
+  type?: string;
+  city?: string;
+  postcode?: string;
+  context?: string;
+  housenumber?: string;
+  street?: string;
+}
+
+interface GeoFeature {
+  properties?: GeoProperties;
+  geometry?: {
+    type?: string;
+    coordinates?: number[];
+  };
+}
+
+interface GeoApiResponse {
+  features?: GeoFeature[];
+}
+
 /**
  * Service d'intégration avec la plateforme PRIM (Île-de-France Mobilités)
  * https://prim.iledefrance-mobilites.fr/
@@ -50,17 +112,19 @@ export class PrimService implements OnModuleInit {
     }
   }
 
-  async onModuleInit() {
-    this.logger.log('PRIM Service initialized — Île-de-France Mobilités Open Data');
+  onModuleInit() {
+    this.logger.log(
+      'PRIM Service initialized — Île-de-France Mobilités Open Data',
+    );
   }
 
   /**
    * Effectue un appel authentifié à l'API PRIM
    */
-  private async callPrimApi(
+  private async callPrimApi<T = unknown>(
     endpoint: string,
     params: Record<string, string> = {},
-  ): Promise<any> {
+  ): Promise<T> {
     const url = `${this.primApiUrl}${endpoint}`;
     const config = {
       headers: {
@@ -71,10 +135,8 @@ export class PrimService implements OnModuleInit {
     };
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(url, config),
-      );
-      return response.data;
+      const response = await firstValueFrom(this.httpService.get(url, config));
+      return response.data as T;
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(`PRIM API error: ${err.message}`, err.stack);
@@ -85,18 +147,16 @@ export class PrimService implements OnModuleInit {
   /**
    * Effectue un appel à l'API OpenData IDFM (données statiques)
    */
-  private async callDataApi(
+  private async callDataApi<T = unknown>(
     endpoint: string,
     params: Record<string, string> = {},
-  ): Promise<any> {
+  ): Promise<T> {
     const url = `${this.dataApiUrl}${endpoint}`;
     const config = { params };
 
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(url, config),
-      );
-      return response.data;
+      const response = await firstValueFrom(this.httpService.get(url, config));
+      return response.data as T;
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(`IDFM Data API error: ${err.message}`, err.stack);
@@ -132,45 +192,82 @@ export class PrimService implements OnModuleInit {
    * avec leur nom court, couleur et statut.
    */
   async getLinesByMode(): Promise<{
-    metro: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
-    rer: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
-    tram: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
-    transilien: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
+    metro: Array<{
+      id: string;
+      name: string;
+      shortName: string;
+      color: string;
+      status: string;
+    }>;
+    rer: Array<{
+      id: string;
+      name: string;
+      shortName: string;
+      color: string;
+      status: string;
+    }>;
+    tram: Array<{
+      id: string;
+      name: string;
+      shortName: string;
+      color: string;
+      status: string;
+    }>;
+    transilien: Array<{
+      id: string;
+      name: string;
+      shortName: string;
+      color: string;
+      status: string;
+    }>;
   }> {
-    const select = 'id_line,name_line,shortname_line,transportmode,transportsubmode,status,colourweb_hexa';
+    const select =
+      'id_line,name_line,shortname_line,transportmode,transportsubmode,status,colourweb_hexa';
 
     const [metroData, rerData, tramData, transilienData] = await Promise.all([
       // Métro
-      this.callDataApi('/catalog/datasets/referentiel-des-lignes/records', {
-        where: "transportmode='metro'",
-        select,
-        limit: '20',
-        order_by: 'shortname_line',
-      }),
+      this.callDataApi<DataApiResponse<LineRecord>>(
+        '/catalog/datasets/referentiel-des-lignes/records',
+        {
+          where: "transportmode='metro'",
+          select,
+          limit: '20',
+          order_by: 'shortname_line',
+        },
+      ),
       // RER (rail + local)
-      this.callDataApi('/catalog/datasets/referentiel-des-lignes/records', {
-        where: "transportmode='rail' AND transportsubmode='local'",
-        select,
-        limit: '10',
-        order_by: 'shortname_line',
-      }),
+      this.callDataApi<DataApiResponse<LineRecord>>(
+        '/catalog/datasets/referentiel-des-lignes/records',
+        {
+          where: "transportmode='rail' AND transportsubmode='local'",
+          select,
+          limit: '10',
+          order_by: 'shortname_line',
+        },
+      ),
       // Tram
-      this.callDataApi('/catalog/datasets/referentiel-des-lignes/records', {
-        where: "transportmode='tram'",
-        select,
-        limit: '20',
-        order_by: 'shortname_line',
-      }),
+      this.callDataApi<DataApiResponse<LineRecord>>(
+        '/catalog/datasets/referentiel-des-lignes/records',
+        {
+          where: "transportmode='tram'",
+          select,
+          limit: '20',
+          order_by: 'shortname_line',
+        },
+      ),
       // Transilien (rail + suburbanRailway)
-      this.callDataApi('/catalog/datasets/referentiel-des-lignes/records', {
-        where: "transportmode='rail' AND transportsubmode='suburbanRailway'",
-        select,
-        limit: '20',
-        order_by: 'shortname_line',
-      }),
+      this.callDataApi<DataApiResponse<LineRecord>>(
+        '/catalog/datasets/referentiel-des-lignes/records',
+        {
+          where: "transportmode='rail' AND transportsubmode='suburbanRailway'",
+          select,
+          limit: '20',
+          order_by: 'shortname_line',
+        },
+      ),
     ]);
 
-    const mapLine = (l: any) => ({
+    const mapLine = (l: LineRecord) => ({
       id: l.id_line,
       name: l.name_line,
       shortName: l.shortname_line,
@@ -179,10 +276,18 @@ export class PrimService implements OnModuleInit {
     });
 
     return {
-      metro: (metroData?.results || []).filter((l: any) => l.status === 'active').map(mapLine),
-      rer: (rerData?.results || []).filter((l: any) => l.status === 'active').map(mapLine),
-      tram: (tramData?.results || []).filter((l: any) => l.status === 'active').map(mapLine),
-      transilien: (transilienData?.results || []).filter((l: any) => l.status === 'active').map(mapLine),
+      metro: (metroData.results ?? [])
+        .filter((l) => l.status === 'active')
+        .map(mapLine),
+      rer: (rerData.results ?? [])
+        .filter((l) => l.status === 'active')
+        .map(mapLine),
+      tram: (tramData.results ?? [])
+        .filter((l) => l.status === 'active')
+        .map(mapLine),
+      transilien: (transilienData.results ?? [])
+        .filter((l) => l.status === 'active')
+        .map(mapLine),
     };
   }
 
@@ -199,8 +304,8 @@ export class PrimService implements OnModuleInit {
     where?: string;
     limit?: number;
     offset?: number;
-  }): Promise<any> {
-    return this.callDataApi(
+  }): Promise<unknown> {
+    return this.callDataApi<unknown>(
       '/catalog/datasets/jcdecaux-bike-stations-data/records',
       this.buildQueryParams(params),
     );
@@ -265,33 +370,40 @@ export class PrimService implements OnModuleInit {
 
     try {
       const parisResponse = await firstValueFrom(
-        this.httpService.get(parisUrl, { params: parisParams }),
+        this.httpService.get<ParisApiResponse>(parisUrl, {
+          params: parisParams,
+        }),
       );
       const parisData = parisResponse.data;
 
-      parisStations = (parisData?.records || []).map((record: any) => {
-        const f = record.fields || {};
-        const coords = f.coordonnees_geo || [lat, lon];
+      parisStations = (parisData.records ?? []).map((record) => {
+        const f = record.fields ?? {};
+        const coords = f.coordonnees_geo ?? [lat, lon];
         const stationDistance = this.haversineDistance(
-          lat, lon, coords[0], coords[1],
+          lat,
+          lon,
+          Number(coords[0]),
+          Number(coords[1]),
         );
         return {
-          id: f.stationcode || String(record.recordid || ''),
-          name: f.name || 'Station Vélib\'',
-          position: { lat: coords[0], lon: coords[1] },
-          available_bikes: f.numbikesavailable || 0,
-          available_ebikes: f.ebike || 0,
-          available_mechanical: f.mechanical || 0,
-          available_bike_stands: f.numdocksavailable || 0,
-          capacity: f.capacity || 0,
+          id: f.stationcode ?? String(record.recordid ?? ''),
+          name: f.name ?? "Station Vélib'",
+          position: { lat: Number(coords[0]), lon: Number(coords[1]) },
+          available_bikes: f.numbikesavailable ?? 0,
+          available_ebikes: f.ebike ?? 0,
+          available_mechanical: f.mechanical ?? 0,
+          available_bike_stands: f.numdocksavailable ?? 0,
+          capacity: f.capacity ?? 0,
           is_renting: f.is_renting === 'OUI',
           is_returning: f.is_returning === 'OUI',
           distance: Math.round(stationDistance),
-          arrondissement: f.nom_arrondissement_communes || 'Paris',
+          arrondissement: f.nom_arrondissement_communes ?? 'Paris',
         };
       });
     } catch (error) {
-      this.logger.warn(`Paris Open Data API error: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(
+        `Paris Open Data API error: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
     // Trier par distance et limiter
@@ -339,18 +451,33 @@ export class PrimService implements OnModuleInit {
    * Essaie d'abord "housenumber" (adresse précise), puis
    * sans filtre de type si aucun résultat (lieux, rues).
    */
-  async geocode(query: string, limit = 5): Promise<any> {
+  async geocode(
+    query: string,
+    limit = 5,
+  ): Promise<{
+    total_count: number;
+    results: Array<{
+      label: string;
+      score: number;
+      type: string;
+      city: string;
+      postcode: string;
+      context: string;
+      geometry: GeoFeature['geometry'];
+      isParis: boolean;
+    }>;
+  }> {
     const url = 'https://api-adresse.data.gouv.fr/search';
     const baseParams: Record<string, string> = {
       q: query,
-      limit: '20',      // Demander plus pour pouvoir filtrer
-      lat: '48.8566',   // Centre Paris
+      limit: '20', // Demander plus pour pouvoir filtrer
+      lat: '48.8566', // Centre Paris
       lon: '2.3522',
     };
 
-    const isParisResult = (f: any) => {
-      const postcode = String(f.properties?.postcode || '');
-      const city = String(f.properties?.city || '').toLowerCase();
+    const isParisResult = (f: GeoFeature) => {
+      const postcode = String(f.properties?.postcode ?? '');
+      const city = String(f.properties?.city ?? '').toLowerCase();
       return postcode.startsWith('75') || city === 'paris';
     };
 
@@ -362,24 +489,26 @@ export class PrimService implements OnModuleInit {
       // la plus lente des deux (~600ms). api-adresse est gratuit/sans clé.
       const [parisRes, broadRes] = await Promise.all([
         firstValueFrom(
-          this.httpService.get(url, {
+          this.httpService.get<GeoApiResponse>(url, {
             params: { ...baseParams, city: 'Paris' },
             timeout: 5000,
           }),
         ).catch(() => null),
         firstValueFrom(
-          this.httpService.get(url, {
+          this.httpService.get<GeoApiResponse>(url, {
             params: baseParams,
             timeout: 5000,
           }),
         ).catch(() => null),
       ]);
 
-      const parisFeatures = (parisRes?.data?.features || []).filter(isParisResult);
-      const broadFeatures = broadRes?.data?.features || [];
+      const parisFeatures = (parisRes?.data?.features ?? []).filter(
+        isParisResult,
+      );
+      const broadFeatures = broadRes?.data?.features ?? [];
 
       // Fusionner (a) puis (b), en dédupliquant par id et en ne gardant que Paris
-      const seen = new Set(parisFeatures.map((f: any) => f.properties?.id));
+      const seen = new Set(parisFeatures.map((f) => f.properties?.id));
       for (const f of broadFeatures) {
         if (!seen.has(f.properties?.id) && isParisResult(f)) {
           parisFeatures.push(f);
@@ -388,20 +517,22 @@ export class PrimService implements OnModuleInit {
       }
 
       // Normaliser la réponse pour le frontend — ne garder que Paris
-      const results = parisFeatures.slice(0, limit).map((f: any) => ({
-        label: f.properties?.label || '',
-        score: f.properties?.score || 0,
-        type: f.properties?.type || '',
-        city: f.properties?.city || '',
-        postcode: f.properties?.postcode || '',
-        context: f.properties?.context || '',
-        geometry: f.geometry || {},
+      const results = parisFeatures.slice(0, limit).map((f) => ({
+        label: f.properties?.label ?? '',
+        score: f.properties?.score ?? 0,
+        type: f.properties?.type ?? '',
+        city: f.properties?.city ?? '',
+        postcode: f.properties?.postcode ?? '',
+        context: f.properties?.context ?? '',
+        geometry: f.geometry ?? {},
         isParis: true, // Tous les résultats passent isParisResult
       }));
       return { total_count: results.length, results };
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.logger.warn(`Geocoding API error (${err.message}) — returning empty results`);
+      this.logger.warn(
+        `Geocoding API error (${err.message}) — returning empty results`,
+      );
       // Return empty results instead of throwing — geocoding is non-critical
       return { total_count: 0, results: [] };
     }
@@ -413,42 +544,71 @@ export class PrimService implements OnModuleInit {
    * Géocodage inverse : convertit des coordonnées (lat, lon) en adresse lisible.
    * Utilise l'API data.gouv.fr (Nominatim-like).
    */
-  async reverseGeocode(lat: number, lon: number): Promise<any> {
+  async reverseGeocode(
+    lat: number,
+    lon: number,
+  ): Promise<{
+    label: string;
+    type: string;
+    city: string;
+    postcode: string;
+    context?: string;
+    geometry: GeoFeature['geometry'];
+    housenumber?: string;
+    street?: string;
+    isParis: boolean;
+  }> {
     const url = 'https://api-adresse.data.gouv.fr/reverse';
 
     try {
       const response = await firstValueFrom(
-        this.httpService.get(url, {
+        this.httpService.get<GeoApiResponse>(url, {
           params: { lat: String(lat), lon: String(lon) },
         }),
       );
 
-      const features = response.data?.features || [];
+      const features = response.data?.features ?? [];
       if (features.length === 0) {
-        return { label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`, type: 'coordinates', city: '', postcode: '', isParis: false };
+        return {
+          label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+          type: 'coordinates',
+          city: '',
+          postcode: '',
+          geometry: {},
+          isParis: false,
+        };
       }
 
       const f = features[0];
-      const postcode = String(f.properties?.postcode || '');
-      const city = String(f.properties?.city || '').toLowerCase();
+      const postcode = String(f.properties?.postcode ?? '');
+      const city = String(f.properties?.city ?? '').toLowerCase();
       const isParis = postcode.startsWith('75') || city === 'paris';
       return {
-        label: f.properties?.label || '',
-        type: f.properties?.type || '',
-        city: f.properties?.city || '',
-        postcode: f.properties?.postcode || '',
-        context: f.properties?.context || '',
-        geometry: f.geometry || {},
-        housenumber: f.properties?.housenumber || '',
-        street: f.properties?.street || '',
+        label: f.properties?.label ?? '',
+        type: f.properties?.type ?? '',
+        city: f.properties?.city ?? '',
+        postcode: f.properties?.postcode ?? '',
+        context: f.properties?.context ?? '',
+        geometry: f.geometry ?? {},
+        housenumber: f.properties?.housenumber ?? '',
+        street: f.properties?.street ?? '',
         isParis,
       };
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.logger.error(`Reverse geocoding API error: ${err.message}`, err.stack);
+      this.logger.error(
+        `Reverse geocoding API error: ${err.message}`,
+        err.stack,
+      );
       // Fallback : retourner les coordonnées brutes
-      return { label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`, type: 'coordinates', city: '', postcode: '', isParis: false };
+      return {
+        label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+        type: 'coordinates',
+        city: '',
+        postcode: '',
+        geometry: {},
+        isParis: false,
+      };
     }
   }
-
-  }
+}

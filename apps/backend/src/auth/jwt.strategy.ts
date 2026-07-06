@@ -9,7 +9,8 @@ import { resolveJwtSecret } from './jwt-secret';
 // ─── OWASP A07: Extract JWT from httpOnly cookie (fallback: Authorization header) ───
 function extractJwtFromCookieOrHeader(req: Request): string | null {
   // Priority 1: httpOnly cookie
-  const cookieToken = req.cookies?.urbanflow_token;
+  const cookies = req.cookies as Record<string, string> | undefined;
+  const cookieToken = cookies?.urbanflow_token;
   if (cookieToken) return cookieToken;
   // Priority 2: Authorization Bearer header (backward compat)
   return ExtractJwt.fromAuthHeaderAsBearerToken()(req);

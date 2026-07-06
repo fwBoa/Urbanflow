@@ -179,7 +179,7 @@ export class JourneyService {
   private setCached(key: string, result: JourneyResult[]): void {
     if (this.journeyCache.size >= this.CACHE_MAX_SIZE) {
       // Éviction FIFO simple
-      const first = this.journeyCache.keys().next().value;
+      const first = this.journeyCache.keys().next().value as string | undefined;
       if (first !== undefined) this.journeyCache.delete(first);
     }
     this.journeyCache.set(key, {
@@ -396,7 +396,9 @@ export class JourneyService {
         const kept: typeof departures = [];
         for (const dep of departures) {
           if (seenRoutes.has(dep.route.route_id)) continue;
-          const originDeparture = this.timeToSeconds(dep.stopTime.departure_time);
+          const originDeparture = this.timeToSeconds(
+            dep.stopTime.departure_time,
+          );
           if (originDeparture < currentArrival) continue;
           seenRoutes.add(dep.route.route_id);
           kept.push(dep);

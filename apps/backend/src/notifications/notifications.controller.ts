@@ -12,12 +12,11 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { NotificationsService } from './notifications.service';
 import { PushService } from './push.service';
-import {
-  CreateNotificationDto,
-  MarkReadDto,
-  SubscribePushDto,
-  UnsubscribePushDto,
-} from './notifications.dto';
+import { SubscribePushDto, UnsubscribePushDto } from './notifications.dto';
+
+interface RequestWithUser {
+  user: { id: string };
+}
 
 @Controller('notifications')
 @UseGuards(AuthGuard('jwt'))
@@ -29,41 +28,41 @@ export class NotificationsController {
 
   /** GET /api/notifications — list all notifications for current user */
   @Get()
-  async getAll(@Request() req: any) {
+  async getAll(@Request() req: RequestWithUser) {
     return this.notifService.getNotifications(req.user.id);
   }
 
   /** GET /api/notifications/unread-count — get unread count */
   @Get('unread-count')
-  async getUnreadCount(@Request() req: any) {
+  async getUnreadCount(@Request() req: RequestWithUser) {
     const count = await this.notifService.getUnreadCount(req.user.id);
     return { count };
   }
 
   /** PATCH /api/notifications/:id/read — mark one as read */
   @Patch(':id/read')
-  async markAsRead(@Param('id') id: string, @Request() req: any) {
+  async markAsRead(@Param('id') id: string, @Request() req: RequestWithUser) {
     const notif = await this.notifService.markAsRead(id, req.user.id);
     return notif ?? { message: 'Notification not found' };
   }
 
   /** POST /api/notifications/mark-all-read — mark all as read */
   @Post('mark-all-read')
-  async markAllAsRead(@Request() req: any) {
+  async markAllAsRead(@Request() req: RequestWithUser) {
     await this.notifService.markAllAsRead(req.user.id);
     return { message: 'All notifications marked as read' };
   }
 
   /** DELETE /api/notifications/:id — delete one notification */
   @Delete(':id')
-  async remove(@Param('id') id: string, @Request() req: any) {
+  async remove(@Param('id') id: string, @Request() req: RequestWithUser) {
     const deleted = await this.notifService.remove(id, req.user.id);
     return { deleted };
   }
 
   /** DELETE /api/notifications — delete all notifications (RGPD) */
   @Delete()
-  async removeAll(@Request() req: any) {
+  async removeAll(@Request() req: RequestWithUser) {
     await this.notifService.removeAllForUser(req.user.id);
     return { message: 'All notifications deleted' };
   }
@@ -72,7 +71,7 @@ export class NotificationsController {
   @Post('push/subscribe')
   async subscribePush(
     @Body() dto: SubscribePushDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ) {
     return this.pushService.subscribe(req.user.id, dto);
   }
@@ -81,15 +80,18 @@ export class NotificationsController {
   @Delete('push/subscribe')
   async unsubscribePush(
     @Body() dto: UnsubscribePushDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ) {
-    const deleted = await this.pushService.unsubscribe(req.user.id, dto.endpoint);
+    const deleted = await this.pushService.unsubscribe(
+      req.user.id,
+      dto.endpoint,
+    );
     return { deleted };
   }
 
   /** POST /api/notifications/push/send-test — send a test push to current user */
   @Post('push/send-test')
-  async sendTestPush(@Request() req: any) {
+  async sendTestPush(@Request() req: RequestWithUser) {
     await this.pushService.sendToUser(req.user.id, {
       title: 'UrbanFlow — Test',
       body: 'Vos notifications push fonctionnent.',
