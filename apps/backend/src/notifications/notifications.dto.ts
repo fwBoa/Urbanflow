@@ -1,4 +1,13 @@
-import { IsString, IsIn, IsOptional, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsIn,
+  IsOptional,
+  IsBoolean,
+  IsObject,
+  IsNumber,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateNotificationDto {
   @IsString()
@@ -29,4 +38,31 @@ export class CreateNotificationDto {
 export class MarkReadDto {
   @IsBoolean()
   isRead: boolean;
+}
+
+class PushSubscriptionKeysDto {
+  @IsString()
+  p256dh: string;
+
+  @IsString()
+  auth: string;
+}
+
+export class SubscribePushDto {
+  @IsString()
+  endpoint: string;
+
+  @IsOptional()
+  @IsNumber()
+  expirationTime?: number | null;
+
+  @IsObject()
+  @ValidateNested()
+  @Type(() => PushSubscriptionKeysDto)
+  keys: PushSubscriptionKeysDto;
+}
+
+export class UnsubscribePushDto {
+  @IsString()
+  endpoint: string;
 }

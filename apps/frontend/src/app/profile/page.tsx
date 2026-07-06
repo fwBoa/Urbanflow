@@ -37,6 +37,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { updateProfile as updateRemoteProfile } from "@/services/auth";
 import { apiService } from "@/services/api";
 import { useDarkMode } from "@/hooks/useDarkMode";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 // ─── Mapping mode de mobilité : UI (fast|eco) ↔ backend (rapide|eco|economique) ───
 const MODE_UI_TO_BACKEND: Record<string, string> = {
@@ -68,6 +69,27 @@ export default function ProfilePage() {
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
   const { isDark, toggleDarkMode } = useDarkMode();
+  const {
+    supported: pushSupported,
+    permission: pushPermission,
+    subscribed: pushSubscribed,
+    loading: pushLoading,
+    subscribe: pushSubscribe,
+    unsubscribe: pushUnsubscribe,
+  } = usePushNotifications();
+
+  const handlePushToggle = async () => {
+    if (pushLoading) return;
+    try {
+      if (pushSubscribed) {
+        await pushUnsubscribe();
+      } else {
+        await pushSubscribe();
+      }
+    } catch {
+      // L'erreur est déjà stockée dans le hook ; on ne bloque pas l'UI.
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -373,7 +395,42 @@ export default function ProfilePage() {
             icon={<Bell size={18} />}
           >
             Notifications
+            <span className="block text-xs text-[var(--color-text-tertiary)] font-normal">
+              Alertes perturbations et rappels
+            </span>
           </Switch>
+        </div>
+
+        <div className="border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-3">
+          <span className="text-[var(--color-text-tertiary)]" aria-hidden="true">
+            <Bell size={18} />
+          </span>
+          <div className="flex-1">
+            <p className="text-sm text-[var(--color-text-primary)]">Notifications push</p>
+            <p className="text-xs text-[var(--color-text-tertiary)]">
+              {pushPermission === "denied"
+                ? "Bloqué dans les paramètres du navigateur"
+                : !pushSupported
+                  ? "Non supporté sur cet appareil"
+                  : pushSubscribed
+                    ? "Activées"
+                    : "Désactivées"}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={
+              pushLoading || !pushSupported || pushPermission === "denied"
+            }
+            onClick={handlePushToggle}
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]"
+          >
+            {pushLoading
+              ? "..."
+              : pushSubscribed
+                ? "Désactiver"
+                : "Activer"}
+          </button>
         </div>
 
         <div className="border-b border-[var(--color-border)]">
