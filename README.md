@@ -2,7 +2,10 @@
 
 Plateforme intelligente de mobilité multimodale pour Paris et son agglomération.
 
-> **État au 2026-07-06** : backend = NestJS 11 + PostgreSQL 16 + **Navitia PRIM v2 (primaire) + GTFS RAPTOR (repli silencieux)** ; frontend = Next.js 16 + Tailwind v4 + Leaflet. PR ouverte : `feat/gtfs-postgres` (#1).
+> **État au 2026-07-06** : backend = NestJS 11 + PostgreSQL 16 + **Navitia PRIM v2 (primaire) + GTFS RAPTOR (repli silencieux)** ; frontend = Next.js 16 + Tailwind v4 + Leaflet. PR `feat/gtfs-postgres` fermée et fusionnée dans `main`.
+>
+> [![CI](https://github.com/fwBoa/Urbanflow/actions/workflows/ci.yml/badge.svg)](https://github.com/fwBoa/Urbanflow/actions/workflows/ci.yml)
+> ![Coverage backend](badge/coverage-backend.svg)
 
 ## Stack technique
 
@@ -175,9 +178,28 @@ cd packages/shared && npm run build
 
 # Lancer les tests backend
 cd apps/backend && npm run test
+
+# Tests + couverture + badge SVG
+npm run test:cov        # génère coverage-summary.json + badge/coverage-backend.svg
+
+# Tests e2e backend (requiert urbanflow-db running)
+cd apps/backend && DATABASE_URL=postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow npm run test:e2e -- --runInBand
+
+# Sauvegarder / restaurer la base PostgreSQL
+./scripts/backup-db.sh ./backups
+./scripts/restore-db.sh ./backups/urbanflow_YYYYMMDD_HHMMSS.sql.gz
+
+# Vérification avant mise en production
+voir [docs/prod-verification.md](docs/prod-verification.md)
 ```
 
+## CI / CD
 
+Le workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) s'exécute sur chaque push/PR vers `main` :
+
+1. **Backend** : build → lint bloquant (`--max-warnings 0`) → tests unitaires avec couverture → artefact coverage.
+2. **Backend e2e** : monte un conteneur PostgreSQL 16 et exécute la suite e2e (33 tests) en base réelle.
+3. **Frontend** : lint bloquant → tests → build production.
 
 ## Licence
 

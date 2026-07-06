@@ -2,7 +2,7 @@
 
 API REST pour la plateforme de mobilité multimodale Urban Flow Mobility.
 
-> **État au 2026-07-06** : NestJS 11 + TypeORM + PostgreSQL 16, **PWA offline + Web Push VAPID** (`ea42742`, Bloc 44) : `PushService` (`web-push@^3.6.7`), entité `push_subscriptions`, 3 endpoints `/api/notifications/push/*` (subscribe / unsubscribe / send-test), opt-in `marketingConsent` dans `ConsentBanner`.
+> **État au 2026-07-06** : NestJS 11 + TypeORM + PostgreSQL 16. **CI bloquante** (lint, 186 tests unitaires, 33 tests e2e sur PostgreSQL réelle, build frontend). **Notifications événementielles** (`@nestjs/event-emitter`) : alertes GTFS-RT → création in-app + Web Push asynchrone, et broadcast admin découplé. **PWA offline + Web Push VAPID** (`web-push@^3.6.7`) avec entité `push_subscriptions` et endpoints `/api/notifications/push/*`.
 
 ## Architecture
 

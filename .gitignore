@@ -35,6 +35,9 @@ coverage/
 docker/data/
 docker/postgres/
 
+# ─── Local DB backups ───
+backups/
+
 # ─── GTFS data (regenerated at runtime — downloaded from PRIM + extracted,
 #     never commit ~1.5 GB of artefacts) ───
 apps/backend/data/gtfs/
