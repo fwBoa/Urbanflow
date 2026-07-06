@@ -2,102 +2,111 @@
 
 Interface web PWA pour la plateforme de mobilité multimodale Urban Flow Mobility.
 
+> **État au 2026-07-06** : Next.js 16 + React 19 + TypeScript 5 + Tailwind v4 + Leaflet.
+> Refonte majeure récente (`7b8988e`) : dark mode no-FOUC, a11y `prefers-reduced-motion`, AbortController sur fetches, composants `SearchAutocomplete` / `NearbyStopDrawer` / `Switch` / `CO2Comparison`, source unique couleurs modes.
+
 ## Stack
 
-- Next.js 16.2.6 (App Router, TypeScript)
-- Tailwind CSS v4 + CSS Variables (design tokens)
-- Leaflet + OpenStreetMap (cartographie)
-- lucide-react (icônes SVG)
-- PWA (manifest.json, service worker à venir)
+- **Next.js 16.2.6** (App Router, Turbopack, standalone prod build, `use client`)
+- **React 19** + **TypeScript 5**
+- **Tailwind CSS v4** + CSS Variables (design tokens)
+- **Leaflet** + OpenStreetMap (cartographie, `next/dynamic` SSR off)
+- **lucide-react** (icônes SVG)
+- **Framer Motion** (animations, désactivées si `prefers-reduced-motion`)
+- PWA (manifest.json + service worker, installable)
 
-## Pages (5 écrans Figma)
+## Pages (6 écrans)
 
 | Page | Route | Description |
 |---|---|---|
-| Accueil | `/` | Barre de recherche, 6 modes de transport, lignes PRIM temps réel, trajets récents |
-| Recherche | `/search` | Origine/destination, filtres (Rapide/Éco/Économique), résultats trajet |
-| Détail itinéraire | `/trip/[id]` | Timeline visuelle, comparaison CO2, carte, CTA |
+| Accueil | `/` | Recherche rapide, modes de transport, lignes PRIM temps réel, trajets récents |
+| Recherche | `/search` | O/D + filtres modes + autocomplete arrêts/adresses (`SearchAutocomplete`) + géoloc + clic carte |
+| Détail itinéraire | `/trip/[id]` | Timeline segmentée, `CO2Comparison` (vs voiture ADEME 170 g/km), carte, navigation GPS immersive |
 | Favoris | `/favorites` | Onglets Favoris/Historique, cartes trajet, badges CO2 |
-| Profil | `/profile` | Avatar, stats, menu paramètres, toggle mode sombre |
+| Profil | `/profile` | Avatar, stats, badges gamification, économie CO2, dark mode, RGPD |
+| Admin | `/admin` | Dashboard (users, trips, GTFS load), users, trips, broadcast, reload GTFS |
 
-## Composants (10)
+## Composants (17+)
 
 | Composant | Fichier | Rôle |
 |---|---|---|
-| NavBar | `components/NavBar.tsx` | Navigation basse (Home, Search, Heart, User) |
-| Header | `components/Header.tsx` | En-tête avec titre, bouton retour, action droite |
-| AppShell | `components/AppShell.tsx` | Layout wrapper (Header + contenu + NavBar) |
-| TransportCard | `components/TransportCard.tsx` | Carte mode de transport avec bordure colorée |
-| CO2Badge | `components/CO2Badge.tsx` | Badge émissions CO2 (icône Leaf, g/kg) |
-| TripCard | `components/TripCard.tsx` | Carte résultat trajet (mode, durée, CO2) |
-| SearchBar | `components/SearchBar.tsx` | Champ de recherche avec icône |
-| FilterChip | `components/FilterChip.tsx` | Chips de filtre (Rapide/Éco/Économique) |
-| MapComponent | `components/MapComponent.tsx` | Carte Leaflet interactive (marqueurs, polylignes, Vélib') |
-| DynamicMap | `components/DynamicMap.tsx` | Wrapper next/dynamic (SSR désactivé) + état de chargement |
+| `NavBar` | `components/NavBar.tsx` | Navigation basse (Home, Search, Heart, User) |
+| `Header` | `components/Header.tsx` | En-tête (titre, retour, action droite) |
+| `MapComponent` | `components/MapComponent.tsx` | Carte Leaflet interactive (marqueurs, polylignes, Vélib') |
+| `SearchBar` | `components/SearchBar.tsx` | Champ de recherche avec icône (respecte `prefers-reduced-motion`) |
+| `FilterChip` | `components/FilterChip.tsx` | Chips de filtre (Rapide/Éco/Économique) animées |
+| `TripCard` | `components/TripCard.tsx` | Carte résultat trajet (Framer Motion spring stagger) |
+| `VelibStationCard` | `components/VelibStationCard.tsx` | Carte station Vélib' |
+| `NotificationBell` | `components/NotificationBell.tsx` | Cloche notifications + compteur non-lus |
+| `ConsentBanner` | `components/ConsentBanner.tsx` | Bandeau consentement RGPD (geoloc/cookies/history) |
+| `PwaInstallBanner` | `components/PwaInstallBanner.tsx` | Bandeau d'installation PWA |
+| `ModeBadge` | `components/ModeBadge.tsx` | Badge mode (10 modes, couleurs IDFM depuis `mode-colors.ts`) |
+| `journey-helpers` | `components/journey-helpers.ts` | Helpers construction timeline / format durée / CO2 |
+| `SearchAutocomplete` | `components/SearchAutocomplete.tsx` | ⭐ Autocomplete fusion arrêts + adresses (AbortController) |
+| `NearbyStopDrawer` | `components/NearbyStopDrawer.tsx` | ⭐ Drawer prochains départs quand on clique un arrêt proche |
+| `Switch` | `components/Switch.tsx` | ⭐ Toggle UI atomique accessible (consent, profil, PWA) |
+| `CO2Comparison` | (utilisé dans `trip/[id]`) | ⭐ Comparaison CO2 vs voiture ADEME 170 g/km (g + %) |
 
-## Hooks React (`hooks/useTransport.ts`)
+## Hooks (`hooks/`)
 
-| Hook | Données | Source API |
+| Hook | Fichier | Rôle |
 |---|---|---|
-| `useLines(limit)` | Lignes de transport | `GET /api/transport/lines` |
-| `useStopSearch(query)` | Recherche d'arrêts (debounce 300ms) | `GET /api/transport/stops?where=search(...)` |
-| `useVelibStations(limit)` | Stations Vélib' ouvertes (Paris) | `GET /api/transport/velib` |
-| `useTrafficMessages(limit)` | Perturbations trafic | `GET /api/transport/traffic` |
-| `useHealthCheck()` | État de l'API PRIM | `GET /api/transport/health` |
+| `useTransport` | `useTransport.ts` | ⭐ Hooks API avec `AbortController` (annule fetches concurrents + en vol) |
+| `useGeolocation` | (livré précedemment) | Géolocalisation navigateur (ponctuel + `watchPosition` continu) |
+| `useNavigation` | `useNavigation.ts` | Navigation GPS (segments, vibration, voix, wake lock) |
+| `useDarkMode` | `useDarkMode.ts` | Dark mode (respecte `prefers-color-scheme`) |
+| `usePrefersReducedMotion` | `usePrefersReducedMotion.ts` | ⭐ Détecte préférence OS, désactive animations Framer Motion |
+
+## Contexts (`contexts/`)
+
+| Context | Rôle |
+|---|---|
+| `AuthContext` | JWT, user courant, signup/login/logout, RGPD export/anonymize |
+| `ThemeContext` | ⭐ Dark mode no-FOUC (script inline avant hydratation) |
+
+## Constantes (`constants/`)
+
+| Fichier | Rôle |
+|---|---|
+| `mode-colors.ts` | ⭐ `MAP_MODE_COLORS` (IDFM carte) + `UI_MODE_COLORS` (badges assombris) — source unique |
 
 ## Service API
 
-`services/api.ts` — Classe `ApiService` avec méthodes typées pour les 8 endpoints PRIM :
-- `healthCheck()`, `getLines()`, `getStops()`, `searchStops()`, `getStopLines()`, `getTrafficMessages()`, `getVelibStations()`, `getElevatorStatus()`, `getGtfsUrls()`
+`services/api.ts` — classe `ApiService` typée (méthodes : `getLines`, `getStops`, `searchStops`, `getNearbyStops`, `getJourney`, `getAlerts`, `getVelibStations`, `getElevatorStatus`, etc.).
+`services/favorites.ts` — favoris, historique, stats, préférences.
 
-Types exportés : `PrimLine`, `PrimStop`, `PrimVelibStation`, `JourneyResult`, `JourneySegment`, etc.
+Types partagés : `PrimLine`, `PrimStop`, `PrimVelibStation`, `JourneyResult`, `JourneySegment`, `RealtimeAlert`, `Favorite`, `UserProfile`, `ConsentState`, etc.
 
-## Design tokens (CSS Variables)
+## Design tokens (`app/globals.css`)
 
-20+ variables dans `globals.css` :
+20+ variables CSS :
+- **Couleurs** : Primary (#2E7D9B), Eco Green, Mobility Orange, surfaces dark/light
+- **Transport** : metro, bus, velo, rer, tram, train, voiture, marche (référencés aussi depuis `mode-colors.ts`)
+- **Espacements** : header-height (60px), navbar-height (80px), card-radius, cta-radius
+- **Typographie** : Inter, 10-32px
 
-| Catégorie | Tokens |
-|---|---|
-| Couleurs | Primary (#2E7D9B), Eco Green (#7CB342), Mobility Orange (#FF6B35), etc. |
-| Transport | metro, bus, velo, rer, tram, train, voiture, marche |
-| Espacements | header-height (60px), navbar-height (80px), card-radius (12px), cta-radius (26px) |
-| Typographie | font-family Inter, tailles 10-32px |
+## a11y
 
-## Design
+- `prefers-reduced-motion` détecté via hook → animations Framer Motion désactivées (TripCard, SearchBar, ConsentBanner)
+- `prefers-color-scheme` détecté via ThemeContext → dark mode no-FOUC (script inline avant hydratation React)
+- Focus visible WCAG, safe-area insets iPhone (notch)
+- Switch : `role="switch"`, `aria-checked`, focus visible
+- `aria-label` / `aria-live` sur listes de résultats et compteur notifications
 
-5 écrans réalisés sur Figma :
-1. Accueil — Barre de recherche, cartes transport, zone carte
-2. Résultats — Filtres (Rapide/Eco/Économique), cartes trajet avec badges CO2
-3. Détail — Timeline itinéraire, carte, badge CO2, CTA "Démarrer le trajet"
-4. Favoris — Cartes favoris, historique trajets
-5. Profil — Avatar, infos utilisateur, paramètres
-
-**Lien Figma :** https://www.figma.com/design/JEcRNJTv6EnI4IAWTnIRO8/T6
-
-**Améliorations UI par rapport au Figma :**
-- Icônes lucide-react (SVG) au lieu d'emojis
-- CO2Badge réutilisable avec tailles sm/md/lg
-- FilterChip avec état actif/inactif animé
-- AppShell comme layout wrapper commun
-- Safe-area insets pour iPhone (notch)
-- Focus visible pour accessibilité WCAG
-- Carte Leaflet interactive avec stations Vélib' en temps réel
-- Hooks React pour connexion API avec debounce et gestion d'erreurs
-
-## Développement
+## Dev
 
 ```bash
 npm install
-npm run dev
+npm run dev      # port 3001 (Turbopack)
+npm run build    # standalone prod
+npm run lint
 ```
-
-Le frontend tourne sur le port 3001.
 
 ## API Backend
 
-Le frontend communique avec le backend NestJS sur le port 4000 :
-- Variable `NEXT_PUBLIC_API_URL=http://localhost:4000`
-- Endpoints transport : `/api/transport/*`
+- `NEXT_PUBLIC_API_URL=http://localhost:4000`
+- Endpoints : `/api/transport/*`, `/api/auth/*`, `/api/favorites/*`, `/api/notifications/*`, `/api/admin/*`
+- JWT httpOnly cookies + Bearer pour compat
 
 ## Licence
 

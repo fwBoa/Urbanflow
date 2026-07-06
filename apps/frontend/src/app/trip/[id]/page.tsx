@@ -1,23 +1,36 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, MapPin, Footprints, Bike, Train, TramFront, Bus, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot } from "lucide-react";
+import { Clock, MapPin, Footprints, Bike, Train, TramFront, Bus, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
 import ModeBadge from "@/components/ModeBadge";
+import TurnByTurnBanner from "@/components/TurnByTurnBanner";
 import { useRoute } from "@/hooks/useTransport";
 import { useNavigation } from "@/hooks/useNavigation";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { MAP_MODE_COLORS } from "@/constants/mode-colors";
 import { apiService } from "@/services/api";
 import type { JourneyResult } from "@/services/api";
+import { Immersion } from "@/services/immersion";
 
 // ─── Facteur d'émission moyen voiture particulière en France (thermique) ───
 // Source : ADEME ~170 g CO₂/km (valeur conservative pour comparaison)
 const CAR_EMISSION_G_PER_KM = 170;
+
+// ─── Haversine local (distance en mètres) pour le garde déplacement reroute ──
+function haversinePage(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 function CO2Comparison({ co2, distanceKm }: { co2: number; distanceKm?: number }) {
   const carEmission = Math.round((distanceKm ?? 0) * CAR_EMISSION_G_PER_KM);
@@ -111,18 +124,19 @@ const fallbackTrip = {
 
 export default function TripDetailPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const reducedMotion = usePrefersReducedMotion();
 
-  // Parse journey data from URL
-  let trip: JourneyResult | null = null;
-  try {
-    const data = searchParams.get("data");
-    if (data) {
-      trip = JSON.parse(decodeURIComponent(data));
+  // ─── Trip : state (init depuis le `data` param) pour permettre le reroutage ──
+  const [trip, setTrip] = useState<JourneyResult | null>(() => {
+    try {
+      const data = searchParams.get("data");
+      if (data) return JSON.parse(decodeURIComponent(data));
+    } catch {
+      // Use fallback
     }
-  } catch {
-    // Use fallback
-  }
+    return null;
+  });
 
   const segments = (trip?.segments || fallbackTrip.segments) as JourneyResult["segments"];
   const firstSeg = segments[0];
@@ -148,9 +162,9 @@ export default function TripDetailPage() {
   const destLon = searchParams.get("destLon");
 
   const hasCoords = originLat && originLon && destLat && destLon;
-  const originPos = useMemo(
-    () => (hasCoords ? { lat: parseFloat(originLat!), lon: parseFloat(originLon!) } : null),
-    [originLat, originLon, hasCoords],
+  // ─── Origin en state : reroutage remplace l'origine par la position user ──
+  const [originPos, setOriginPos] = useState<{ lat: number; lon: number } | null>(() =>
+    hasCoords ? { lat: parseFloat(originLat!), lon: parseFloat(originLon!) } : null,
   );
   const destPos = useMemo(
     () => (hasCoords ? { lat: parseFloat(destLat!), lon: parseFloat(destLon!) } : null),
@@ -241,6 +255,10 @@ export default function TripDetailPage() {
     currentSpeed,
     remainingDistance,
     remainingTime,
+    instruction,
+    nextManeuverPoint,
+    nextBearing,
+    heading,
     startNavigation,
     pauseNavigation,
     resumeNavigation,
@@ -254,7 +272,6 @@ export default function TripDetailPage() {
   );
 
   // Build map markers from real coordinates
-  /* eslint-disable react-hooks/preserve-manual-memoization */
   const mapMarkers = useMemo(() => {
     const markers: Array<{ position: [number, number]; label: string; color: string }> = [];
     if (originPos) {
@@ -271,7 +288,6 @@ export default function TripDetailPage() {
     }
     return markers;
   }, [originPos, destPos, departure, arrival]);
-  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   // Map center: follow user during navigation, else origin or default Paris
   const mapCenter: [number, number] = isNavigating && userPosition
@@ -297,6 +313,106 @@ export default function TripDetailPage() {
   const totalDurationSeconds = segments.reduce((acc, s) => acc + s.durationMinutes * 60, 0);
   const progressPercent = totalDurationSeconds > 0 ? Math.min((elapsedSeconds / totalDurationSeconds) * 100, 100) : 0;
 
+  // ─── Recalcul d'itinéraire (reroute) sur hors-trajet persistant ──────
+  const [isRerouting, setIsRerouting] = useState(false);
+  const rerouteAbortRef = useRef<AbortController | null>(null);
+  const lastRerouteOriginRef = useRef<{ lat: number; lon: number } | null>(null);
+
+  const reroute = useCallback(
+    async (fromPos: { lat: number; lon: number }) => {
+      if (!destPos) return;
+      // Annule la requête de reroute précédente.
+      rerouteAbortRef.current?.abort();
+      const controller = new AbortController();
+      rerouteAbortRef.current = controller;
+
+      setIsRerouting(true);
+      Immersion.recalculating();
+      try {
+        const results = await apiService.searchJourney(
+          {
+            originLat: fromPos.lat,
+            originLon: fromPos.lon,
+            destLat: destPos.lat,
+            destLon: destPos.lon,
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        const newTrip = results[0];
+        if (!newTrip) {
+          // Aucun itinéraire trouvé depuis cette position → on garde l'ancien.
+          return;
+        }
+        setTrip(newTrip);
+        setOriginPos(fromPos);
+        hasFetchedRef.current = false; // re-fetch OSRM polyline depuis la nouvelle origine
+        lastRerouteOriginRef.current = fromPos;
+        // Resync URL (best-effort, peut échouer si le payload est trop long).
+        try {
+          const query = new URLSearchParams({ data: JSON.stringify(newTrip) });
+          query.set("originLat", String(fromPos.lat));
+          query.set("originLon", String(fromPos.lon));
+          query.set("destLat", String(destPos.lat));
+          query.set("destLon", String(destPos.lon));
+          router.replace(`${window.location.pathname}?${query.toString()}`);
+        } catch {
+          // best-effort
+        }
+        // Annonce vocale de la 1ʳᵉ instruction du nouvel itinéraire.
+        const firstSeg = newTrip.segments[0];
+        if (firstSeg) {
+          Immersion.segmentChange(
+            firstSeg.type === "walking"
+              ? firstSeg.instruction
+              : `Montez dans le ${firstSeg.mode || "transit"} direction ${firstSeg.direction || firstSeg.toStop || ""}`,
+          );
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        // Repli silencieux : on garde l'itinéraire courant.
+        console.warn("Reroute failed:", err);
+      } finally {
+        if (!controller.signal.aborted) setIsRerouting(false);
+      }
+    },
+    [destPos, router],
+  );
+
+  // ─── Déclenchement auto : hors-trajet persistant > 8 s (+ 30 m de déplacement) ──
+  useEffect(() => {
+    if (!isNavigating || !offRoute || !userPosition) return;
+    // Si l'utilisateur n'a pas bougé > 30 m depuis le dernier reroute, on évite le
+    // spam (il est peut-être juste arrêté hors trajet).
+    const last = lastRerouteOriginRef.current;
+    if (last) {
+      const moved = haversinePage(userPosition.lat, userPosition.lon, last.lat, last.lon);
+      if (moved < 30) return;
+    }
+    const timer = setTimeout(() => {
+      if (userPosition) reroute(userPosition);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [isNavigating, offRoute, userPosition, reroute]);
+
+  // ─── Cap de la carte (leaflet-rotate) + zoom segment actif ───────────
+  const mapBearing = useMemo(() => {
+    if (!isNavigating) return 0;
+    if (heading != null && heading >= 0 && currentSpeed > 0.5) return heading; // sens de marche
+    if (nextBearing != null) return nextBearing; // repli : vers le prochain manœuvre
+    return 0; // nord en haut
+  }, [isNavigating, heading, currentSpeed, nextBearing]);
+
+  const activeFitBounds = useMemo<Array<[number, number]> | undefined>(() => {
+    if (!isNavigating || !userPosition || !nextManeuverPoint) return undefined;
+    return [
+      [userPosition.lat, userPosition.lon],
+      [nextManeuverPoint.lat, nextManeuverPoint.lon],
+    ];
+  }, [isNavigating, userPosition, nextManeuverPoint]);
+
+  const fitBoundsKey = isNavigating ? `seg-${activeSegment}` : undefined;
+
   return (
     <AppShell
       title="Détail itinéraire"
@@ -307,6 +423,14 @@ export default function TripDetailPage() {
         </button>
       }
     >
+      {/* Bannière turn-by-turn (overlay fixed sous le header, nav only) */}
+      {isNavigating && instruction && (
+        <TurnByTurnBanner
+          instruction={instruction}
+          accentColor={segments[activeSegment]?.lineColor}
+        />
+      )}
+
       {/* Summary Card */}
       <motion.div
         initial={reducedMotion ? false : { opacity: 0, y: -8 }}
@@ -528,11 +652,14 @@ export default function TripDetailPage() {
           markers={mapMarkers}
           polyline={tripPolyline.length > 0 ? tripPolyline : undefined}
           shapePolylines={shapePolylines}
-          userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined } : undefined}
+          userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined, heading } : undefined}
           onLocateUser={() => {}}
           isWatching={isNavigating}
           onToggleWatch={isNavigating ? stopNavigation : startNavigation}
           followUser={isNavigating}
+          bearing={mapBearing}
+          fitBounds={activeFitBounds}
+          fitBoundsKey={fitBoundsKey}
         />
       </div>
 
@@ -655,10 +782,28 @@ export default function TripDetailPage() {
           {offRoute && !arrived && (
             <div className="bg-amber-50 border border-amber-200 rounded-[var(--card-radius)] p-3 flex items-center gap-2">
               <AlertTriangle size={18} className="text-amber-500 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-amber-800">Hors trajet</p>
-                <p className="text-xs text-amber-600">Vous vous êtes écarté de l&apos;itinéraire</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-800">
+                  {isRerouting ? "Recalcul en cours…" : "Hors trajet"}
+                </p>
+                <p className="text-xs text-amber-600">
+                  {isRerouting
+                    ? "Nouvel itinéraire depuis votre position"
+                    : "Vous vous êtes écarté de l&apos;itinéraire"}
+                </p>
               </div>
+              {!isRerouting && userPosition && (
+                <button
+                  type="button"
+                  onClick={() => reroute(userPosition)}
+                  disabled={!destPos}
+                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                  aria-label="Recalculer l'itinéraire"
+                >
+                  <RotateCcw size={14} />
+                  Recalculer
+                </button>
+              )}
             </div>
           )}
 

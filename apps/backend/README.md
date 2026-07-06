@@ -23,6 +23,7 @@ graph TD
   TM --> Prim[prim.service.ts]
   TM --> Parser[gtfs-parser.service.ts]
   TM --> GtfsDb[gtfs-db.service.ts]
+  TM --> Navitia[navitia.service.ts]
   TM --> Rt[gtfs-rt.service.ts]
   TM --> Journey[journey.service.ts]
   TM --> Osrm[osrm.service.ts]
@@ -36,6 +37,7 @@ graph TD
   TC --> Prim
   TC --> Parser
   TC --> GtfsDb
+  TC --> Navitia
   TC --> Rt
   TC --> Carbon
   TC --> Osrm
@@ -57,12 +59,16 @@ graph TD
 
 ### Flux d'une recherche d'itinéraire (`GET /api/transport/journey`)
 
+**Stratégie double couche** depuis `7b8988e` : Navitia PRIM v2 (routing + alertes temps réel, géométrie embarquée) est **primaire** ; GTFS RAPTOR est en **repli silencieux** si Navitia échoue (401, quota, réseau) ou ne renvoie rien. Cf. `transport.controller.ts:457-502`.
+
 ```mermaid
 sequenceDiagram
   autonumber
   actor U as Utilisateur
   participant FE as Frontend (Next.js)
   participant TC as TransportController
+  participant N as NavitiaService
+  participant API as PRIM Navitia v2
   participant J as JourneyService
   participant P as GtfsParserService
   participant DB as GtfsDbService
@@ -71,43 +77,64 @@ sequenceDiagram
 
   U->>FE: Saisit O/D + modes + heure
   FE->>TC: GET /api/transport/journey?...
-  TC->>J: findJourney(JourneyQuery)
-  loop round k = 0..maxTransfers
-    J->>P: getNextDeparturesBatch(markedStops, minDepByStop, services, limit)
-    P->>DB: getNextDeparturesBatch(...)
-    DB->>PG: 1 requête unnest() JOIN LATERAL ... LIMIT
-    PG-->>DB: 1er départ par (stop, route)
-    DB-->>J: Map<stopId, Departure[]>
-    Note over J: Dédup « 1er départ par route »<br/>(Node, 0 DB)
-    J->>P: getTripStopTimesBatch(uniqueTripIds[])
-    P->>DB: getTripStopTimesBatch(tripIds)
-    alt Cache HIT (trip connu)
-      DB->>Cache: get(tripId)
-      Cache-->>DB: stop_times[]
-    else Cache MISS
-      DB->>PG: SELECT ... WHERE trip_id = ANY($1)
-      PG-->>DB: stop_times[]
-      DB->>Cache: set(tripId, stop_times[])
+  alt Navitia disponible (PRIM_API_KEY set)
+    TC->>N: isAvailable()
+    N-->>TC: true
+    TC->>N: findJourneys(origin, dest, datetime, modes)
+    N->>API: GET /marketplace/v2/navitia/journeys
+    API-->>N: sections + disruptions + géométrie
+    N-->>TC: Journey[] (géométrie embarquée)
+    TC->>TC: usedNavitia = true
+  else Navitia échoue (401/quota/réseau) ou pas de clé
+    Note over TC,API: Repli silencieux → RAPTOR batch ×430
+    TC->>J: findJourney(JourneyQuery)
+    loop round k = 0..maxTransfers
+      J->>P: getNextDeparturesBatch(markedStops, minDepByStop, services, limit)
+      P->>DB: getNextDeparturesBatch(...)
+      DB->>PG: 1 requête unnest() JOIN LATERAL ... LIMIT
+      PG-->>DB: 1er départ par (stop, route)
+      DB-->>J: Map<stopId, Departure[]>
+      Note over J: Dédup « 1er départ par route »<br/>(Node, 0 DB)
+      J->>P: getTripStopTimesBatch(uniqueTripIds[])
+      P->>DB: getTripStopTimesBatch(tripIds)
+      alt Cache HIT (trip connu)
+        DB->>Cache: get(tripId)
+        Cache-->>DB: stop_times[]
+      else Cache MISS
+        DB->>PG: SELECT ... WHERE trip_id = ANY($1)
+        PG-->>DB: stop_times[]
+        DB->>Cache: set(tripId, stop_times[])
+      end
+      DB-->>J: Map<tripId, stop_times[]>
+      Note over J: Traverse 0 DB<br/>(bestArrival, cameFrom,<br/>newMarkedStops, destStopIds)
+      opt destStopIds touched
+        J->>J: reconstructJourney(cameFrom)
+      end
+      J->>P: getTransfersFromBatch(newMarkedStops[])
+      P->>DB: getTransfersFromBatch(stopIds)
+      DB->>PG: SELECT ... WHERE from_stop_id = ANY($1)
+      PG-->>DB: transfers[]
+      DB-->>J: Map<stopId, Transfer[]>
     end
-    DB-->>J: Map<tripId, stop_times[]>
-    Note over J: Traverse 0 DB<br/>(update bestArrival, cameFrom,<br/>newMarkedStops, destStopIds)
-    opt destStopIds touched
-      J->>J: reconstructJourney(cameFrom)
-    end
-    J->>P: getTransfersFromBatch(newMarkedStops[])
-    P->>DB: getTransfersFromBatch(stopIds)
-    DB->>PG: SELECT ... WHERE from_stop_id = ANY($1)
-    PG-->>DB: transfers[]
-    DB-->>J: Map<stopId, Transfer[]>
+    J->>J: carbonService.calculateFromGtfsRouteType(...)
+    J-->>TC: Journey
+    TC->>TC: usedNavitia = false
   end
-  J->>J: carbonService.calculateFromGtfsRouteType(...)<br/>+ snapshot Journey
-  J-->>TC: Journey
-  TC-->>FE: 200 Journey JSON
+  opt usedNavitia == false
+    Note over TC: Repli alertes : GTFS-RT si dispo
+  else usedNavitia == true
+    TC->>N: getAlerts()
+    N->>API: GET /marketplace/v2/navitia/disruptions
+    API-->>N: RealtimeAlert[]
+    N-->>TC: RealtimeAlert[]
+  end
+  TC-->>FE: 200 Journey[] + alerts
   FE-->>U: Itinéraire + transfers + CO2
 ```
 
-**Bilan mesuré** : ~22 requêtes PostgreSQL par trajet cold (était 9 494).
-Cache long-vie : invalidé à chaque reload atomique via `invalidateLoadedCache()`.
+**Bilan mesuré** :
+- **Navitia primaire** : 1 appel API (itinéraires) + 1 appel (alertes) → ~200-400 ms typiques, géométrie embarquée
+- **Repli GTFS RAPTOR** : ~22 requêtes PostgreSQL par trajet cold (était 9 494) ; cold 20-30 s, chaud ~0,26 s ; cache LRU 20 000 invalidé à chaque reload atomique via `invalidateLoadedCache()`
 
 ### Rechargement atomique GTFS (`POST /api/admin/gtfs/reload`)
 
@@ -156,14 +183,15 @@ sequenceDiagram
 ```
 src/
   transport/
-    prim.service.ts          → Appels API PRIM (référentiels, temps réel)
+    prim.service.ts          → Appels API PRIM (référentiels)
+    navitia.service.ts       → PRIM Navitia v2 (PRIMAIRE) — itinéraires + alertes temps réel + géométrie embarquée
     gtfs-parser.service.ts   → Téléchargement/parsing GTFS statiques → PostgreSQL (staging gtfs_*_next + swap atomique)
     gtfs-db.service.ts       → Pool pg + cache trip long-vie (LRU 20 000) + pg_prewarm des index RAPTOR
-    gtfs-rt.service.ts       → Flux GTFS-RT temps réel
-    journey.service.ts       → RAPTOR batch par round (22 requêtes max/trajet, was 9 494)
+    gtfs-rt.service.ts       → Flux GTFS-RT temps réel (REPLI pour alertes si Navitia KO)
+    journey.service.ts       → RAPTOR batch par round (REPLI routing si Navitia KO) — 22 requêtes max/trajet, was 9 494
     osrm.service.ts          → Reverse-geocode + distances
     carbon.service.ts        → Empreinte carbone (ADEME Base Carbone)
-    transport.controller.ts  → Endpoints REST /api/transport/*
+    transport.controller.ts  → Endpoints REST /api/transport/* — orchestre Navitia → RAPTOR, alertes Navitia → GTFS-RT
   admin/
     admin.service.ts + admin.controller.ts  → Dashboard, users, trips, broadcast, reload GTFS
   auth/                      → JWT, stratégies, register/login, RGPD
@@ -285,8 +313,8 @@ inter-conteneurs). Sémantique RAPTOR identique à l'implémentation per-stop d'
 | `PORT` | Port d'écoute NestJS | `4000` |
 | `CORS_ORIGIN` | Origines CORS autorisées (CSV) | `http://localhost:3001,http://localhost:3000` |
 | `DATABASE_URL` | Chaîne PostgreSQL (pool pg, tables `gtfs_*` ; fallback `PG*`) | — |
-| `PRIM_API_URL` | URL de l'API PRIM | `https://api-lab.idfm.fr` |
-| `PRIM_API_KEY` | Clé API PRIM (inscription gratuite) | — |
+| `PRIM_API_URL` | URL de l'API PRIM (Navitia v2 + référentiels PRIM) | `https://prim.iledefrance-mobilites.fr` |
+| `PRIM_API_KEY` | Clé API PRIM (itinéraires Navitia + référentiels) — requise pour que `NavitiaService.isAvailable()` retourne true | — |
 | `IDFM_DATA_API_URL` | URL API OpenData IDFM | `https://data.iledefrance-mobilites.fr/api/explore/v2.1` |
 | `GTFS_STATIC_URL` | URL téléchargement GTFS statique | `https://api-lab.idfm.fr/gtfs/v1/idfm-gtfs-static.zip` |
 | `GTFS_RT_URL` | URL flux GTFS-RT temps réel | `https://api-lab.idfm.fr/gtfs-rt/v1` |
