@@ -5,11 +5,10 @@ import { useRouter } from "next/navigation";
 import { MapPin, Bike, Clock, ChevronRight, CheckCircle, AlertCircle } from "lucide-react";
 import NotificationBell from "@/components/NotificationBell";
 import NavBar from "@/components/NavBar";
-import SearchBar from "@/components/SearchBar";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
-import { NearbyVelibSection, NearbyScootersSection } from "@/components/VelibStationCard";
-import { useVelibStations, useLinesByMode, useNearbyVelib, useNearbyScooters } from "@/hooks/useTransport";
+import { NearbyVelibSection } from "@/components/VelibStationCard";
+import { useVelibStations, useLinesByMode, useNearbyVelib } from "@/hooks/useTransport";
 import type { LineByMode, LinesByMode } from "@/hooks/useTransport";
 import { getHistory } from "@/services/favorites";
 import type { HistoryJourney } from "@/services/favorites";
@@ -108,7 +107,6 @@ function LineBadge({ line }: { line: LineByMode }) {
 
 export default function HomePage() {
   const router = useRouter();
-  const [searchValue, setSearchValue] = useState("");
   const [recentTrips, setRecentTrips] = useState<HistoryJourney[]>([]);
   const { stations: velibStations } = useVelibStations(50);
   const { linesByMode, loading: linesByModeLoading } = useLinesByMode();
@@ -148,6 +146,8 @@ export default function HomePage() {
 
   // Auto-request location on mount
   useEffect(() => {
+    // requestLocation updates internal state; this is the intended initialization path.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     requestLocation();
   }, [requestLocation]);
 
@@ -158,57 +158,42 @@ export default function HomePage() {
     8
   );
 
-  const { vehicles: nearbyScooters, message: scootersMessage, loading: scootersLoading, error: scootersError } = useNearbyScooters(
-    userPosition?.lat ?? null,
-    userPosition?.lon ?? null,
-    2,
-    20
-  );
-
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-background">
       {/* WCAG 2.4.1: Skip navigation link */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:bg-white focus:text-black focus:p-4 focus:outline focus:outline-2 focus:outline-blue-600"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-0 focus:left-0 focus:z-50 focus:bg-background focus:text-[var(--color-text-primary)] focus:p-4 focus:outline focus:outline-2 focus:outline-[var(--color-primary)]"
       >
         Aller au contenu principal
       </a>
       {/* ─── Header ─── */}
-      <header className="sticky top-0 z-40 bg-[var(--color-primary)] text-white px-4 h-[60px] flex items-center justify-between safe-area-top">
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-[var(--color-border)]/60 text-[var(--color-text-primary)] px-4 h-[60px] flex items-center justify-between safe-area-top transition-colors duration-300">
         <div className="flex items-center gap-2">
-          <MapPin size={22} className="text-white" />
-          <h1 className="text-lg font-semibold">UrbanFlow</h1>
+          <MapPin size={22} className="text-[var(--color-primary)]" />
+          <h1 className="text-base font-semibold">UrbanFlow</h1>
         </div>
         <NotificationBell />
       </header>
 
       {/* ─── Main Content ─── */}
       <main id="main-content" className="flex-1 px-4 py-4 pb-[96px] max-w-lg mx-auto w-full">
-        {/* Search Bar */}
-        <div className="mb-6">
-          <SearchBar
-            placeholder="Où allez-vous ?"
-            value={searchValue}
-            onChange={setSearchValue}
-            onSubmit={() => router.push("/search")}
-          />
-          <div className="flex gap-2 mt-3">
-            <button
-              onClick={() => router.push("/search")}
-              className="flex-1 h-[44px] rounded-[var(--chip-radius)] bg-[var(--color-primary)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[var(--color-primary-dark)] transition-colors"
-            >
-              <MapPin size={16} />
-              Itinéraire
-            </button>
-            <button
-              onClick={() => router.push("/search?mode=velib")}
-              className="flex-1 h-[44px] rounded-[var(--chip-radius)] bg-[var(--color-eco-green)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#6DA33A] transition-colors"
-            >
-              <Bike size={16} />
-              Vélib&apos; proches
-            </button>
-          </div>
+        {/* ─── CTAs : entrées principales (itinéraire / Vélib') ─── */}
+        <div className="mb-6 flex gap-2">
+          <button
+            onClick={() => router.push("/search")}
+            className="flex-1 h-[44px] rounded-[var(--chip-radius)] bg-[var(--color-primary)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[var(--color-primary-dark)] transition-colors"
+          >
+            <MapPin size={16} />
+            Itinéraire
+          </button>
+          <button
+            onClick={() => router.push("/search?mode=velib")}
+            className="flex-1 h-[44px] rounded-[var(--chip-radius)] bg-[var(--color-eco-green)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#6DA33A] transition-colors"
+          >
+            <Bike size={16} />
+            Vélib&apos; proches
+          </button>
         </div>
 
         {/* Live Lines */}
@@ -222,15 +207,6 @@ export default function HomePage() {
           stations={nearbyVelib}
           loading={nearbyLoading && userPosition !== null}
           error={geoError || nearbyError}
-          onRequestLocation={requestLocation}
-        />
-
-        {/* Nearby shared scooters/bikes (GBFS — F3) */}
-        <NearbyScootersSection
-          vehicles={nearbyScooters}
-          message={scootersMessage}
-          loading={scootersLoading && userPosition !== null}
-          error={geoError || scootersError}
           onRequestLocation={requestLocation}
         />
 
@@ -256,11 +232,6 @@ export default function HomePage() {
             }
             userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon } : null}
             onLocateUser={requestLocation}
-            scooterStations={nearbyScooters.map((v) => ({
-              position: v.position,
-              operator: v.operator,
-              type: v.type,
-            }))}
           />
         </div>
 
@@ -278,7 +249,7 @@ export default function HomePage() {
               <button
                 key={trip.id || i}
                 onClick={() => router.push(`/search?mode=${trip.mode.toLowerCase().replace("'", "").replace(/\s+/g, "")}`)}
-                className="w-full flex items-center gap-3 bg-white rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-sm transition-all text-left"
+                className="w-full flex items-center gap-3 bg-surface rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-md transition-all text-left"
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[var(--color-text-primary)]">

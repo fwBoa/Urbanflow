@@ -102,14 +102,14 @@ export default function NotificationBell() {
       {/* Bell button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-3 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        className="relative p-2 rounded-full hover:bg-[var(--color-surface)] transition-colors text-[var(--color-text-primary)]"
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} non lues)` : ''}`}
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          className="h-6 w-6 text-gray-600 dark:text-gray-300"
+          className="h-6 w-6 text-[var(--color-text-primary)]"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -123,7 +123,7 @@ export default function NotificationBell() {
           />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center" role="status" aria-live="polite" aria-label={`${unreadCount} notification${unreadCount > 1 ? 's' : ''} non lue${unreadCount > 1 ? 's' : ''}`}>
+          <span className="absolute top-0 right-0 bg-[var(--color-favorite-red)] text-white text-[10px] font-bold rounded-full h-4.5 w-4.5 flex items-center justify-center" role="status" aria-live="polite" aria-label={`${unreadCount} notification${unreadCount > 1 ? 's' : ''} non lue${unreadCount > 1 ? 's' : ''}`}>
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -132,20 +132,20 @@ export default function NotificationBell() {
       {/* Dropdown panel */}
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-[1000]"
+          className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-[var(--color-background)] rounded-xl shadow-xl border border-[var(--color-border)] z-[1000]"
           role="dialog"
           aria-modal="true"
           aria-label="Panneau de notifications"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <div className="flex items-center justify-between p-3 border-b border-[var(--color-border)]">
+            <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
               Notifications
             </h2>
             {notifications.length > 0 && (
               <button
                 onClick={handleMarkAllRead}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                className="text-xs text-[var(--color-primary)] hover:underline"
                 aria-label="Marquer toutes les notifications comme lues"
               >
                 Tout marquer lu
@@ -156,7 +156,7 @@ export default function NotificationBell() {
           {/* Notification list */}
           <div role="list" aria-label="Liste des notifications">
             {notifications.length === 0 ? (
-              <p className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
+              <p className="p-4 text-center text-sm text-[var(--color-text-tertiary)]">
                 Aucune notification
               </p>
             ) : (
@@ -166,8 +166,8 @@ export default function NotificationBell() {
                   <div
                     key={notif.id}
                     role="listitem"
-                    className={`flex items-start gap-3 p-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
-                      !notif.isRead ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                    className={`flex items-start gap-3 p-3 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] transition-colors ${
+                      !notif.isRead ? 'bg-[var(--color-primary)]/5' : ''
                     }`}
                   >
                     <span className="text-lg flex-shrink-0" aria-hidden="true">
@@ -177,16 +177,16 @@ export default function NotificationBell() {
                       <p
                         className={`text-sm ${
                           !notif.isRead
-                            ? 'font-semibold text-gray-900 dark:text-gray-100'
-                            : 'text-gray-700 dark:text-gray-300'
+                            ? 'font-semibold text-[var(--color-text-primary)]'
+                            : 'text-[var(--color-text-secondary)]'
                         }`}
                       >
                         {notif.title}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
+                      <p className="text-xs text-[var(--color-text-tertiary)] mt-0.5 line-clamp-2">
                         {notif.message}
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      <p className="text-xs text-[var(--color-text-tertiary)]/70 mt-1">
                         {formatDate(notif.createdAt)}
                       </p>
                     </div>
@@ -194,7 +194,7 @@ export default function NotificationBell() {
                       {!notif.isRead && (
                         <button
                           onClick={() => handleMarkAsRead(notif.id)}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                          className="text-xs text-[var(--color-primary)] hover:underline"
                           aria-label={`Marquer "${notif.title}" comme lu`}
                         >
                           Lu
@@ -202,7 +202,7 @@ export default function NotificationBell() {
                       )}
                       <button
                         onClick={() => handleDelete(notif.id)}
-                        className="text-xs text-red-500 hover:underline"
+                        className="text-xs text-[var(--color-favorite-red)] hover:underline"
                         aria-label={`Supprimer "${notif.title}"`}
                       >
                         ✕

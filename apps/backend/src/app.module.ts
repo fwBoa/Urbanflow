@@ -12,6 +12,7 @@ import { User } from './auth/user.entity';
 import { Favorite } from './favorites/favorite.entity';
 import { History } from './favorites/history.entity';
 import { Notification } from './notifications/notification.entity';
+import { PushSubscription } from './notifications/push-subscription.entity';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 
@@ -29,7 +30,7 @@ import { AdminModule } from './admin/admin.module';
       useFactory: () => ({
         type: 'postgres' as const,
         url: process.env.DATABASE_URL || 'postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow',
-        entities: [User, Favorite, History, Notification],
+        entities: [User, Favorite, History, Notification, PushSubscription],
         // AdminModule entities are loaded via TypeOrmModule.forFeature()
         // ─── Never auto-mutate the schema in production (data-loss risk). ───
         // Use migrations in prod; synchronize only re-syncs the dev schema.

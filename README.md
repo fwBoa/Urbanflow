@@ -2,100 +2,87 @@
 
 Plateforme intelligente de mobilité multimodale pour Paris et son agglomération.
 
+> **État au 2026-07-06** : backend = NestJS 11 + PostgreSQL 16 + **Navitia PRIM v2 (primaire) + GTFS RAPTOR (repli silencieux)** ; frontend = Next.js 16 + Tailwind v4 + Leaflet. PR ouverte : `feat/gtfs-postgres` (#1).
+
 ## Stack technique
 
 | Couche | Technologie |
 |---|---|
-| Frontend | Next.js 16 + TypeScript + Tailwind CSS |
-| Backend | NestJS + TypeScript |
-| Base de données | PostgreSQL 16 |
+| Frontend | Next.js 16 + React 19 + TypeScript 5 + Tailwind CSS v4 + Leaflet |
+| Backend | NestJS 11 + TypeScript 5.7 |
+| Routing | **Navitia PRIM v2** (primaire — itinéraires + alertes + géométrie embarquée) + **GTFS RAPTOR PostgreSQL** (repli silencieux) |
+| Base de données | PostgreSQL 16 (10 tables `gtfs_*` + 4 entités TypeORM : User, Favorite, History, Notification) |
 | Cartographie | Leaflet + OpenStreetMap |
-| Données transport | PRIM (Île-de-France Mobilités) — Open Data |
-| Conteneurisation | Docker + Docker Compose |
+| Données transport | PRIM IDFM (référentiels + Navitia v2) + Open Data Paris (Vélib') + OSRM (routing piéton/vélo) + GBFS (trottinettes) |
+| Données GTFS statiques | PostgreSQL via `gtfs-db.service.ts` (pool `pg` + `pg-copy-streams` + `pg_prewarm` + cache trip LRU 20k) |
+| Auth | Passport JWT (httpOnly cookies) + bcrypt + RBAC + RGPD (consentGeoloc/Cookies/History + soft delete) |
+| PWA | manifest.json + Service Worker (cache-first / network-first) |
+| DevOps | Docker Compose (4 services) + Nginx (SSL, CSP, rate limiting) |
 
 ## Structure du projet
 
 ```
 urbanflow/
 ├── apps/
-│   ├── frontend/          # Next.js 16.2.6 (port 3001)
-│   │   ├── src/
-│   │   │   ├── app/
-│   │   │   │   ├── page.tsx           # Accueil
-│   │   │   │   ├── search/page.tsx    # Recherche itinéraire (autocomplete arrêts + adresses, mode transport, géolocalisation, clic carte)
-│   │   │   │   ├── trip/[id]/page.tsx  # Détail itinéraire + mode navigation + détails enrichis (direction, quai, attente)
-│   │   │   │   ├── favorites/page.tsx  # Favoris & historique
-│   │   │   │   └── profile/page.tsx    # Profil utilisateur
-│   │   │   ├── components/            # 13 composants réutilisables
-│   │   │   │   ├── NavBar.tsx          # Navigation basse
-│   │   │   │   ├── Header.tsx          # En-tête
-│   │   │   │   ├── AppShell.tsx        # Layout wrapper
-│   │   │   │   ├── TransportCard.tsx   # Carte mode transport (⚠️ inutilisé — voir cleanup)
-│   │   │   │   ├── CO2Badge.tsx        # Badge émissions CO2
-│   │   │   │   ├── TripCard.tsx        # Carte résultat trajet
-│   │   │   │   ├── SearchBar.tsx        # Champ de recherche
-│   │   │   │   ├── FilterChip.tsx      # Chips de filtre
-│   │   │   │   ├── MapComponent.tsx    # Carte Leaflet interactive
-│   │   │   │   ├── DynamicMap.tsx      # Wrapper next/dynamic (SSR off)
-│   │   │   │   ├── VelibStationCard.tsx # Carte station Vélib'
-│   │   │   │   ├── NotificationBell.tsx  # Cloche notifications
-│   │   │   │   ├── ServiceWorkerRegistration.tsx # Enregistrement SW PWA
-│   │   │   │   └── ConsentBanner.tsx   # Bannière consentement RGPD
-│   │   │   ├── hooks/
-│   │   │   │   ├── useTransport.ts     # Hooks React (useLines, useStopSearch, useGeocode, useReverseGeocode, useJourney, etc.)
-│   │   │   │   ├── useLocalStorage.ts  # Hook localStorage typé
-│   │   │   │   └── useGeolocation.ts   # Hook géolocalisation navigateur (GPS ponctuel + watchPosition continu)
-│   │   │   └── services/
-│   │   │       ├── api.ts              # Service API typé (10 endpoints PRIM + geocoding + reverse-geocoding + journey)
-│   │   │       └── favorites.ts        # Service favoris, historique, stats, préférences
-│   │   └── ...
-│   └── backend/           # NestJS (port 4000)
-│       └── src/transport/ # Module Transport PRIM
-│           ├── prim.service.ts        # Appels API PRIM + geocoding + reverse-geocoding data.gouv.fr
-│           ├── gtfs-parser.service.ts  # Parsing GTFS statiques (streaming, index optimisé)
-│           ├── journey.service.ts      # Calcul d'itinéraires (RAPTOR + fallback)
-│           ├── gtfs-rt.service.ts      # GTFS-RT temps réel (alertes, perturbations)
-│           ├── gbfs.service.ts         # GBFS trottinettes/vélos partagés
-│           ├── osrm.service.ts         # Routing OSRM (polyline réelle)
-│           ├── carbon.service.ts       # Empreinte CO2 (ADEME)
-│           ├── transport.controller.ts # Endpoints REST (20+ routes)
-│           └── transport.module.ts      # Module NestJS
-├── packages/
-│   └── shared/            # Types et constantes partagés (GTFS/PRIM)
-├── docker/
-│   ├── docker-compose.yml
-│   └── init-db.sql
+│   ├── frontend/          # Next.js 16 (port 3001)
+│   │   └── src/
+│   │       ├── app/                          # Pages (App Router)
+│   │       │   ├── page.tsx                  # Accueil / landing
+│   │       │   ├── search/page.tsx           # Recherche itinéraire
+│   │       │   ├── trip/[id]/page.tsx        # Détail itinéraire + mode navigation
+│   │       │   ├── favorites/page.tsx
+│   │       │   ├── profile/page.tsx
+│   │       │   └── admin/page.tsx
+│   │       ├── components/                   # 17+ composants
+│   │       │   ├── NavBar, Header, MapComponent, SearchBar, FilterChip,
+│   │       │   │   TripCard, VelibStationCard, NotificationBell, ConsentBanner,
+│   │       │   │   PwaInstallBanner, ModeBadge, journey-helpers
+│   │       │   ├── SearchAutocomplete.tsx    # ⭐ fusion arrêts + adresses (AbortController)
+│   │       │   ├── NearbyStopDrawer.tsx      # ⭐ drawer prochains départs
+│   │       │   └── Switch.tsx                # ⭐ toggle UI accessible
+│   │       ├── constants/mode-colors.ts      # ⭐ MAP_MODE_COLORS + UI_MODE_COLORS (source unique)
+│   │       ├── contexts/
+│   │       │   ├── AuthContext.tsx
+│   │       │   └── ThemeContext.tsx          # ⭐ dark mode no-FOUC
+│   │       ├── hooks/
+│   │       │   ├── useTransport.ts           # ⭐ AbortController intégré
+│   │       │   ├── useGeolocation.ts
+│   │       │   ├── useNavigation.ts
+│   │       │   ├── useDarkMode.ts
+│   │       │   └── usePrefersReducedMotion.ts # ⭐ a11y OS preference
+│   │       └── services/api.ts, favorites.ts
+│   └── backend/           # NestJS (port 4000) — voir apps/backend/README.md
+├── packages/shared/       # Types et constantes partagés
+├── diagrammes/            # 7 .mmd + .png (cas utilisation, classes, séquence, architecture, IA, déploiement)
+├── docker/                # docker-compose (4 services : postgres, backend, frontend, nginx)
 ├── scripts/               # Scripts utilitaires
-├── .env.example           # Variables d'environnement
-└── .gitignore
+├── .env.example
+└── README.md, KAIZEN.md, PLAN.md, AUDIT_PROJET.md
 ```
 
-## API Transport — Endpoints
+## API Transport — Endpoints (résumé)
 
-| Endpoint | Description |
-|---|---|
-| `GET /api/transport/health` | Vérification connexion PRIM |
-| `GET /api/transport/modes` | Modes de transport avec compteurs dynamiques |
-| `GET /api/transport/lines` | Référentiel des lignes |
-| `GET /api/transport/lines-by-mode` | Lignes groupées par mode (Métro, RER, Tram…) |
-| `GET /api/transport/stops` | Référentiel des arrêts PRIM (toute l'IDF) |
-| `GET /api/transport/gtfs-stops/search?q=...&limit=N` | Recherche d'arrêts GTFS par nom (Paris uniquement) |
-| `GET /api/transport/nearby?lat=...&lon=...&radius=...&limit=...` | Arrêts proches avec lignes desservies |
-| `GET /api/transport/stop-lines` | Arrêts et lignes associées |
-| `GET /api/transport/traffic` | Perturbations / infos trafic |
-| `GET /api/transport/velib` | Stations Vélib' temps réel |
-| `GET /api/transport/velib-nearby?lat=...&lon=...` | Stations Vélib' proches (Open Data Paris) |
-| `GET /api/transport/shared-vehicles?lat=...&lon=...` | Trottinettes/vélos libres (GBFS) |
-| `GET /api/transport/elevators` | État des ascenseurs |
-| `GET /api/transport/gtfs-url` | URLs de téléchargement GTFS |
-| `GET /api/transport/gtfs-status` | Statut du chargement GTFS (loaded, stats) |
-| `POST /api/transport/gtfs-reload` | Rechargement manuel du GTFS |
-| `GET /api/transport/geocode?q=...&limit=N` | Recherche d'adresses (Paris uniquement) + arrêts GTFS |
-| `GET /api/transport/reverse-geocode?lat=...&lon=...` | Géocodage inverse — coordonnées → adresse lisible |
-| `GET /api/transport/realtime-alerts` | Alertes et perturbations temps réel |
-| `GET /api/transport/realtime-status` | Statut du service GTFS-RT |
-| `GET /api/transport/journey?originLat=...&originLon=...&destLat=...&destLon=...&departureTime=...&modes=...` | Calcul d'itinéraire multimodal (RAPTOR + GTFS réel) |
-| `GET /api/transport/route?originLat=...&originLon=...&destLat=...&destLon=...` | Routing OSRM (polyline réelle) |
+**Itinéraires et temps réel :**
+- `GET /api/transport/journey` — Calcul d'itinéraire multimodal (Navitia primaire, GTFS RAPTOR repli)
+- `GET /api/transport/realtime-alerts` — Alertes (Navitia primaire, GTFS-RT repli)
+- `GET /api/transport/route` — Routing OSRM piéton/vélo (polylignes)
+- `GET /api/transport/shape/:shapeId` — Géométrie tracé GTFS
+
+**Données de référence :**
+- `GET /api/transport/lines` / `lines-by-mode` / `stops` / `gtfs-stops/search` / `stop-lines`
+- `GET /api/transport/nearby` (arrêts proches) / `stop-times` (prochains passages)
+- `GET /api/transport/velib` / `velib-nearby` / `elevators` / `traffic`
+- `GET /api/transport/geocode` / `reverse-geocode`
+
+**Auth, profil, RGPD :** `/api/auth/{register,login,me,me/export,consent,...}` (JWT)
+
+**Favoris et notifications :** `/api/favorites/*` (7 routes), `/api/notifications/*` (7 routes)
+
+**Admin (JWT + rôle admin) :** `/api/admin/{dashboard,users,trips,notifications,broadcast,gtfs/reload,gtfs/status}`
+
+**Health et config :** `/api/health`, `/api/transport/{health,gtfs-url,gtfs-status}`, `POST /api/transport/gtfs-reload`
+
+📖 **Liste complète + signatures** : voir [`apps/backend/README.md`](apps/backend/README.md) (3 diagrammes Mermaid : modules NestJS, séquence journey, swap atomique GTFS).
 
 ## Démarrage rapide
 
@@ -131,7 +118,10 @@ docker compose up -d
 ### 4. Base de données
 
 La base est initialisée automatiquement via `docker/init-db.sql` avec les tables :
-- `users`, `favorites`, `trips`, `routes`, `stops`, `notifications`, `transport_feeds`
+- `users`, `favorites`, `history`, `routes`, `stops`, `notifications`, `transport_feeds`
+- `gtfs_*` (10 tables : `gtfs_agencies`, `gtfs_routes`, `gtfs_stops`, `gtfs_trips`,
+  `gtfs_stop_times`, `gtfs_calendar`, `gtfs_calendar_dates`, `gtfs_transfers`,
+  `gtfs_stop_modes`, `gtfs_stop_lines`) + `gtfs_load_meta` — ~6,8 M lignes dans `gtfs_stop_times`
 
 ## Ports
 
@@ -158,7 +148,6 @@ Les calculs CO2 utilisent les **facteurs d'emission ADEME Base Carbone v2024** (
 | Marche | 0 |
 | Voiture (1 passager, moyenne IDF) | 170.0 |
 | Covoiturage (2 passagers) | 85.0 |
-| Trottinette électrique | 35.0 |
 | Funiculaire | 10.0 |
 | Navette fluviale | 15.0 |
 

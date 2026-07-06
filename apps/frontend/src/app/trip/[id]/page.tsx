@@ -1,52 +1,66 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
-import { useSearchParams } from "next/navigation";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, MapPin, Footprints, Bike, Train, TramFront, Bus, Ship, Car, ArrowRight, Navigation, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, AlertOctagon, CheckCircle2, ChevronUp, ChevronDown, Wifi, WifiOff, Search, X, Timer, ArrowDown, CircleDot } from "lucide-react";
+import { Clock, MapPin, Footprints, Bike, Train, TramFront, Bus, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
-import JourneyLine from "@/components/JourneyLine";
 import ModeBadge from "@/components/ModeBadge";
+import TurnByTurnBanner from "@/components/TurnByTurnBanner";
 import { useRoute } from "@/hooks/useTransport";
 import { useNavigation } from "@/hooks/useNavigation";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { MAP_MODE_COLORS } from "@/constants/mode-colors";
 import { apiService } from "@/services/api";
 import type { JourneyResult } from "@/services/api";
+import { Immersion } from "@/services/immersion";
 
-const modeIcons: Record<string, React.ReactNode> = {
-  metro: <Train size={18} />,
-  bus: <Bus size={18} />,
-  rer: <Train size={18} />,
-  tram: <Train size={18} />,
-  marche: <Footprints size={18} />,
-  velib: <Bike size={18} />,
-};
+// ─── Facteur d'émission moyen voiture particulière en France (thermique) ───
+// Source : ADEME ~170 g CO₂/km (valeur conservative pour comparaison)
+const CAR_EMISSION_G_PER_KM = 170;
 
-function getModeLabel(mode?: string): string {
-  if (!mode) return "Transit";
-  const m = mode.toLowerCase();
-  if (m.includes("métro") || m.includes("metro")) return "Métro";
-  if (m.includes("rer")) return "RER";
-  if (m.includes("bus")) return "Bus";
-  if (m.includes("tram")) return "Tram";
-  if (m.includes("transilien") || m.includes("train")) return "Train";
-  if (m.includes("marche") || m.includes("walk")) return "Marche";
-  if (m.includes("vélib") || m.includes("velib")) return "Vélib'";
-  return mode;
+// ─── Haversine local (distance en mètres) pour le garde déplacement reroute ──
+function haversinePage(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function getSegmentIcon(segment: JourneyResult["segments"][0], isDone: boolean) {
-  if (isDone) return <CheckCircle2 size={14} />;
-  if (segment.type === "walking") return <Footprints size={14} />;
-  if (segment.type === "velib") return <Bike size={14} />;
-  const mode = segment.mode?.toLowerCase() || "";
-  if (mode.includes("tram")) return <TramFront size={14} />;
-  if (mode.includes("bus")) return <Bus size={14} />;
-  if (mode.includes("rer")) return <Train size={14} />;
-  if (mode.includes("métro") || mode.includes("metro")) return <Train size={14} />;
-  return <Bus size={14} />;
+function CO2Comparison({ co2, distanceKm }: { co2: number; distanceKm?: number }) {
+  const carEmission = Math.round((distanceKm ?? 0) * CAR_EMISSION_G_PER_KM);
+  const saved = carEmission - co2;
+  const percentSaved = carEmission > 0 ? Math.round((saved / carEmission) * 100) : 0;
+
+  let message: string;
+  if (saved <= 0) {
+    message = "Empreinte comparable à la voiture pour ce trajet";
+  } else if (percentSaved >= 90) {
+    message = `${percentSaved}% moins de CO₂ qu'en voiture`;
+  } else {
+    message = `${percentSaved}% moins de CO₂ qu'en voiture`;
+  }
+
+  return (
+    <div className="bg-[var(--color-eco-green)]/10 rounded-[var(--card-radius)] p-3 mb-4 border border-[var(--color-eco-green)]/20">
+      <div className="flex items-center gap-2">
+        <Leaf size={16} className="text-[var(--color-eco-green)] shrink-0" />
+        <p className="text-sm text-[var(--color-eco-green)]">
+          <span className="font-semibold">{message}</span>
+          {saved > 0 && distanceKm && (
+            <span className="block text-xs text-[var(--color-eco-green)]/80 mt-0.5">
+              Économie réelle : {saved}g CO₂ sur {carEmission}g en voiture ({distanceKm.toFixed(1)} km)
+            </span>
+          )}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 // ─── Mode metadata (label FR, icône, couleur de fond, couleur d'accent) ─────
@@ -89,7 +103,7 @@ const fallbackTrip = {
       type: "transit" as const,
       mode: "RER A",
       lineName: "RER A",
-      lineColor: "#1A5A73",
+      lineColor: MAP_MODE_COLORS.rer,
       from: "Châtelet",
       to: "La Défense",
       durationMinutes: 18,
@@ -109,19 +123,20 @@ const fallbackTrip = {
 };
 
 export default function TripDetailPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const reducedMotion = usePrefersReducedMotion();
 
-  // Parse journey data from URL
-  let trip: JourneyResult | null = null;
-  try {
-    const data = searchParams.get("data");
-    if (data) {
-      trip = JSON.parse(decodeURIComponent(data));
+  // ─── Trip : state (init depuis le `data` param) pour permettre le reroutage ──
+  const [trip, setTrip] = useState<JourneyResult | null>(() => {
+    try {
+      const data = searchParams.get("data");
+      if (data) return JSON.parse(decodeURIComponent(data));
+    } catch {
+      // Use fallback
     }
-  } catch {
-    // Use fallback
-  }
+    return null;
+  });
 
   const segments = (trip?.segments || fallbackTrip.segments) as JourneyResult["segments"];
   const firstSeg = segments[0];
@@ -147,14 +162,20 @@ export default function TripDetailPage() {
   const destLon = searchParams.get("destLon");
 
   const hasCoords = originLat && originLon && destLat && destLon;
-  const originPos = hasCoords ? { lat: parseFloat(originLat!), lon: parseFloat(originLon!) } : null;
-  const destPos = hasCoords ? { lat: parseFloat(destLat!), lon: parseFloat(destLon!) } : null;
+  // ─── Origin en state : reroutage remplace l'origine par la position user ──
+  const [originPos, setOriginPos] = useState<{ lat: number; lon: number } | null>(() =>
+    hasCoords ? { lat: parseFloat(originLat!), lon: parseFloat(originLon!) } : null,
+  );
+  const destPos = useMemo(
+    () => (hasCoords ? { lat: parseFloat(destLat!), lon: parseFloat(destLon!) } : null),
+    [destLat, destLon, hasCoords],
+  );
 
   // ─── Alertes temps réel sur ce trajet ────────────────────────────────
   const alerts = trip?.alerts || [];
 
   // ─── OSRM Routing for real geometry ─────────────────────────────────
-  const { geometry: routeGeometry, fetchRoute } = useRoute();
+  const { fetchRoute } = useRoute();
   const [tripPolyline, setTripPolyline] = useState<[number, number][]>([]);
   const hasFetchedRef = useRef(false);
 
@@ -173,36 +194,53 @@ export default function TripDetailPage() {
           }
         });
     }
-  }, [originPos, destPos]);
+  }, [originPos, destPos, fetchRoute]);
 
-  // ─── Lazy load shapes (trajectoires réelles) ────────────────────────
+  // ─── Shapes (trajectoires réelles) ────────────────────────────────
+  //  1. Privilégie la géométrie Navitia embarquée dans `seg.geojson` ([lon, lat]).
+  //  2. Repli : lazy-load /shape/:id pour les segments GTFS sans geojson.
   const [shapePolylines, setShapePolylines] = useState<Array<{ points: [number, number][]; color: string }>>([]);
 
   useEffect(() => {
     if (!trip) return;
-    const transitSegments = segments.filter((s) => s.type === 'transit' && s.shapeId);
+    const transitSegments = segments.filter((s) => s.type === 'transit');
     if (transitSegments.length === 0) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
     const loadShapes = async () => {
       const shapes: Array<{ points: [number, number][]; color: string }> = [];
       for (const seg of transitSegments) {
+        // (1) Géométrie Navitia déjà embarquée → conversion [lon, lat] → [lat, lon].
+        if (seg.geojson && seg.geojson.length >= 2) {
+          const points = seg.geojson
+            .map((c) => [c[1], c[0]] as [number, number])
+            .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+          if (points.length >= 2) {
+            shapes.push({
+              points,
+              color: seg.lineColor || "var(--color-favorite-red)",
+            });
+          }
+          continue;
+        }
+        // (2) Repli GTFS : lazy-load /shape/:id.
         if (!seg.shapeId) continue;
         try {
-          const data = await apiService.getShape(seg.shapeId);
-          if (cancelled) return;
+          const data = await apiService.getShape(seg.shapeId, controller.signal);
+          if (controller.signal.aborted) return;
           shapes.push({
             points: data.points.map((p) => [p.lat, p.lon]),
-            color: seg.lineColor || "#E53935",
+            color: seg.lineColor || "var(--color-favorite-red)",
           });
-        } catch {
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === "AbortError") return;
           // Ignore shape load errors — fallback to straight line
         }
       }
-      if (!cancelled) setShapePolylines(shapes);
+      if (!controller.signal.aborted) setShapePolylines(shapes);
     };
     loadShapes();
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, [trip, segments]);
 
   // ─── Navigation GPS hook ─────────────────────────────────────────────
@@ -211,7 +249,6 @@ export default function TripDetailPage() {
     isPaused,
     activeSegment,
     elapsedSeconds,
-    progress,
     arrived,
     offRoute,
     userPosition,
@@ -219,6 +256,9 @@ export default function TripDetailPage() {
     remainingDistance,
     remainingTime,
     instruction,
+    nextManeuverPoint,
+    nextBearing,
+    heading,
     startNavigation,
     pauseNavigation,
     resumeNavigation,
@@ -273,6 +313,106 @@ export default function TripDetailPage() {
   const totalDurationSeconds = segments.reduce((acc, s) => acc + s.durationMinutes * 60, 0);
   const progressPercent = totalDurationSeconds > 0 ? Math.min((elapsedSeconds / totalDurationSeconds) * 100, 100) : 0;
 
+  // ─── Recalcul d'itinéraire (reroute) sur hors-trajet persistant ──────
+  const [isRerouting, setIsRerouting] = useState(false);
+  const rerouteAbortRef = useRef<AbortController | null>(null);
+  const lastRerouteOriginRef = useRef<{ lat: number; lon: number } | null>(null);
+
+  const reroute = useCallback(
+    async (fromPos: { lat: number; lon: number }) => {
+      if (!destPos) return;
+      // Annule la requête de reroute précédente.
+      rerouteAbortRef.current?.abort();
+      const controller = new AbortController();
+      rerouteAbortRef.current = controller;
+
+      setIsRerouting(true);
+      Immersion.recalculating();
+      try {
+        const results = await apiService.searchJourney(
+          {
+            originLat: fromPos.lat,
+            originLon: fromPos.lon,
+            destLat: destPos.lat,
+            destLon: destPos.lon,
+          },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        const newTrip = results[0];
+        if (!newTrip) {
+          // Aucun itinéraire trouvé depuis cette position → on garde l'ancien.
+          return;
+        }
+        setTrip(newTrip);
+        setOriginPos(fromPos);
+        hasFetchedRef.current = false; // re-fetch OSRM polyline depuis la nouvelle origine
+        lastRerouteOriginRef.current = fromPos;
+        // Resync URL (best-effort, peut échouer si le payload est trop long).
+        try {
+          const query = new URLSearchParams({ data: JSON.stringify(newTrip) });
+          query.set("originLat", String(fromPos.lat));
+          query.set("originLon", String(fromPos.lon));
+          query.set("destLat", String(destPos.lat));
+          query.set("destLon", String(destPos.lon));
+          router.replace(`${window.location.pathname}?${query.toString()}`);
+        } catch {
+          // best-effort
+        }
+        // Annonce vocale de la 1ʳᵉ instruction du nouvel itinéraire.
+        const firstSeg = newTrip.segments[0];
+        if (firstSeg) {
+          Immersion.segmentChange(
+            firstSeg.type === "walking"
+              ? firstSeg.instruction
+              : `Montez dans le ${firstSeg.mode || "transit"} direction ${firstSeg.direction || firstSeg.toStop || ""}`,
+          );
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        // Repli silencieux : on garde l'itinéraire courant.
+        console.warn("Reroute failed:", err);
+      } finally {
+        if (!controller.signal.aborted) setIsRerouting(false);
+      }
+    },
+    [destPos, router],
+  );
+
+  // ─── Déclenchement auto : hors-trajet persistant > 8 s (+ 30 m de déplacement) ──
+  useEffect(() => {
+    if (!isNavigating || !offRoute || !userPosition) return;
+    // Si l'utilisateur n'a pas bougé > 30 m depuis le dernier reroute, on évite le
+    // spam (il est peut-être juste arrêté hors trajet).
+    const last = lastRerouteOriginRef.current;
+    if (last) {
+      const moved = haversinePage(userPosition.lat, userPosition.lon, last.lat, last.lon);
+      if (moved < 30) return;
+    }
+    const timer = setTimeout(() => {
+      if (userPosition) reroute(userPosition);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [isNavigating, offRoute, userPosition, reroute]);
+
+  // ─── Cap de la carte (leaflet-rotate) + zoom segment actif ───────────
+  const mapBearing = useMemo(() => {
+    if (!isNavigating) return 0;
+    if (heading != null && heading >= 0 && currentSpeed > 0.5) return heading; // sens de marche
+    if (nextBearing != null) return nextBearing; // repli : vers le prochain manœuvre
+    return 0; // nord en haut
+  }, [isNavigating, heading, currentSpeed, nextBearing]);
+
+  const activeFitBounds = useMemo<Array<[number, number]> | undefined>(() => {
+    if (!isNavigating || !userPosition || !nextManeuverPoint) return undefined;
+    return [
+      [userPosition.lat, userPosition.lon],
+      [nextManeuverPoint.lat, nextManeuverPoint.lon],
+    ];
+  }, [isNavigating, userPosition, nextManeuverPoint]);
+
+  const fitBoundsKey = isNavigating ? `seg-${activeSegment}` : undefined;
+
   return (
     <AppShell
       title="Détail itinéraire"
@@ -283,20 +423,30 @@ export default function TripDetailPage() {
         </button>
       }
     >
+      {/* Bannière turn-by-turn (overlay fixed sous le header, nav only) */}
+      {isNavigating && instruction && (
+        <TurnByTurnBanner
+          instruction={instruction}
+          accentColor={segments[activeSegment]?.lineColor}
+        />
+      )}
+
       {/* Summary Card */}
       <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
+        initial={reducedMotion ? false : { opacity: 0, y: -8 }}
+        animate={reducedMotion ? false : { opacity: 1, y: 0 }}
+        transition={reducedMotion ? undefined : { duration: 0.4, ease: "easeOut" }}
         className="bg-[var(--color-primary)] rounded-[var(--card-radius)] p-4 text-white mb-4 relative overflow-hidden"
       >
         {/* Halo animé d'arrière-plan */}
-        <motion.div
-          aria-hidden
-          className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl"
-          animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        />
+        {!reducedMotion && (
+          <motion.div
+            aria-hidden
+            className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl"
+            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          />
+        )}
         <div className="flex items-center justify-between mb-2">
           <div>
             <p className="text-sm text-white/80">Trajet</p>
@@ -323,17 +473,7 @@ export default function TripDetailPage() {
       </motion.div>
 
       {/* CO2 Comparison */}
-      <div className="bg-[var(--color-eco-green)]/10 rounded-[var(--card-radius)] p-3 mb-4 border border-[var(--color-eco-green)]/20">
-        <div className="flex items-center gap-2">
-          <Leaf size={16} className="text-[var(--color-eco-green)]" />
-          <p className="text-sm text-[var(--color-eco-green)]">
-            <span className="font-semibold">
-              {co2 > 0 ? `${Math.round((1 - co2 / (co2 * 5.3)) * 100)}%` : "100%"} moins de CO₂
-            </span>{" "}
-            qu&apos;en voiture
-          </p>
-        </div>
-      </div>
+      <CO2Comparison co2={co2} distanceKm={trip?.distanceKm} />
 
       {/* Alertes temps réel */}
       {alerts.length > 0 && (
@@ -371,15 +511,7 @@ export default function TripDetailPage() {
       <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-3">
         Détail du trajet
       </h2>
-      <motion.div
-        className="space-y-3"
-        initial="hidden"
-        animate="visible"
-        variants={{
-          hidden: {},
-          visible: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } },
-        }}
-      >
+      <div className="space-y-3">
         {segments.map((segment, i) => {
           const isActive = isNavigating && i === activeSegment;
           const isDone = isNavigating && i < activeSegment;
@@ -390,29 +522,25 @@ export default function TripDetailPage() {
           return (
             <motion.div
               key={i}
-              variants={{
-                hidden: { opacity: 0, x: -12 },
-                visible: { opacity: 1, x: 0, transition: { type: "spring" as const, stiffness: 300, damping: 28 } },
-              }}
+              initial={reducedMotion ? false : { opacity: 0, x: -12 }}
+              animate={reducedMotion ? false : { opacity: 1, x: 0 }}
+              transition={reducedMotion ? undefined : { type: "spring" as const, stiffness: 300, damping: 28 }}
               className={`relative flex gap-3 rounded-xl p-3 border ${
                 isActive ? "bg-[var(--color-primary)]/5 border-[var(--color-primary)]/30 shadow-sm"
                   : isDone ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200/50"
-                  : "bg-white border-[var(--color-border)]"
+                  : "bg-surface border-[var(--color-border)]"
               }`}
             >
               {/* Timeline node : icône + couleur de la ligne */}
               <div className="flex flex-col items-center pt-0.5">
-                <motion.div
-                  layout
-                  animate={{ scale: isActive ? 1.12 : 1 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                <div
                   className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm ${
                     isDone ? "bg-emerald-500 text-white" : "text-white"
-                  }`}
+                  } ${isActive ? "scale-110" : ""}`}
                   style={!isDone ? { backgroundColor: lineColor || "#2E7D9B" } : {}}
                 >
                   {isDone ? <CheckCircle2 size={18} /> : <ModeIcon size={18} />}
-                </motion.div>
+                </div>
                 {i < segments.length - 1 && (
                   <div
                     className={`w-0.5 flex-1 min-h-[12px] mt-1 ${isDone ? "bg-emerald-300" : "bg-[var(--color-border)]"}`}
@@ -514,7 +642,7 @@ export default function TripDetailPage() {
             </motion.div>
           );
         })}
-      </motion.div>
+      </div>
 
       {/* Map */}
       <div className="rounded-[var(--card-radius)] h-48 mb-4 border border-[var(--color-border)] overflow-hidden">
@@ -524,11 +652,14 @@ export default function TripDetailPage() {
           markers={mapMarkers}
           polyline={tripPolyline.length > 0 ? tripPolyline : undefined}
           shapePolylines={shapePolylines}
-          userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined } : undefined}
+          userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined, heading } : undefined}
           onLocateUser={() => {}}
           isWatching={isNavigating}
           onToggleWatch={isNavigating ? stopNavigation : startNavigation}
           followUser={isNavigating}
+          bearing={mapBearing}
+          fitBounds={activeFitBounds}
+          fitBoundsKey={fitBoundsKey}
         />
       </div>
 
@@ -537,30 +668,37 @@ export default function TripDetailPage() {
         {!isNavigating ? (
           <motion.button
             key="cta-start"
+            type="button"
             onClick={startNavigation}
-            initial={{ opacity: 0, y: 12 }}
+            initial={reducedMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ duration: 0.25 }}
+            exit={reducedMotion ? undefined : { opacity: 0, y: -12 }}
+            whileTap={reducedMotion ? undefined : { scale: 0.97 }}
+            transition={reducedMotion ? { duration: 0 } : { duration: 0.25 }}
             className="w-full h-[52px] rounded-[var(--cta-radius)] bg-[var(--color-primary)] text-white font-semibold text-base hover:bg-[var(--color-primary-dark)] transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[var(--color-primary)]/20"
           >
-            <motion.span
-              animate={{ scale: [1, 1.15, 1] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              className="inline-flex"
-            >
-              <Play size={18} />
-            </motion.span>
+            {reducedMotion ? (
+              <span className="inline-flex">
+                <Play size={18} />
+              </span>
+            ) : (
+              <motion.span
+                animate={{ scale: [1, 1.15, 1] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                className="inline-flex"
+              >
+                <Play size={18} />
+              </motion.span>
+            )}
             Démarrer le trajet
           </motion.button>
         ) : (
           <motion.div
             key="nav-active"
-            initial={{ opacity: 0, y: 12 }}
+            initial={reducedMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.3 }}
+            exit={reducedMotion ? undefined : { opacity: 0, y: -12 }}
+            transition={reducedMotion ? { duration: 0 } : { duration: 0.3 }}
             className="space-y-3"
           >
           {/* Progress bar */}
@@ -597,7 +735,7 @@ export default function TripDetailPage() {
 
           {/* Active segment info */}
           {segments[activeSegment] && (
-            <div className="bg-white rounded-[var(--card-radius)] p-3 border border-[var(--color-border)]">
+            <div className="bg-surface rounded-[var(--card-radius)] p-3 border border-[var(--color-border)]">
               <p className="text-xs text-[var(--color-text-tertiary)] mb-1">Étape en cours</p>
               <p className="text-sm font-medium text-[var(--color-primary)]">
                 {segments[activeSegment].instruction}
@@ -644,10 +782,28 @@ export default function TripDetailPage() {
           {offRoute && !arrived && (
             <div className="bg-amber-50 border border-amber-200 rounded-[var(--card-radius)] p-3 flex items-center gap-2">
               <AlertTriangle size={18} className="text-amber-500 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-amber-800">Hors trajet</p>
-                <p className="text-xs text-amber-600">Vous vous êtes écarté de l&apos;itinéraire</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-800">
+                  {isRerouting ? "Recalcul en cours…" : "Hors trajet"}
+                </p>
+                <p className="text-xs text-amber-600">
+                  {isRerouting
+                    ? "Nouvel itinéraire depuis votre position"
+                    : "Vous vous êtes écarté de l&apos;itinéraire"}
+                </p>
               </div>
+              {!isRerouting && userPosition && (
+                <button
+                  type="button"
+                  onClick={() => reroute(userPosition)}
+                  disabled={!destPos}
+                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                  aria-label="Recalculer l'itinéraire"
+                >
+                  <RotateCcw size={14} />
+                  Recalculer
+                </button>
+              )}
             </div>
           )}
 
