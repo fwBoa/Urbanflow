@@ -54,7 +54,7 @@ services:
       JWT_EXPIRATION: ${JWT_EXPIRATION:-2h}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
       PRIM_API_KEY: ${PRIM_API_KEY:-}
-      PRIM_API_URL: ${PRIM_API_URL:-https://api-lab.idfm.fr}
+      PRIM_API_URL: ${PRIM_API_URL:-https://prim.iledefrance-mobilites.fr}
       GTFS_RADIUS_KM: ${GTFS_RADIUS_KM:-15}
       # GTFS désormais en PostgreSQL : Node ne conserve plus les ~6,8 M
       # stop_times en heap (consommation réelle ~100 Mo). L'ancienne limite

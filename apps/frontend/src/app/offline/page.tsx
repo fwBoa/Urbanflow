@@ -1,8 +1,6 @@
-import { CloudOff, RefreshCw } from "lucide-react";
+"use client";
 
-export const metadata = {
-  title: "Hors ligne — UrbanFlow",
-};
+import { CloudOff, RefreshCw } from "lucide-react";
 
 export default function OfflinePage() {
   return (

@@ -9,6 +9,7 @@ import { GtfsParserService } from './gtfs-parser.service';
 import { GtfsRtService } from './gtfs-rt.service';
 import { OsrmService } from './osrm.service';
 import { GtfsDbService } from './gtfs-db.service';
+import { NavitiaService } from './navitia.service';
 
 describe('TransportController', () => {
   let controller: TransportController;
@@ -48,6 +49,14 @@ describe('TransportController', () => {
                 return 'https://data.iledefrance-mobilites.fr/api/explore/v2.1';
               return defaultValue;
             },
+          },
+        },
+        {
+          provide: NavitiaService,
+          useValue: {
+            isAvailable: jest.fn().mockReturnValue(false),
+            findJourneys: jest.fn().mockResolvedValue([]),
+            getAlerts: jest.fn().mockResolvedValue([]),
           },
         },
       ],

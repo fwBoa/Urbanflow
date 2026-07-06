@@ -18,17 +18,22 @@ Interface web PWA pour la plateforme de mobilité multimodale Urban Flow Mobilit
 - **Framer Motion** (animations, désactivées si `prefers-reduced-motion`)
 - PWA (manifest.json + service worker, installable)
 
-## Pages (6 écrans)
+## Pages
 
 | Page | Route | Description |
 |---|---|---|
 | Accueil | `/` | Recherche rapide, modes de transport, lignes PRIM temps réel, trajets récents |
-| Recherche | `/search` | O/D + filtres modes + autocomplete arrêts/adresses (`SearchAutocomplete`) + géoloc + clic carte |
-| Détail itinéraire | `/trip/[id]` | Timeline segmentée, `CO2Comparison` (vs voiture ADEME 170 g/km), carte, navigation GPS immersive, **turn-by-turn** (banner directionnel + reroutage auto sur hors-trajet) |
-| Hors ligne | `/offline` | ⭐ Page fallback servie par le SW quand le réseau est coupé (`CloudOff` + bouton « Réessayer ») |
+| Recherche | `/search` | O/D + filtres modes + autocomplete arrêts/adresses + géoloc + clic carte |
+| Détail itinéraire | `/trip/[id]` | Timeline segmentée, CO2 vs voiture, carte, navigation GPS immersive, turn-by-turn |
 | Favoris | `/favorites` | Onglets Favoris/Historique, cartes trajet, badges CO2 |
-| Profil | `/profile` | Avatar, stats, badges gamification, économie CO2, dark mode, RGPD |
-| Admin | `/admin` | Dashboard (users, trips, GTFS load), users, trips, broadcast, reload GTFS |
+| Profil | `/profile` | Avatar, stats, dark mode, RGPD, **notifications push VAPID** |
+| Admin | `/admin` | Dashboard users/trips/GTFS |
+| Notifications | `/notifications` | Liste des notifications in-app |
+| Hors ligne | `/offline` | ⭐ Page fallback servie par le SW quand le réseau est coupé |
+| Login | `/login` | Authentification JWT |
+| Register | `/register` | Création de compte |
+| Legal | `/legal` | Mentions légales |
+| Privacy | `/privacy` | Politique de confidentialité |
 
 ## Composants (17+)
 
@@ -52,6 +57,7 @@ Interface web PWA pour la plateforme de mobilité multimodale Urban Flow Mobilit
 | `CO2Comparison` | (utilisé dans `trip/[id]`) | ⭐ Comparaison CO2 vs voiture ADEME 170 g/km (g + %) |
 | `TurnByTurnBanner` | `components/TurnByTurnBanner.tsx` | ⭐ Bandeau overlay directionnel (gauche/droite/straight/board/alight/arrive) + distance + ETA, Framer Motion + `usePrefersReducedMotion` |
 | `ServiceWorkerRegistration` | `components/ServiceWorkerRegistration.tsx` | ⭐ Enregistrement du SW `/sw.js` au layout, `displayMode: 'standalone'` pour install prompt PWA |
+| `OfflinePage` | `app/offline/page.tsx` | ⭐ Page fallback hors ligne (client component) |
 
 ## Hooks (`hooks/`)
 

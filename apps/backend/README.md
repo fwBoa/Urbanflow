@@ -237,79 +237,176 @@ recherche. PostgreSQL est conservé (le goulot était le nombre de round-trips, 
 vitesse des requêtes — chaque SQL est sub-2 ms, l'overhead était la latence
 inter-conteneurs). Sémantique RAPTOR identique à l'implémentation per-stop d'origine.
 
+## Flux secondaires (Mermaid)
+
+### Authentification JWT + cookies httpOnly
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Utilisateur
+  participant FE as Frontend
+  participant AC as AuthController
+  participant AS as AuthService
+  participant DB as PostgreSQL (User)
+
+  U->>FE: register / login
+  FE->>AC: POST /api/auth/register | /api/auth/login
+  AC->>AS: bcrypt + JwtService
+  AS->>DB: create / read user
+  DB-->>AS: User
+  AS-->>AC: access_token
+  AC->>AC: res.cookie('urbanflow_token', httpOnly, SameSite=Lax, 2h)
+  AC-->>FE: { user }
+  FE->>AC: GET /api/auth/me (cookie JWT)
+  AC->>AS: validate + profile
+  AS-->>AC: sanitized user
+  AC-->>FE: profil
+
+  alt RGPD
+    FE->>AC: DELETE /api/auth/me
+    AC->>AS: softDelete(userId)
+    AC-->>FE: message 30 jours
+    FE->>AC: GET /api/auth/me/export
+    AC-->>FE: JSON téléchargeable
+  end
+```
+
+### Favoris + historique
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Utilisateur
+  participant FE as Frontend
+  participant FC as FavoritesController
+  participant FS as FavoritesService
+  participant DB as PostgreSQL
+
+  U->>FE: ajoute un trajet en favori
+  FE->>FC: POST /api/favorites { from, to, mode, ... }
+  FC->>FS: addFavorite(userId, dto)
+  FS->>DB: findOne(duplicate)
+  alt pas de doublon
+    FS->>DB: create Favorite
+    DB-->>FS: Favorite
+  end
+  FS-->>FC: Favorite
+  FC-->>FE: 201
+
+  U->>FE: consulte historique / stats
+  FE->>FC: GET /api/favorites/history
+  FC->>FS: getHistory(userId)
+  FS->>DB: find (limit 20)
+  DB-->>FS: History[]
+  FS-->>FC: History[]
+  FC-->>FE: render timeline
+```
+
+### Notifications push VAPID
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Utilisateur
+  participant FE as Frontend
+  participant SW as Service Worker
+  participant NC as NotificationsController
+  participant PS as PushService
+  participant DB as push_subscriptions
+  participant NS as NotificationsService
+
+  U->>FE: active les notifications push
+  FE->>SW: Notification.requestPermission()
+  SW-->>FE: granted
+  FE->>SW: pushManager.subscribe(applicationServerKey)
+  SW-->>FE: PushSubscriptionJSON
+  FE->>NC: POST /api/notifications/push/subscribe
+  NC->>PS: subscribe(userId, dto)
+  PS->>DB: upsert endpoint + keys
+  DB-->>PS: PushSubscription
+  PS-->>FE: { success: true }
+
+  alt envoi test / broadcast / alerte ligne
+    NC->>PS: sendToUser(userId, payload)
+    PS->>DB: find subscriptions
+    DB-->>PS: subscriptions[]
+    PS->>SW: webpush.sendNotification(payload)
+    SW->>U: showNotification(title, body, actionUrl)
+  end
+```
+
 ## Endpoints
 
-### Public — `/api/transport/*` (sauf auth requises)
+### Public — `/api/health` + `/api/transport/*`
 
 | Méthode | Route | Description |
 |---|---|---|
-| GET | `/api/health` | Health check backend |
-| GET | `/api/transport/health` | Vérification connexion PRIM |
-| GET | `/api/transport/lines` | Référentiel des lignes |
-| GET | `/api/transport/lines-by-mode` | Lignes filtrées par mode (métro/bus/tram/rail) |
-| GET | `/api/transport/stops` | Référentiel des arrêts |
-| GET | `/api/transport/gtfs-stops/search` | Recherche d'arrêts (q, lat/lon, radius) |
-| GET | `/api/transport/nearby` | Arrêts à proximité d'un point (lat, lon, radius) |
-| GET | `/api/transport/stop-times` | Prochains passages à un arrêt (stopId, datetime, limit) |
-| GET | `/api/transport/shape/:shapeId` | Géométrie d'un tracé |
-| GET | `/api/transport/route` | Détail d'un itinéraire (tripId) |
-| GET | `/api/transport/traffic` | Perturbations / infos trafic |
+| GET | `/api/health` | Health check rapide (`{ status: 'ok', timestamp }`) |
+| GET | `/api/transport/lines-by-mode` | Lignes agrégées par mode (PRIM) |
 | GET | `/api/transport/velib` | Stations Vélib' temps réel |
-| GET | `/api/transport/velib-nearby` | Stations Vélib' à proximité d'un point |
-| GET | `/api/transport/elevators` | État des ascenseurs |
-| GET | `/api/transport/geocode` | Géocodage d'une adresse (PRIM/OSRM) |
-| GET | `/api/transport/reverse-geocode` | Reverse-geocoding (lat/lon → adresse) |
-| GET | `/api/transport/realtime-alerts` | Alertes temps réel consolidées |
-| GET | `/api/transport/journey` | Calcul d'itinéraire multimodal (RAPTOR) |
-| GET | `/api/transport/gtfs-url` | URLs de téléchargement GTFS |
-| GET | `/api/transport/gtfs-status` | Statut du chargement GTFS (`loaded`, `lastLoadTime`, stats) |
-| POST | `/api/transport/gtfs-reload` | Rechargement GTFS (skip si déjà chargé — pas de force) |
+| GET | `/api/transport/velib-nearby` | Stations Vélib' à proximité (lat, lon, radius) |
+| GET | `/api/transport/nearby` | Arrêts GTFS proches d'un point |
+| GET | `/api/transport/gtfs-stops/search` | Recherche d'arrêts par nom |
+| GET | `/api/transport/stops` | Compat ancien PRIM (`where=search(arrname,"…")`) |
+| GET | `/api/transport/stop-times` | Prochains départs pour un arrêt GTFS |
+| GET | `/api/transport/shape/:shapeId` | Géométrie d'un tracé GTFS |
+| GET | `/api/transport/route` | Routing OSRM piéton/vélo (lat/lon → polyline) |
+| GET | `/api/transport/geocode` | Géocodage adresse (PRIM + OSRM) |
+| GET | `/api/transport/reverse-geocode` | Reverse-geocoding lat/lon |
+| GET | `/api/transport/realtime-alerts` | Alertes temps réel (Navitia → GTFS-RT repli) |
+| GET | `/api/transport/journey` | Calcul d'itinéraire (Navitia primaire, GTFS RAPTOR repli) |
+| GET | `/api/transport/gtfs-status` | Statut du chargement GTFS |
+| POST | `/api/transport/gtfs-reload` | Rechargement GTFS (skip si déjà chargé) |
 
 ### Auth — `/api/auth/*`
 
 | Méthode | Route | Description |
 |---|---|---|
-| POST | `/api/auth/register` | Inscription (email, password, role: user\|admin) |
-| POST | `/api/auth/login` | Connexion (retourne JWT) |
-| POST | `/api/auth/logout` | Déconnexion (invalide le token côté serveur) |
-| GET | `/api/auth/me` | Profil courant (JWT) |
-| DELETE | `/api/auth/me` | Suppression de compte (RGPD) |
-| GET | `/api/auth/me/export` | Export des données utilisateur (RGPD) |
+| POST | `/api/auth/register` | Inscription (rate-limit 5/min) |
+| POST | `/api/auth/login` | Connexion + cookie JWT httpOnly |
+| POST | `/api/auth/logout` | Efface le cookie |
+| GET | `/api/auth/me` | Profil courant |
+| PUT | `/api/auth/me` | Mise à jour du profil |
+| DELETE | `/api/auth/me` | Suppression de compte (RGPD, soft delete 30 j) |
+| GET | `/api/auth/me/export` | Export JSON des données (RGPD) |
 | POST | `/api/auth/consent` | Mise à jour du consentement RGPD |
 | GET | `/api/auth/consent` | Lecture du consentement courant |
+| PUT | `/api/auth/notifications-preference` | Active/désactive `notificationsEnabled` |
 
-### Auth — `/api/favorites/*`, `/api/notifications/*`
+### Favoris / Historique / Notifications — `/api/favorites/*`, `/api/notifications/*`
 
 | Méthode | Route | Description |
 |---|---|---|
-| GET/POST/DELETE | `/api/favorites` | Favoris (list/ajout/suppression) |
+| GET/POST/DELETE | `/api/favorites` | CRUD favoris |
 | GET | `/api/favorites/check` | Test « est dans les favoris » |
-| GET | `/api/favorites/history` | Historique de recherche |
+| GET | `/api/favorites/history` | Historique de recherche (20 derniers) |
 | POST | `/api/favorites/history` | Ajout à l'historique |
 | DELETE | `/api/favorites/history` | Purge de l'historique |
-| GET | `/api/favorites/stats` | Statistiques favoris |
+| GET | `/api/favorites/stats` | Statistiques (trips, CO₂, favoris) |
 | GET | `/api/notifications` | Liste des notifications |
 | GET | `/api/notifications/unread-count` | Compteur non-lus |
-| PATCH | `/api/notifications/:id/read` | Marquer une notification lue |
+| PATCH | `/api/notifications/:id/read` | Marquer lue |
 | POST | `/api/notifications/mark-all-read` | Tout marquer lu |
 | DELETE | `/api/notifications/:id` | Supprimer une notification |
 | DELETE | `/api/notifications` | Tout supprimer |
-| POST | `/api/notifications/push/subscribe` | ⭐ Enregistrer une subscription Web Push (VAPID) — body `{ endpoint, keys: { p256dh, auth } }` |
-| DELETE | `/api/notifications/push/subscribe` | ⭐ Désabonner l'endpoint courant de l'utilisateur |
-| POST | `/api/notifications/push/send-test` | ⭐ Envoi d'une notification push test à l'utilisateur courant (debug) |
+| POST | `/api/notifications/push/subscribe` | ⭐ Souscription Web Push VAPID |
+| DELETE | `/api/notifications/push/subscribe` | Désabonnement d'un endpoint |
+| POST | `/api/notifications/push/send-test` | Envoi push test |
 
 ### Admin — `/api/admin/*` (JWT + rôle admin)
 
 | Méthode | Route | Description |
 |---|---|---|
-| GET | `/api/admin/dashboard` | KPIs (users, trips, GTFS load) |
+| GET | `/api/admin/dashboard` | KPIs users / trips / CO₂ |
 | GET | `/api/admin/users` | Liste utilisateurs |
 | GET | `/api/admin/users/:id` | Détail utilisateur |
-| GET | `/api/admin/trips` | Historique trajets |
+| DELETE | `/api/admin/users/:id` | Suppression soft |
+| GET | `/api/admin/trips` | Historique trajets paginé |
 | GET | `/api/admin/notifications` | Notifications broadcast |
-| POST | `/api/admin/broadcast` | Envoi notification broadcast |
-| POST | `/api/admin/gtfs/reload` | Rechargement atomique zero-downtime (`force=true`) |
-| GET | `/api/admin/gtfs/status` | État détaillé des données GTFS |
+| POST | `/api/admin/broadcast` | Notification globale |
+| POST | `/api/admin/gtfs/reload` | Rechargement atomique `force=true` |
+| GET | `/api/admin/gtfs/status` | État détaillé GTFS |
 
 ## Variables d'environnement
 

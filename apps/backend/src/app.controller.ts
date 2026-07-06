@@ -9,4 +9,10 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  /** GET /api/health — Health check rapide pour monitoring / CI / load balancer. */
+  @Get('health')
+  getHealth(): { status: string; timestamp: string } {
+    return this.appService.getHealth();
+  }
 }
