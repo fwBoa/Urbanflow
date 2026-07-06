@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Shield, MapPin, Cookie, BarChart3 } from "lucide-react";
 
 const CONSENT_KEY = "urbanflow_consent";
@@ -56,9 +56,23 @@ export function hasConsentBeenAsked(): boolean {
 }
 
 export default function ConsentBanner() {
-  const [visible, setVisible] = useState(() => !getConsent().date);
+  // On évite de lire localStorage dans l'initialiseur du state : le serveur
+  // rendrait un dialog (window undefined → defaultConsent, date null → visible)
+  // alors qu'un client déjà consentant rendrait null → mismatch d'hydration.
+  // On attend le mount côté client avant de lire le consentement.
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-  const [consent, setConsent] = useState<ConsentState>(() => getConsent());
+  const [consent, setConsent] = useState<ConsentState>(defaultConsent);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    const c = getConsent();
+    setConsent(c);
+    setVisible(!c.date);
+    setMounted(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   const acceptAll = useCallback(() => {
     const all: ConsentState = {
@@ -102,6 +116,7 @@ export default function ConsentBanner() {
     syncConsentToBackend(custom);
   }, [consent]);
 
+  if (!mounted) return null;
   if (!visible) return null;
 
   return (

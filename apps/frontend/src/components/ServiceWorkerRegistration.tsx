@@ -6,23 +6,20 @@ export default function ServiceWorkerRegistration() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
-    // Disable SW in development (PWA not implemented yet)
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
       return;
     }
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[SW] Service Worker disabled in development");
-      return;
-    }
+
+    let registration: ServiceWorkerRegistration | undefined;
 
     async function registerSW() {
       try {
-        const registration = await navigator.serviceWorker.register("/sw.js", {
+        registration = await navigator.serviceWorker.register("/sw.js", {
           scope: "/",
         });
 
         registration.addEventListener("updatefound", () => {
-          const newWorker = registration.installing;
+          const newWorker = registration?.installing;
           if (!newWorker) return;
 
           newWorker.addEventListener("statechange", () => {
@@ -35,9 +32,8 @@ export default function ServiceWorkerRegistration() {
           });
         });
 
-        // No success log in production (avoid console noise for end users);
-        // a registration failure is still surfaced for diagnosis.
-        if (process.env.NODE_ENV !== "production") {
+        // En dev on logue pour faciliter le debug PWA/push ; en prod on reste silencieux.
+        if (process.env.NODE_ENV === "development") {
           console.log("✅ Service Worker registered:", registration.scope);
         }
       } catch (error) {
@@ -46,6 +42,15 @@ export default function ServiceWorkerRegistration() {
     }
 
     registerSW();
+
+    // Ré-enregistrement après un hot reload de Next/Turbopack si le SW a disparu.
+    return () => {
+      if (registration && typeof registration.unregister === "function") {
+        registration.unregister().catch(() => {
+          /* cleanup best-effort */
+        });
+      }
+    };
   }, []);
 
   if (!updateAvailable) return null;

@@ -52,6 +52,31 @@ export default function RootLayout({
   return (
     <html lang="fr" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col font-sans bg-background text-[var(--color-text-primary)]" suppressHydrationWarning>
+        {/*
+          No-FOUC dark-mode : inline script injecté côté serveur dans <head> et
+          exécuté avant tout paint/hydratation. next/script (id + strategy
+          beforeInteractive) est le moyen officiellement supporté en App Router —
+          un <script dangerouslySetInnerHTML> brut n'est pas exécuté par React 19.
+          Doit vivre À L'INTÉRIEUR de <body> (sibling de </body> = hors document
+          → erreur Next 16 « Cannot render a sync or defer <script> outside the
+          main document »). beforeInteractive le remonte dans <head> au render.
+        */}
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`(function() {
+            try {
+              var prefs = JSON.parse(localStorage.getItem('urbanflow_preferences') || '{}');
+              var isDark = prefs.darkMode;
+              if (isDark === undefined) {
+                isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+              }
+              if (isDark) {
+                document.documentElement.classList.add('dark');
+              } else {
+                document.documentElement.classList.remove('dark');
+              }
+            } catch (e) {}
+          })();`}
+        </Script>
         <AuthProvider>
           <ThemeProvider>
             {children}
@@ -61,28 +86,6 @@ export default function RootLayout({
         <ServiceWorkerRegistration />
         <PwaInstallBanner />
       </body>
-      {/*
-        No-FOUC dark-mode : inline script injecté côté serveur dans <head> et
-        exécuté avant tout paint/hydratation. next/script (avec id + strategy
-        beforeInteractive) est le moyen officiellement supporté en App Router —
-        un <script dangerouslySetInnerHTML> brut n'est pas exécuté par React 19.
-      */}
-      <Script id="theme-init" strategy="beforeInteractive">
-        {`(function() {
-          try {
-            var prefs = JSON.parse(localStorage.getItem('urbanflow_preferences') || '{}');
-            var isDark = prefs.darkMode;
-            if (isDark === undefined) {
-              isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            }
-            if (isDark) {
-              document.documentElement.classList.add('dark');
-            } else {
-              document.documentElement.classList.remove('dark');
-            }
-          } catch (e) {}
-        })();`}
-      </Script>
     </html>
   );
 }

@@ -4,6 +4,7 @@ Interface web PWA pour la plateforme de mobilité multimodale Urban Flow Mobilit
 
 > **État au 2026-07-06** : Next.js 16 + React 19 + TypeScript 5 + Tailwind v4 + Leaflet.
 > Refonte majeure récente (`7b8988e`) : dark mode no-FOUC, a11y `prefers-reduced-motion`, AbortController sur fetches, composants `SearchAutocomplete` / `NearbyStopDrawer` / `Switch` / `CO2Comparison`, source unique couleurs modes.
+> Immersion trajet turn-by-turn (`dea244c`) : banner directionnel (`TurnByTurnBanner`), reroutage réel (8s/30m, AbortController, bouton recalculer), rotation au cap via `leaflet-rotate` + zoom auto sur segment actif.
 
 ## Stack
 
@@ -11,6 +12,7 @@ Interface web PWA pour la plateforme de mobilité multimodale Urban Flow Mobilit
 - **React 19** + **TypeScript 5**
 - **Tailwind CSS v4** + CSS Variables (design tokens)
 - **Leaflet** + OpenStreetMap (cartographie, `next/dynamic` SSR off)
+- **leaflet-rotate** (rotation au cap programmatique via `map.setBearing()` — activé en nav, `touchRotate` désactivé)
 - **lucide-react** (icônes SVG)
 - **Framer Motion** (animations, désactivées si `prefers-reduced-motion`)
 - PWA (manifest.json + service worker, installable)
@@ -21,7 +23,7 @@ Interface web PWA pour la plateforme de mobilité multimodale Urban Flow Mobilit
 |---|---|---|
 | Accueil | `/` | Recherche rapide, modes de transport, lignes PRIM temps réel, trajets récents |
 | Recherche | `/search` | O/D + filtres modes + autocomplete arrêts/adresses (`SearchAutocomplete`) + géoloc + clic carte |
-| Détail itinéraire | `/trip/[id]` | Timeline segmentée, `CO2Comparison` (vs voiture ADEME 170 g/km), carte, navigation GPS immersive |
+| Détail itinéraire | `/trip/[id]` | Timeline segmentée, `CO2Comparison` (vs voiture ADEME 170 g/km), carte, navigation GPS immersive, **turn-by-turn** (banner directionnel + reroutage auto sur hors-trajet) |
 | Favoris | `/favorites` | Onglets Favoris/Historique, cartes trajet, badges CO2 |
 | Profil | `/profile` | Avatar, stats, badges gamification, économie CO2, dark mode, RGPD |
 | Admin | `/admin` | Dashboard (users, trips, GTFS load), users, trips, broadcast, reload GTFS |
@@ -46,6 +48,7 @@ Interface web PWA pour la plateforme de mobilité multimodale Urban Flow Mobilit
 | `NearbyStopDrawer` | `components/NearbyStopDrawer.tsx` | ⭐ Drawer prochains départs quand on clique un arrêt proche |
 | `Switch` | `components/Switch.tsx` | ⭐ Toggle UI atomique accessible (consent, profil, PWA) |
 | `CO2Comparison` | (utilisé dans `trip/[id]`) | ⭐ Comparaison CO2 vs voiture ADEME 170 g/km (g + %) |
+| `TurnByTurnBanner` | `components/TurnByTurnBanner.tsx` | ⭐ Bandeau overlay directionnel (gauche/droite/straight/board/alight/arrive) + distance + ETA, Framer Motion + `usePrefersReducedMotion` |
 
 ## Hooks (`hooks/`)
 
@@ -53,7 +56,7 @@ Interface web PWA pour la plateforme de mobilité multimodale Urban Flow Mobilit
 |---|---|---|
 | `useTransport` | `useTransport.ts` | ⭐ Hooks API avec `AbortController` (annule fetches concurrents + en vol) |
 | `useGeolocation` | (livré précedemment) | Géolocalisation navigateur (ponctuel + `watchPosition` continu) |
-| `useNavigation` | `useNavigation.ts` | Navigation GPS (segments, vibration, voix, wake lock) |
+| `useNavigation` | `useNavigation.ts` | ⭐ Navigation GPS (segments, vibration, voix, wake lock, **turn-by-turn directionnel** via delta cap-bearing, `nextManeuverPoint` depuis `geojson` Navitia ou repli polyline, `distanceToManeuver` + ETA, `reroute()` avec AbortController) |
 | `useDarkMode` | `useDarkMode.ts` | Dark mode (respecte `prefers-color-scheme`) |
 | `usePrefersReducedMotion` | `usePrefersReducedMotion.ts` | ⭐ Détecte préférence OS, désactive animations Framer Motion |
 

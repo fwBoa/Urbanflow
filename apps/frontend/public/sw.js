@@ -1,16 +1,30 @@
-const CACHE_NAME = "urbanflow-v1";
+const CACHE_NAME = "urbanflow-v2";
 const STATIC_ASSETS = [
   "/",
   "/search",
   "/favorites",
   "/profile",
+  "/offline",
   "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
 ];
 
-// Install: cache static assets
+// Mode dev : on désactive tout cache pour ne pas casser le HMR/Turbopack de Next.js.
+// Le SW continue de tourner pour que push + install prompt fonctionnent en localhost.
+const IS_DEV =
+  typeof self !== "undefined" &&
+  (self.location.hostname === "localhost" ||
+    self.location.hostname === "127.0.0.1" ||
+    self.location.port === "3000");
+
+// Install: cache static assets (sauf en dev)
 self.addEventListener("install", (event) => {
+  if (IS_DEV) {
+    self.skipWaiting();
+    return;
+  }
+
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
@@ -33,7 +47,7 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first strategy with cache fallback
+// Fetch: network-first strategy with cache fallback (prod only)
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -46,6 +60,9 @@ self.addEventListener("fetch", (event) => {
 
   // API calls: network-only (fresh data required)
   if (url.pathname.startsWith("/api")) return;
+
+  // En dev : tout passe en network-only pour préserver HMR.
+  if (IS_DEV) return;
 
   // Navigation requests: network-first
   if (request.mode === "navigate") {
@@ -64,9 +81,9 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => {
-          // Fallback to cache if offline
+          // Fallback to cache if offline, then to offline page
           return caches.match(request).then((cached) => {
-            return cached || caches.match("/");
+            return cached || caches.match("/offline") || caches.match("/");
           });
         })
     );
@@ -91,6 +108,51 @@ self.addEventListener("fetch", (event) => {
         return response;
       });
     })
+  );
+});
+
+// Push: afficher la notification système
+self.addEventListener("push", (event) => {
+  let payload = { title: "UrbanFlow", body: "Nouvelle alerte", actionUrl: "/" };
+  try {
+    if (event.data) {
+      payload = { ...payload, ...event.data.json() };
+    }
+  } catch (e) {
+    console.error("[SW] Invalid push payload", e);
+  }
+
+  const title = payload.title || "UrbanFlow";
+  const options = {
+    body: payload.body || "",
+    icon: payload.icon || "/icons/icon-192.png",
+    badge: payload.badge || "/icons/icon-192.png",
+    tag: payload.tag || "urbanflow-default",
+    data: { actionUrl: payload.actionUrl || "/" },
+    requireInteraction: false,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Notification click: focus une fenêtre ou ouvre l'URL cible
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const actionUrl = event.notification.data?.actionUrl || "/";
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if (client.url === actionUrl && "focus" in client) {
+            return client.focus();
+          }
+        }
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(actionUrl);
+        }
+      })
   );
 });
 
