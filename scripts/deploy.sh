@@ -5,6 +5,12 @@
 
 set -e
 
+DRY_RUN=false
+if [ "$1" = "--dry-run" ]; then
+  DRY_RUN=true
+  shift
+fi
+
 ENV=${1:-staging}
 BRANCH=${2:-staging}
 
@@ -55,9 +61,16 @@ fi
 echo "Pull de la branche $BRANCH..."
 git pull origin "$BRANCH"
 
-echo "Build et déploiement Docker..."
+echo "Build Docker..."
 cd docker
 docker compose build
+
+if [ "$DRY_RUN" = "true" ]; then
+  echo "✅ Dry-run terminé — images construites, containers non démarrés."
+  echo "   Pour déployer : ./scripts/deploy.sh $ENV $BRANCH"
+  exit 0
+fi
+
 docker compose $PROFILE up -d
 
 echo "⏳ Attente du démarrage des services..."

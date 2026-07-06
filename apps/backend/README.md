@@ -436,19 +436,32 @@ npm install
 
 ## Développement
 
+### Local (sans Docker)
+
 ```bash
-npm run start:dev
+npm run start:dev   # port 4000
 ```
+
+### Avec Docker + HTTPS local (recommandé pour PWA / Web Push)
+
+```bash
+./scripts/generate-certs.sh   # génère docker/certs/*.pem (auto-signé)
+cd docker
+docker compose up -d            # démarre aussi nginx-dev sur https://localhost
+```
+
+En dev HTTPS, le frontend est accessible directement sur `https://localhost`.  
+`nginx-dev` proxifie `/api/*` vers le backend. Le certificat auto-signé doit être accepté dans le navigateur.
 
 ## Tests
 
 ```bash
 npm run test           # alias jest
 npx jest --verbose     # détaillé
-npx jest --listTests   # 12 suites
+npx jest --listTests   # 12+ suites
 ```
 
-12 suites — **110 tests** (transport, auth, admin, carbon, prim, RAPTOR, JWT, GDPR, **Web Push**) :
+12 suites — **110+ tests** (transport, auth, admin, carbon, prim, RAPTOR, JWT, GDPR, **Web Push**) :
 
 | Fichier | Couverture |
 |---|---|

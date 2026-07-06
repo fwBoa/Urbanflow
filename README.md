@@ -115,6 +115,14 @@ cd docker
 docker compose up -d
 ```
 
+**HTTPS local (requis pour Service Worker + Web Push) :**
+```bash
+./scripts/generate-certs.sh
+cd docker
+docker compose up -d
+# https://localhost (accepter le certificat auto-signé)
+```
+
 ### 4. Base de données
 
 La base est initialisée automatiquement via `docker/init-db.sql` avec les tables :

@@ -113,11 +113,21 @@ npm install
 npm run dev      # port 3001 (Turbopack)
 npm run build    # standalone prod
 npm run lint
+npm run test     # Jest + Testing Library (à venir)
+```
+
+### Docker / HTTPS local
+
+```bash
+cd docker
+./scripts/generate-certs.sh   # une seule fois
+docker compose up -d          # https://localhost (auto-signé)
 ```
 
 ## API Backend
 
-- `NEXT_PUBLIC_API_URL=http://localhost:4000`
+- `NEXT_PUBLIC_API_URL=http://localhost:4000` en dev local
+- `NEXT_PUBLIC_API_URL=""` en prod Docker : URLs relatives `/api/*` proxifiées par nginx
 - Endpoints : `/api/transport/*`, `/api/auth/*`, `/api/favorites/*`, `/api/notifications/*`, `/api/admin/*`
 - JWT httpOnly cookies + Bearer pour compat
 
