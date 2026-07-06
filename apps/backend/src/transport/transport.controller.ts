@@ -15,7 +15,7 @@ import {
   modeKey,
 } from './gtfs-parser.service';
 import { JourneyService, JourneyQuery, JourneyResult } from './journey.service';
-import { OsrmService } from './osrm.service';
+import { OsrmRouteResult, OsrmService } from './osrm.service';
 import { GtfsRtService, RealtimeAlert } from './gtfs-rt.service';
 import { NavitiaService } from './navitia.service';
 
@@ -552,7 +552,7 @@ export class TransportController {
     @Query('destLat') destLat?: string,
     @Query('destLon') destLon?: string,
     @Query('profile') profile?: string,
-  ) {
+  ): Promise<OsrmRouteResult> {
     if (!originLat || !originLon || !destLat || !destLon) {
       throw new HttpException(
         'originLat, originLon, destLat, destLon are required',
