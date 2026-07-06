@@ -8,13 +8,17 @@ import {
   UseGuards,
   Request as ReqDecorator,
   Res,
-  Req,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
-import { Response, Request as ExpressRequest } from 'express';
+import { Throttle } from '@nestjs/throttler';
+import { Response } from 'express';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, UpdateProfileDto, ConsentDto } from './auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  UpdateProfileDto,
+  ConsentDto,
+} from './auth.dto';
 
 // ─── OWASP A07: JWT httpOnly cookie config ───
 const COOKIE_NAME = 'urbanflow_token';
@@ -33,7 +37,10 @@ export class AuthController {
   // ─── OWASP: 5 registrations per minute max (brute-force prevention) ───
   @Post('register')
   @Throttle({ default: { ttl: 60000, limit: 5 } })
-  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
+  async register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const authResponse = await this.authService.register(dto);
     res.cookie(COOKIE_NAME, authResponse.access_token, COOKIE_OPTIONS);
     return { user: authResponse.user };
@@ -42,7 +49,10 @@ export class AuthController {
   // ─── OWASP: 5 login attempts per minute max (credential stuffing prevention) ───
   @Post('login')
   @Throttle({ default: { ttl: 60000, limit: 5 } })
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const authResponse = await this.authService.login(dto);
     res.cookie(COOKIE_NAME, authResponse.access_token, COOKIE_OPTIONS);
     return { user: authResponse.user };
@@ -50,7 +60,7 @@ export class AuthController {
 
   // ─── OWASP: Clear httpOnly cookie on logout ───
   @Post('logout')
-  async logout(@Res({ passthrough: true }) res: Response) {
+  logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie(COOKIE_NAME, { path: '/' });
     return { message: 'Déconnecté' };
   }
@@ -116,6 +126,9 @@ export class AuthController {
     @ReqDecorator() req: { user: { id: string } },
     @Body() body: { enabled: boolean },
   ) {
-    return this.authService.updateNotificationsPreference(req.user.id, body.enabled);
+    return this.authService.updateNotificationsPreference(
+      req.user.id,
+      body.enabled,
+    );
   }
 }

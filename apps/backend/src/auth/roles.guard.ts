@@ -6,16 +6,24 @@ import { User } from './user.entity';
 
 export const ROLES_KEY = 'roles';
 
-export function Roles(...roles: string[]) {
-  return (target: any, key: string, descriptor?: PropertyDescriptor) => {
+interface RequestWithUser {
+  user?: User;
+}
+
+export function Roles(...roles: string[]): MethodDecorator & ClassDecorator {
+  return ((
+    target: object | (new (...args: unknown[]) => object),
+    key?: string | symbol,
+    descriptor?: PropertyDescriptor,
+  ) => {
     if (descriptor) {
-      Reflect.defineMetadata(ROLES_KEY, roles, descriptor.value);
+      Reflect.defineMetadata(ROLES_KEY, roles, descriptor.value as object);
       return descriptor;
     }
     // Class decorator fallback
     Reflect.defineMetadata(ROLES_KEY, roles, target);
     return target;
-  };
+  }) as MethodDecorator & ClassDecorator;
 }
 
 // ─── Guard that checks user has required role ─────────────────────────────
@@ -25,17 +33,17 @@ export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     if (!requiredRoles || requiredRoles.length === 0) {
       return true; // No roles required → allow access
     }
 
-    const request = context.switchToHttp().getRequest();
-    const user: User | null = request.user;
+    const request = context.switchToHttp().getRequest<RequestWithUser>();
+    const user = request.user;
 
     if (!user) {
       return false; // No user in request → not authenticated

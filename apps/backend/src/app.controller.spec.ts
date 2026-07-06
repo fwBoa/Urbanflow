@@ -19,4 +19,12 @@ describe('AppController', () => {
       expect(appController.getHello()).toBe('Hello World!');
     });
   });
+
+  describe('health', () => {
+    it('should return status ok with timestamp', () => {
+      const health = appController.getHealth();
+      expect(health.status).toBe('ok');
+      expect(health.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+  });
 });

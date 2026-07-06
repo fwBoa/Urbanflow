@@ -7,8 +7,6 @@ import type {
   PrimStop,
   PrimVelibStation,
   NearbyVelibStation,
-  NearbyScooter,
-  NearbyScootersResponse,
   JourneyResult,
   GeocodeResult,
   ReverseGeocodeResult,
@@ -19,7 +17,6 @@ import type {
 
 // Re-export pour rétro-compat
 export type { NearbyVelibStation } from "@/services/api";
-export type { NearbyScooter } from "@/services/api";
 
 // ─── Generic API data hook (DRY) ───────────────────────────────────
 /**
@@ -28,7 +25,7 @@ export type { NearbyScooter } from "@/services/api";
  * dans tous les hooks de données.
  */
 function useApiData<T>(
-  fetchFn: () => Promise<T>,
+  fetchFn: (signal?: AbortSignal) => Promise<T>,
   defaultValue: T,
   deps: React.DependencyList,
   initialLoading = true,
@@ -38,17 +35,25 @@ function useApiData<T>(
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+    // Synchronous loading state before async fetch — standard data-fetching pattern.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    fetchFn()
+    fetchFn(controller.signal)
       .then((result) => {
+        if (controller.signal.aborted) return;
         setData(result);
         setError(null);
       })
       .catch((err) => {
+        if (err?.name === "AbortError") return;
         setError(err.message);
         setData(defaultValue);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
@@ -73,7 +78,7 @@ export interface LinesByMode {
 
 export function useLinesByMode() {
   const { data: linesByMode, loading, error } = useApiData<LinesByMode>(
-    () => apiService.getLinesByMode(),
+    (signal) => apiService.getLinesByMode(signal),
     { metro: [], rer: [], tram: [], transilien: [] },
     [],
   );
@@ -85,32 +90,46 @@ export function useStopSearch(query: string, limit = 10) {
   const [stops, setStops] = useState<PrimStop[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const search = useCallback(
-    (q: string) => {
+    async (q: string) => {
+      abortRef.current?.abort();
       if (!q || q.length < 2) {
         setStops([]);
+        setLoading(false);
+        setError(null);
+        abortRef.current = null;
         return;
       }
+      const controller = new AbortController();
+      abortRef.current = controller;
       setLoading(true);
-      apiService
-        .searchStops(q, limit)
-        .then((data) => {
-          setStops(data.results || []);
-          setError(null);
-        })
-        .catch((err) => {
-          setError(err.message);
-          setStops([]);
-        })
-        .finally(() => setLoading(false));
+      try {
+        const data = await apiService.searchStops(q, limit, controller.signal);
+        if (controller.signal.aborted) return;
+        setStops(data.results || []);
+        setError(null);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : String(err));
+        setStops([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          abortRef.current = null;
+        }
+      }
     },
     [limit],
   );
 
   useEffect(() => {
     const timer = setTimeout(() => search(query), 300);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      abortRef.current?.abort();
+    };
   }, [query, search]);
 
   return { stops, loading, error };
@@ -119,8 +138,8 @@ export function useStopSearch(query: string, limit = 10) {
 // ─── Vélib' stations (liste brute filtrée Paris) ───────────────────
 export function useVelibStations(limit = 50) {
   const { data: stations, loading, error } = useApiData<PrimVelibStation[]>(
-    () =>
-      apiService.getVelibStations(limit).then((d) =>
+    (signal) =>
+      apiService.getVelibStations(limit, 0, signal).then((d) =>
         (d.results || []).filter(
           (s) =>
             s.status === "OPEN" &&
@@ -139,10 +158,10 @@ export function useVelibStations(limit = 50) {
 // ─── Vélib' proches (F4) ──────────────────────────────────────────
 export function useNearbyVelib(lat: number | null, lon: number | null, radiusKm = 2, limit = 10) {
   const { data: stations, loading, error } = useApiData<NearbyVelibStation[]>(
-    () => {
+    (signal) => {
       if (lat === null || lon === null) return Promise.resolve([]);
       return apiService
-        .getNearbyVelibStations(lat, lon, radiusKm, limit)
+        .getNearbyVelibStations(lat, lon, radiusKm, limit, signal)
         .then((d) => d.stations || []);
     },
     [],
@@ -157,66 +176,51 @@ export function useNearbyVelib(lat: number | null, lon: number | null, radiusKm 
   return { stations, loading, error };
 }
 
-// ─── Trottinettes/vélos partagés (GBFS) ──────────────────────────────
-export function useNearbyScooters(lat: number | null, lon: number | null, radiusKm = 2, limit = 20) {
-  const { data: response, loading, error } = useApiData<NearbyScootersResponse>(
-    () => {
-      if (lat === null || lon === null) return Promise.resolve({ vehicles: [], total: 0, source: "GBFS" });
-      return apiService.getNearbyScooters(lat, lon, radiusKm, limit);
-    },
-    { vehicles: [], total: 0, source: "GBFS" },
-    [lat, lon, radiusKm, limit],
-    false,
-  );
-
-  if (lat === null || lon === null) {
-    return {
-      vehicles: [] as NearbyScooter[],
-      message: undefined as string | undefined,
-      loading: false,
-      error: null,
-    };
-  }
-
-  return {
-    vehicles: response?.vehicles ?? [],
-    message: response?.message,
-    loading,
-    error,
-  };
-}
-
 // ─── Geocoding — Recherche d'adresses ──────────────────────────────
 export function useGeocode(query: string, limit = 5) {
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const search = useCallback(
-    (q: string) => {
+    async (q: string) => {
+      abortRef.current?.abort();
       if (!q || q.length < 3) {
         setResults([]);
+        setLoading(false);
+        setError(null);
+        abortRef.current = null;
         return;
       }
+      const controller = new AbortController();
+      abortRef.current = controller;
       setLoading(true);
-      apiService
-        .geocode(q, limit)
-        .then((data) => {
-          setResults(data.results || []);
-          setError(null);
-        })
-        .catch((err) => {
-          setError(err.message);
-          setResults([]);
-        })
-        .finally(() => setLoading(false));
+      try {
+        const data = await apiService.geocode(q, limit, controller.signal);
+        if (controller.signal.aborted) return;
+        setResults(data.results || []);
+        setError(null);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : String(err));
+        setResults([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          abortRef.current = null;
+        }
+      }
     },
     [limit],
   );
 
   useEffect(() => {
     const timer = setTimeout(() => search(query), 400);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      abortRef.current?.abort();
+    };
   }, [query, search]);
 
   return { results, loading, error };
@@ -227,20 +231,33 @@ export function useReverseGeocode() {
   const [result, setResult] = useState<ReverseGeocodeResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   const reverseGeocode = useCallback(async (lat: number, lon: number) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const data = await apiService.reverseGeocode(lat, lon);
+      const data = await apiService.reverseGeocode(lat, lon, controller.signal);
+      if (controller.signal.aborted) return null;
       setResult(data);
       return data;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return null;
+      setError(err instanceof Error ? err.message : String(err));
       setResult(null);
       return null;
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        abortRef.current = null;
+      }
     }
   }, []);
 
@@ -254,7 +271,11 @@ export function useRoute() {
   const [duration, setDuration] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fetchingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   const fetchRoute = useCallback(
     async (
@@ -264,36 +285,44 @@ export function useRoute() {
       destLon: number,
       profile?: "foot" | "bike" | "car",
     ) => {
-      if (fetchingRef.current) return geometry;
-      fetchingRef.current = true;
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
       setLoading(true);
       setError(null);
       try {
-        const data = await apiService.getRoute({
-          originLat,
-          originLon,
-          destLat,
-          destLon,
-          profile,
-        });
+        const data = await apiService.getRoute(
+          {
+            originLat,
+            originLon,
+            destLat,
+            destLon,
+            profile,
+          },
+          controller.signal,
+        );
         // OSRM GeoJSON: [lon, lat] → Leaflet: [lat, lon]
         const coords = data.geometry.coordinates.map(
           (c: [number, number]) => [c[1], c[0]] as [number, number],
         );
+        if (controller.signal.aborted) return [];
         setGeometry(coords);
         setDistance(data.distance);
         setDuration(data.duration);
         return coords;
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return [];
+        setError(err instanceof Error ? err.message : String(err));
         setGeometry([]);
         return [];
       } finally {
-        setLoading(false);
-        fetchingRef.current = false;
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          abortRef.current = null;
+        }
       }
     },
-    [geometry],
+    [],
   );
 
   return { geometry, distance, duration, loading, error, fetchRoute };
@@ -302,7 +331,7 @@ export function useRoute() {
 // ─── Realtime alerts ───────────────────────────────────────────────
 export function useRealtimeAlerts() {
   const { data: alerts, loading, error } = useApiData<RealtimeAlert[]>(
-    () => apiService.getRealtimeAlerts(),
+    (signal) => apiService.getRealtimeAlerts(signal),
     [],
     [],
   );
@@ -312,9 +341,9 @@ export function useRealtimeAlerts() {
 // ─── Prochains départs par arrêt ───────────────────────────────────
 export function useStopTimes(stopId: string | null, limit = 5) {
   const { data: result, loading, error } = useApiData<{ departures: StopDeparture[] }>(
-    () => {
+    (signal) => {
       if (!stopId) return Promise.resolve({ departures: [] });
-      return apiService.getStopTimes(stopId, limit);
+      return apiService.getStopTimes(stopId, limit, signal);
     },
     { departures: [] },
     [stopId, limit],
@@ -336,12 +365,15 @@ export function useNearbyStops(lat: number | null, lon: number | null, radiusKm 
 
   useEffect(() => {
     if (lat === null || lon === null) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setStops([]);
       setLoading(false);
       setError(null);
+      /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
 
+    const controller = new AbortController();
     let cancelled = false;
     setLoading(true);
 
@@ -349,31 +381,32 @@ export function useNearbyStops(lat: number | null, lon: number | null, radiusKm 
       try {
         // 1. Try cache first for instant offline display
         const cached = await getCachedNearbyStops(lat, lon, radiusKm, limit);
-        if (cached && !cancelled) {
+        if (cached && !cancelled && !controller.signal.aborted) {
           setStops(cached as NearbyStop[]);
         }
 
         // 2. Fetch from network
-        const result = await apiService.getNearbyStops(lat, lon, radiusKm, limit);
-        if (!cancelled) {
+        const result = await apiService.getNearbyStops(lat, lon, radiusKm, limit, controller.signal);
+        if (!cancelled && !controller.signal.aborted) {
           const fresh = result?.stops || [];
           setStops(fresh);
           setError(null);
           await cacheNearbyStops(lat, lon, radiusKm, limit, fresh);
         }
-      } catch (err: any) {
-        if (!cancelled) {
-          setError(err.message);
+      } catch (err: unknown) {
+        if (!cancelled && !controller.signal.aborted && !(err instanceof Error && err.name === "AbortError")) {
+          setError(err instanceof Error ? err.message : String(err));
           // Keep cached data if available — already set above
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !controller.signal.aborted) setLoading(false);
       }
     };
 
     doFetch();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [lat, lon, radiusKm, limit]);
 
@@ -386,9 +419,9 @@ export function useShape(shapeId: string | null) {
     shapeId: string;
     points: Array<{ lat: number; lon: number; seq: number }>;
   }>(
-    () => {
+    (signal) => {
       if (!shapeId) return Promise.resolve({ shapeId: "", points: [] });
-      return apiService.getShape(shapeId);
+      return apiService.getShape(shapeId, signal);
     },
     { shapeId: "", points: [] },
     [shapeId],
@@ -405,17 +438,20 @@ export function useJourney(
   modes?: string[],
 ) {
   const { data: journeys, loading, error } = useApiData<JourneyResult[]>(
-    () => {
+    (signal) => {
       if (!origin || !destination) return Promise.resolve([]);
       return apiService
-        .searchJourney({
-          originLat: origin.lat,
-          originLon: origin.lon,
-          destLat: destination.lat,
-          destLon: destination.lon,
-          departureTime,
-          modes: modes?.join(","),
-        })
+        .searchJourney(
+          {
+            originLat: origin.lat,
+            originLon: origin.lon,
+            destLat: destination.lat,
+            destLon: destination.lon,
+            departureTime,
+            modes: modes?.join(","),
+          },
+          signal,
+        )
         .then((d) => (Array.isArray(d) ? d : []));
     },
     [],

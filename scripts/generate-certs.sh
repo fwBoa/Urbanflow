@@ -25,7 +25,7 @@ openssl req -x509 -newkey rsa:2048 -nodes \
   -out "$CERT_DIR/fullchain.pem" \
   -days 365 \
   -subj "/CN=$DOMAIN" \
-  -addext "subjectAltName=DNS:$DOMAIN" \
+  -addext "subjectAltName=DNS:$DOMAIN,DNS:localhost,IP:127.0.0.1" \
   >/dev/null 2>&1
 
 chmod 600 "$CERT_DIR/privkey.pem"

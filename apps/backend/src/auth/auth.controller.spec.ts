@@ -4,7 +4,12 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { Response } from 'express';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, UpdateProfileDto, ConsentDto } from './auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  UpdateProfileDto,
+  ConsentDto,
+} from './auth.dto';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -31,9 +36,7 @@ describe('AuthController', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      imports: [
-        ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
-      ],
+      imports: [ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])],
       controllers: [AuthController],
       providers: [
         {
@@ -118,10 +121,12 @@ describe('AuthController', () => {
   });
 
   describe('logout', () => {
-    it('should clear auth cookie', async () => {
-      const result = await controller.logout(mockResponse);
+    it('should clear auth cookie', () => {
+      const result = controller.logout(mockResponse);
 
-      expect(mockResponse.clearCookie).toHaveBeenCalledWith('urbanflow_token', { path: '/' });
+      expect(mockResponse.clearCookie).toHaveBeenCalledWith('urbanflow_token', {
+        path: '/',
+      });
       expect(result).toEqual({ message: 'Déconnecté' });
     });
   });
@@ -168,7 +173,10 @@ describe('AuthController', () => {
 
       const result = await controller.updateProfile(req, updateDto);
 
-      expect(authService.updateProfile).toHaveBeenCalledWith('user-123', updateDto);
+      expect(authService.updateProfile).toHaveBeenCalledWith(
+        'user-123',
+        updateDto,
+      );
       expect(result).toEqual(mockUpdatedUser);
     });
   });
@@ -176,7 +184,8 @@ describe('AuthController', () => {
   describe('deleteAccount', () => {
     it('should delete user account (soft delete)', async () => {
       mockAuthService.deleteAccount.mockResolvedValue({
-        message: 'Compte supprimé. Vos données seront définitivement effacées sous 30 jours.',
+        message:
+          'Compte supprimé. Vos données seront définitivement effacées sous 30 jours.',
       });
       const req = { user: { id: 'user-123' } };
 
@@ -203,7 +212,10 @@ describe('AuthController', () => {
       await controller.exportData(req, mockResponse);
 
       expect(authService.exportData).toHaveBeenCalledWith('user-123');
-      expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'application/json');
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'application/json',
+      );
     });
   });
 
@@ -229,7 +241,10 @@ describe('AuthController', () => {
 
       const result = await controller.updateConsent(req, consentDto);
 
-      expect(authService.updateConsent).toHaveBeenCalledWith('user-123', consentDto);
+      expect(authService.updateConsent).toHaveBeenCalledWith(
+        'user-123',
+        consentDto,
+      );
       expect(result).toEqual(mockUpdatedUser);
     });
   });
@@ -255,13 +270,18 @@ describe('AuthController', () => {
 
   describe('updateNotificationsPreference', () => {
     it('should update notification preferences', async () => {
-      mockAuthService.updateNotificationsPreference.mockResolvedValue({ enabled: true });
+      mockAuthService.updateNotificationsPreference.mockResolvedValue({
+        enabled: true,
+      });
       const req = { user: { id: 'user-123' } };
       const body = { enabled: true };
 
       const result = await controller.updateNotificationsPreference(req, body);
 
-      expect(authService.updateNotificationsPreference).toHaveBeenCalledWith('user-123', true);
+      expect(authService.updateNotificationsPreference).toHaveBeenCalledWith(
+        'user-123',
+        true,
+      );
       expect(result).toEqual({ enabled: true });
     });
   });

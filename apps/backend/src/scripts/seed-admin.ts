@@ -13,7 +13,9 @@ import { User } from '../auth/user.entity';
 async function seedAdmin() {
   const dataSource = new DataSource({
     type: 'postgres',
-    url: process.env.DATABASE_URL || 'postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow',
+    url:
+      process.env.DATABASE_URL ||
+      'postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow',
     entities: [User],
     synchronize: false,
   });
@@ -56,13 +58,15 @@ async function seedAdmin() {
     console.log('   Mot de passe: admin123');
     console.log('');
     console.log('⚠️  Changez le mot de passe immédiatement en production !');
-
   } catch (error) {
-    console.error('❌ Erreur lors de la création de l\'admin :', error);
+    console.error("❌ Erreur lors de la création de l'admin :", error);
     process.exit(1);
   } finally {
     await dataSource.destroy();
   }
 }
 
-seedAdmin();
+void seedAdmin().catch((error: unknown) => {
+  console.error('Seed admin failed:', error);
+  process.exit(1);
+});

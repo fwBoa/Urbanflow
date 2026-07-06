@@ -3,12 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Notification } from './notification.entity';
 import { CreateNotificationDto } from './notifications.dto';
+import { PushService } from './push.service';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     @InjectRepository(Notification)
     private readonly notifRepo: Repository<Notification>,
+    private readonly pushService: PushService,
   ) {}
 
   /** Get all notifications for a user, newest first */
@@ -56,7 +58,10 @@ export class NotificationsService {
 
   /** Export notifications for RGPD data export */
   async exportForUser(userId: string): Promise<Notification[]> {
-    return this.notifRepo.find({ where: { userId }, order: { createdAt: 'DESC' } });
+    return this.notifRepo.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   /**
@@ -80,5 +85,16 @@ export class NotificationsService {
       }),
     );
     await this.notifRepo.save(notifications);
+
+    // Envoyes web push en parallèle sans bloquer la transaction in-app.
+    await Promise.all(
+      userIds.map((userId) =>
+        this.pushService.sendToUser(userId, {
+          title,
+          body: message,
+          actionUrl: `/line/${lineId}`,
+        }),
+      ),
+    );
   }
 }

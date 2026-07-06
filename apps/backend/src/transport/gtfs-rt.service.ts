@@ -3,6 +3,57 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
+export interface RealtimeAlert {
+  id: string;
+  headerText: string;
+  descriptionText?: string;
+  severity: 'info' | 'warning' | 'severe' | 'unknown';
+  affectedRoutes: string[];
+  activePeriod: { start: string; end: string }[];
+  cause?: string;
+  effect?: string;
+}
+
+interface PrimDisruptionMessage {
+  text?: string;
+}
+
+interface PrimDisruptionLine {
+  shortName?: string;
+  name?: string;
+}
+
+interface PrimDisruptionSeverity {
+  name?: string;
+}
+
+interface PrimDisruptionPeriod {
+  begin?: string;
+  start?: string;
+  end?: string;
+}
+
+interface PrimDisruption {
+  id?: string;
+  messages?: PrimDisruptionMessage[];
+  severity?: PrimDisruptionSeverity;
+  status?: string;
+  cause?: string;
+  effect?: string;
+  lignes?: PrimDisruptionLine[];
+  lineIds?: string[];
+  routesAffected?: string[];
+  startDate?: string;
+  endDate?: string;
+  debut?: string;
+  fin?: string;
+  applicationPeriods?: PrimDisruptionPeriod[];
+}
+
+interface PrimDisruptionsResponse {
+  disruptions?: PrimDisruption[];
+}
+
 /**
  * GTFS-RT (Realtime) Service
  *
@@ -17,18 +68,6 @@ import { Cron, CronExpression } from '@nestjs/schedule';
  * Note : Les anciens endpoints /v1/traffic et /v1/gtfs-rt sont obsolètes.
  * On utilise maintenant l'API Navitia disruptions pour les alertes.
  */
-
-export interface RealtimeAlert {
-  id: string;
-  headerText: string;
-  descriptionText?: string;
-  severity: 'info' | 'warning' | 'severe' | 'unknown';
-  affectedRoutes: string[];
-  activePeriod: { start: string; end: string }[];
-  cause?: string;
-  effect?: string;
-}
-
 @Injectable()
 export class GtfsRtService {
   private readonly logger = new Logger(GtfsRtService.name);
@@ -42,7 +81,8 @@ export class GtfsRtService {
 
   constructor(private readonly httpService: HttpService) {
     this.primApiKey = process.env.PRIM_API_KEY || '';
-    this.primApiUrl = process.env.PRIM_API_URL || 'https://prim.iledefrance-mobilites.fr';
+    this.primApiUrl =
+      process.env.PRIM_API_URL || 'https://prim.iledefrance-mobilites.fr';
     if (!this.primApiKey) {
       this.logger.warn(
         'PRIM_API_KEY is not set. Realtime alerts will be unavailable (register at https://prim.iledefrance-mobilites.fr/).',
@@ -56,7 +96,10 @@ export class GtfsRtService {
    */
   async getAlerts(): Promise<RealtimeAlert[]> {
     const now = Date.now();
-    if (this.alertsCache.length > 0 && now - this.alertsLastRefresh < this.ALERTS_CACHE_TTL_MS) {
+    if (
+      this.alertsCache.length > 0 &&
+      now - this.alertsLastRefresh < this.ALERTS_CACHE_TTL_MS
+    ) {
       return this.alertsCache;
     }
 
@@ -65,8 +108,10 @@ export class GtfsRtService {
       this.alertsCache = alerts;
       this.alertsLastRefresh = now;
       return alerts;
-    } catch (e) {
-      this.logger.warn(`Failed to fetch realtime alerts: ${e.message}`);
+    } catch (e: unknown) {
+      this.logger.warn(
+        `Failed to fetch realtime alerts: ${e instanceof Error ? e.message : String(e)}`,
+      );
       return this.alertsCache; // Return stale cache
     }
   }
@@ -78,48 +123,68 @@ export class GtfsRtService {
   private async fetchPrimAlerts(): Promise<RealtimeAlert[]> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get(`${this.primApiUrl}/marketplace/v2/navitia/disruptions`, {
-          headers: { apikey: this.primApiKey },
-          timeout: 10000,
-        }),
+        this.httpService.get<PrimDisruptionsResponse>(
+          `${this.primApiUrl}/marketplace/v2/navitia/disruptions`,
+          {
+            headers: { apikey: this.primApiKey },
+            timeout: 10000,
+          },
+        ),
       );
 
       const data = response.data;
-      if (!data || !data.disruptions) return [];
+      if (!data?.disruptions) return [];
 
       // Navitia disruptions format
-      const disruptions = data.disruptions || [];
+      const disruptions = data.disruptions ?? [];
 
-      return disruptions.slice(0, 50).map((d: any, i: number) => ({
+      return disruptions.slice(0, 50).map((d, i) => ({
         id: d.id || `alert-${i}`,
         headerText: d.messages?.[0]?.text || 'Perturbation',
-        descriptionText: d.messages?.map((m: any) => m.text).join(' — ') || undefined,
+        descriptionText:
+          d.messages?.map((m) => m.text).join(' — ') || undefined,
         severity: this.mapSeverity(d.severity?.name || d.status),
         affectedRoutes: this.extractAffectedRoutes(d),
         activePeriod: this.extractActivePeriod(d),
         cause: d.cause || undefined,
         effect: d.effect || undefined,
       }));
-    } catch (e) {
-      this.logger.warn(`PRIM Navitia disruptions API unavailable: ${e.message}`);
+    } catch (e: unknown) {
+      this.logger.warn(
+        `PRIM Navitia disruptions API unavailable: ${e instanceof Error ? e.message : String(e)}`,
+      );
       return [];
     }
   }
 
-  private mapSeverity(severity: string | undefined): 'info' | 'warning' | 'severe' | 'unknown' {
+  private mapSeverity(
+    severity: string | undefined,
+  ): 'info' | 'warning' | 'severe' | 'unknown' {
     if (!severity) return 'unknown';
     const s = severity.toLowerCase();
-    if (s.includes('bloqu') || s.includes('critical') || s.includes('severe') || s.includes('grave')) return 'severe';
-    if (s.includes('perturb') || s.includes('warning') || s.includes('important')) return 'warning';
-    if (s.includes('info') || s.includes('normal') || s.includes('info')) return 'info';
+    if (
+      s.includes('bloqu') ||
+      s.includes('critical') ||
+      s.includes('severe') ||
+      s.includes('grave')
+    )
+      return 'severe';
+    if (
+      s.includes('perturb') ||
+      s.includes('warning') ||
+      s.includes('important')
+    )
+      return 'warning';
+    if (s.includes('info') || s.includes('normal')) return 'info';
     return 'unknown';
   }
 
-  private extractAffectedRoutes(d: any): string[] {
+  private extractAffectedRoutes(d: PrimDisruption): string[] {
     const routes: string[] = [];
     if (d.lignes) {
       for (const l of d.lignes) {
-        if (l.shortName || l.name) routes.push(l.shortName || l.name);
+        const name = l.shortName || l.name;
+        if (name) routes.push(name);
       }
     }
     if (d.lineIds) routes.push(...d.lineIds);
@@ -127,7 +192,9 @@ export class GtfsRtService {
     return routes;
   }
 
-  private extractActivePeriod(d: any): { start: string; end: string }[] {
+  private extractActivePeriod(
+    d: PrimDisruption,
+  ): { start: string; end: string }[] {
     const periods: { start: string; end: string }[] = [];
     if (d.startDate || d.endDate) {
       periods.push({
@@ -143,7 +210,9 @@ export class GtfsRtService {
         });
       }
     }
-    return periods.length > 0 ? periods : [{ start: new Date().toISOString(), end: '' }];
+    return periods.length > 0
+      ? periods
+      : [{ start: new Date().toISOString(), end: '' }];
   }
 
   /**

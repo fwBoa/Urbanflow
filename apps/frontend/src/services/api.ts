@@ -9,6 +9,10 @@ export interface PrimStop {
   arrid: string;
   arrname: string;
   arrtype: string;
+  /** Modes desservant l'arrêt (libellés FR : Métro, Train, Bus, Tramway…). */
+  arrmodes?: string[];
+  /** Lignes desservant l'arrêt (mode + nom). */
+  arrlines?: { mode: string; name: string }[];
   arrtown: string;
   arrpostalregion: string;
   arrgeopoint: { lon: number; lat: number };
@@ -42,23 +46,6 @@ export interface NearbyVelibStation {
   arrondissement: string;
 }
 
-export interface NearbyScooter {
-  id: string;
-  operator: string;
-  type: "trottinette" | "bike";
-  position: { lat: number; lon: number };
-  battery?: number;
-  available: boolean;
-  distance: number; // mètres
-}
-
-export interface NearbyScootersResponse {
-  vehicles: NearbyScooter[];
-  total: number;
-  source: string;
-  message?: string;
-}
-
 export interface PrimDataResponse<T> {
   total_count: number;
   results: T[];
@@ -73,6 +60,12 @@ export interface GeocodeResult {
   context: string;
   geometry: { type: string; coordinates: [number, number] }; // [lon, lat]
   isParis: boolean;
+  /** Présents pour les arrêts GTFS (type === "gtfs_stop") : modes desservant l'arrêt. */
+  modes?: string[];
+  /** Lignes desservant l'arrêt (mode + nom). */
+  lines?: { mode: string; name: string }[];
+  /** ID arrêt GTFS (type === "gtfs_stop"). */
+  gtfsStopId?: string;
 }
 
 export interface GeocodeResponse {
@@ -123,6 +116,13 @@ export interface JourneySegment {
   headsign?: string;
   waitTimeMinutes?: number;
   shapeId?: string;
+  /**
+   * Géométrie réelle du segment (paires [lon, lat]) — embarquée par Navitia
+   * dans chaque section (geojson LineString). Présente → la carte trace la
+   * vraie trajectoire sans lazy-load /shape/:id. Absente (itinéraire GTFS) →
+   * repli sur shapeId (getShape).
+   */
+  geojson?: Array<[number, number]>;
 }
 
 export interface JourneyResult {
@@ -171,8 +171,8 @@ class ApiService {
     return this.baseUrl;
   }
 
-  private async fetch<T>(endpoint: string): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${endpoint}`);
+  private async fetch<T>(endpoint: string, signal?: AbortSignal): Promise<T> {
+    const res = await fetch(`${this.baseUrl}${endpoint}`, { signal });
     if (!res.ok) {
       throw new Error(`API error: ${res.status} ${res.statusText}`);
     }
@@ -180,19 +180,20 @@ class ApiService {
   }
 
   // ─── Lines by Mode ─────────────────────────────────────────────────
-  async getLinesByMode(): Promise<{
+  async getLinesByMode(signal?: AbortSignal): Promise<{
     metro: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
     rer: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
     tram: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
     transilien: Array<{ id: string; name: string; shortName: string; color: string; status: string }>;
   }> {
-    return this.fetch("/api/transport/lines-by-mode");
+    return this.fetch("/api/transport/lines-by-mode", signal);
   }
 
   // ─── Stops ──────────────────────────────────────────────────────────
-  async searchStops(query: string, limit = 10): Promise<PrimDataResponse<PrimStop>> {
+  async searchStops(query: string, limit = 10, signal?: AbortSignal): Promise<PrimDataResponse<PrimStop>> {
     return this.fetch(
       `/api/transport/stops?limit=${limit}&where=search(arrname,"${encodeURIComponent(query)}")`,
+      signal,
     );
   }
 
@@ -202,21 +203,11 @@ class ApiService {
     lon: number,
     radiusKm = 2,
     limit = 10,
+    signal?: AbortSignal,
   ): Promise<{ stations: NearbyVelibStation[]; total: number }> {
     return this.fetch(
       `/api/transport/velib-nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`,
-    );
-  }
-
-  // ─── Trottinettes/vélos partagés (GBFS free-floating) ───────────────
-  async getNearbyScooters(
-    lat: number,
-    lon: number,
-    radiusKm = 2,
-    limit = 20,
-  ): Promise<NearbyScootersResponse> {
-    return this.fetch(
-      `/api/transport/scooters-nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`,
+      signal,
     );
   }
 
@@ -224,28 +215,35 @@ class ApiService {
   async getVelibStations(
     limit = 50,
     offset = 0,
+    signal?: AbortSignal,
   ): Promise<PrimDataResponse<PrimVelibStation>> {
-    return this.fetch(`/api/transport/velib?limit=${limit}&offset=${offset}`);
+    return this.fetch(`/api/transport/velib?limit=${limit}&offset=${offset}`, signal);
   }
 
   // ─── Geocoding ──────────────────────────────────────────────────────
-  async geocode(query: string, limit = 5): Promise<GeocodeResponse> {
-    return this.fetch(`/api/transport/geocode?q=${encodeURIComponent(query)}&limit=${limit}`);
+  async geocode(query: string, limit = 5, signal?: AbortSignal): Promise<GeocodeResponse> {
+    return this.fetch(
+      `/api/transport/geocode?q=${encodeURIComponent(query)}&limit=${limit}`,
+      signal,
+    );
   }
 
   // ─── Reverse Geocoding ──────────────────────────────────────────────
-  async reverseGeocode(lat: number, lon: number): Promise<ReverseGeocodeResult> {
-    return this.fetch(`/api/transport/reverse-geocode?lat=${lat}&lon=${lon}`);
+  async reverseGeocode(lat: number, lon: number, signal?: AbortSignal): Promise<ReverseGeocodeResult> {
+    return this.fetch(`/api/transport/reverse-geocode?lat=${lat}&lon=${lon}`, signal);
   }
 
   // ─── OSRM Routing — Géométrie réelle ────────────────────────────────
-  async getRoute(params: {
-    originLat: number;
-    originLon: number;
-    destLat: number;
-    destLon: number;
-    profile?: "foot" | "bike" | "car";
-  }): Promise<{
+  async getRoute(
+    params: {
+      originLat: number;
+      originLon: number;
+      destLat: number;
+      destLon: number;
+      profile?: "foot" | "bike" | "car";
+    },
+    signal?: AbortSignal,
+  ): Promise<{
     geometry: { type: string; coordinates: [number, number][] };
     distance: number;
     duration: number;
@@ -257,7 +255,7 @@ class ApiService {
       destLon: String(params.destLon),
     });
     if (params.profile) query.set("profile", params.profile);
-    return this.fetch(`/api/transport/route?${query.toString()}`);
+    return this.fetch(`/api/transport/route?${query.toString()}`, signal);
   }
 
   // ─── Nearby stops ───────────────────────────────────────────────────
@@ -266,6 +264,7 @@ class ApiService {
     lon: number,
     radiusKm = 0.5,
     limit = 10,
+    signal?: AbortSignal,
   ): Promise<{
     stops: Array<{
       id: string;
@@ -277,46 +276,53 @@ class ApiService {
   }> {
     return this.fetch(
       `/api/transport/nearby?lat=${lat}&lon=${lon}&radius=${radiusKm}&limit=${limit}`,
+      signal,
     );
   }
 
   // ─── Realtime alerts ────────────────────────────────────────────────
-  async getRealtimeAlerts(): Promise<RealtimeAlert[]> {
-    return this.fetch("/api/transport/realtime-alerts");
+  async getRealtimeAlerts(signal?: AbortSignal): Promise<RealtimeAlert[]> {
+    return this.fetch("/api/transport/realtime-alerts", signal);
   }
 
   // ─── Prochains départs par arrêt ────────────────────────────────────
   async getStopTimes(
     stopId: string,
     limit = 5,
+    signal?: AbortSignal,
   ): Promise<{
     departures: StopDeparture[];
   }> {
     return this.fetch(
       `/api/transport/stop-times?stopId=${encodeURIComponent(stopId)}&limit=${limit}`,
+      signal,
     );
   }
 
   // ─── Shape lazy load ────────────────────────────────────────────────
   async getShape(
     shapeId: string,
+    signal?: AbortSignal,
   ): Promise<{
     shapeId: string;
     points: Array<{ lat: number; lon: number; seq: number }>;
   }> {
-    return this.fetch(`/api/transport/shape/${encodeURIComponent(shapeId)}`);
+    return this.fetch(`/api/transport/shape/${encodeURIComponent(shapeId)}`, signal);
   }
 
   // ─── Journey ────────────────────────────────────────────────────────
-  async searchJourney(params: {
-    originLat: number;
-    originLon: number;
-    destLat: number;
-    destLon: number;
-    departureTime?: string;
-    modes?: string;
-    maxTransfers?: number;
-  }): Promise<JourneyResult[]> {
+  async searchJourney(
+    params: {
+      originLat: number;
+      originLon: number;
+      destLat: number;
+      destLon: number;
+      departureTime?: string;
+      modes?: string;
+      maxTransfers?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<JourneyResult[]> {
     const query = new URLSearchParams({
       originLat: String(params.originLat),
       originLon: String(params.originLon),
@@ -328,7 +334,7 @@ class ApiService {
     if (params.maxTransfers !== undefined)
       query.set("maxTransfers", String(params.maxTransfers));
 
-    return this.fetch(`/api/transport/journey?${query.toString()}`);
+    return this.fetch(`/api/transport/journey?${query.toString()}`, signal);
   }
 }
 

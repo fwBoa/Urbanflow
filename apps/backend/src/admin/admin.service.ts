@@ -38,22 +38,24 @@ export class AdminService {
         .select('user.role', 'role')
         .addSelect('COUNT(user.id)', 'count')
         .groupBy('user.role')
-        .getRawMany(),
+        .getRawMany<{ role: string; count: string }>(),
       this.historyRepo
         .createQueryBuilder('history')
         .select('history.mode', 'mode')
         .addSelect('COUNT(history.id)', 'count')
         .groupBy('history.mode')
-        .getRawMany(),
+        .getRawMany<{ mode: string; count: string }>(),
     ]);
 
     // Calculate CO2 saved (sum of all trips)
     const co2Result = await this.historyRepo
       .createQueryBuilder('history')
       .select('SUM(history.co2)', 'total')
-      .getRawOne();
+      .getRawOne<{ total: string | number | null }>();
 
-    const co2SavedGrams = co2Result?.total ? Math.round(co2Result.total) : 0;
+    const co2SavedGrams = co2Result?.total
+      ? Math.round(Number(co2Result.total))
+      : 0;
 
     // Recent activity (last 7 days)
     const sevenDaysAgo = new Date();
@@ -74,17 +76,23 @@ export class AdminService {
         users: totalUsers,
         trips: totalTrips,
         notifications: totalNotifications,
-        co2SavedKg: Math.round(co2SavedGrams / 1000 * 10) / 10,
+        co2SavedKg: Math.round((co2SavedGrams / 1000) * 10) / 10,
       },
       breakdown: {
-        usersByRole: usersByRole.reduce((acc, r) => {
-          acc[r.role] = parseInt(r.count, 10);
-          return acc;
-        }, {} as Record<string, number>),
-        tripsByMode: tripsByMode.reduce((acc, r) => {
-          acc[r.mode || 'unknown'] = parseInt(r.count, 10);
-          return acc;
-        }, {} as Record<string, number>),
+        usersByRole: usersByRole.reduce(
+          (acc, r) => {
+            acc[r.role] = parseInt(r.count, 10);
+            return acc;
+          },
+          {} as Record<string, number>,
+        ),
+        tripsByMode: tripsByMode.reduce(
+          (acc, r) => {
+            acc[r.mode || 'unknown'] = parseInt(r.count, 10);
+            return acc;
+          },
+          {} as Record<string, number>,
+        ),
       },
       activity: {
         newUsersLast7Days: recentUsers,
@@ -188,7 +196,12 @@ export class AdminService {
     const notifications = users.map((user) =>
       this.notifRepo.create({
         userId: user.id,
-        type: (body.type || 'info') as 'disruption' | 'delay' | 'info' | 'favorite_alert' | 'system',
+        type: (body.type || 'info') as
+          | 'disruption'
+          | 'delay'
+          | 'info'
+          | 'favorite_alert'
+          | 'system',
         title: body.title,
         message: body.message,
         relatedLine: body.lineId || null,
@@ -203,23 +216,23 @@ export class AdminService {
   // ─── GTFS management ────────────────────────────────────────────────────
 
   async reloadGtfs() {
-    await this.gtfsParser.downloadAndLoad();
+    // `force=true` : reload admin explicite — on rafraîchit toujours, même si
+    // loaded=TRUE (le garde skip-if-loaded de loadFromZip est réservé au boot).
+    await this.gtfsParser.downloadAndLoad(true);
+    const loaded = await this.gtfsParser.isLoaded();
     return {
-      loaded: this.gtfsParser.isLoaded(),
-      lastLoadTime: this.gtfsParser.getLastLoadTime(),
-      stats: this.gtfsParser.isLoaded()
-        ? this.gtfsParser.getStats()
-        : null,
+      loaded,
+      lastLoadTime: await this.gtfsParser.getLastLoadTime(),
+      stats: loaded ? await this.gtfsParser.getStats() : null,
     };
   }
 
   async getGtfsStatus() {
+    const loaded = await this.gtfsParser.isLoaded();
     return {
-      loaded: this.gtfsParser.isLoaded(),
-      lastLoadTime: this.gtfsParser.getLastLoadTime(),
-      stats: this.gtfsParser.isLoaded()
-        ? this.gtfsParser.getStats()
-        : null,
+      loaded,
+      lastLoadTime: await this.gtfsParser.getLastLoadTime(),
+      stats: loaded ? await this.gtfsParser.getStats() : null,
     };
   }
 }

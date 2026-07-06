@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 :root {
   /* ─── Urban Flow Mobility — Design Tokens ─── */
   --color-primary: #2E7D9B;
@@ -25,7 +27,6 @@
   --color-metro: #2E7D9B;
   --color-bus: #7CB342;
   --color-velo: #4CAF50;
-  --color-trottinette: #4A9DB8;
   --color-voiture: #FF6B35;
   --color-marche: #FF9800;
   --color-rer: #1A5A73;
@@ -47,11 +48,16 @@
 @theme inline {
   --color-background: var(--color-background);
   --color-foreground: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-tertiary: var(--color-text-tertiary);
   --color-primary: var(--color-primary);
   --color-primary-light: var(--color-primary-light);
   --color-primary-dark: var(--color-primary-dark);
   --color-surface: var(--color-surface);
   --color-border: var(--color-border);
+  --color-eco-green: var(--color-eco-green);
+  --color-mobility-orange: var(--color-mobility-orange);
+  --color-favorite-red: var(--color-favorite-red);
   --font-sans: var(--font-family);
 }
 

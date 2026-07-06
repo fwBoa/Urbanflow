@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -80,7 +80,9 @@ describe('AdminController', () => {
     it('should throw HttpException if user not found', async () => {
       mockAdminService.getUserById.mockResolvedValue(null);
 
-      await expect(controller.getUserById('unknown-id')).rejects.toThrow(HttpException);
+      await expect(controller.getUserById('unknown-id')).rejects.toThrow(
+        HttpException,
+      );
       await expect(controller.getUserById('unknown-id')).rejects.toThrow(
         'Utilisateur non trouvé',
       );
@@ -89,7 +91,9 @@ describe('AdminController', () => {
 
   describe('deleteUser', () => {
     it('should delete user and return message', async () => {
-      mockAdminService.deleteUser.mockResolvedValue({ message: 'Utilisateur supprimé (soft delete)' });
+      mockAdminService.deleteUser.mockResolvedValue({
+        message: 'Utilisateur supprimé (soft delete)',
+      });
 
       const result = await controller.deleteUser('user-1');
 
@@ -136,7 +140,11 @@ describe('AdminController', () => {
     it('should broadcast notification and return count', async () => {
       mockAdminService.broadcastNotification.mockResolvedValue(50);
 
-      const body = { title: 'Maintenance', message: 'Métro fermé', type: 'disruption' };
+      const body = {
+        title: 'Maintenance',
+        message: 'Métro fermé',
+        type: 'disruption',
+      };
       const result = await controller.broadcastNotification(body);
 
       expect(adminService.broadcastNotification).toHaveBeenCalledWith(body);
@@ -151,7 +159,10 @@ describe('AdminController', () => {
       const result = await controller.reloadGtfs();
 
       expect(adminService.reloadGtfs).toHaveBeenCalled();
-      expect(result).toEqual({ success: true, message: 'Données GTFS rechargées' });
+      expect(result).toEqual({
+        success: true,
+        message: 'Données GTFS rechargées',
+      });
     });
 
     it('should throw HttpException on reload failure', async () => {

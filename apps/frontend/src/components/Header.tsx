@@ -14,25 +14,26 @@ export default function Header({ title, showBack = false, rightAction }: HeaderP
 
   return (
     <header
-      className="sticky top-0 z-40 flex items-center justify-between h-[60px] px-4 bg-[var(--color-primary)] text-white safe-area-top"
+      className="sticky top-0 z-40 grid grid-cols-[1fr_auto_1fr] items-center h-[var(--header-height)] px-4 bg-background/85 backdrop-blur-md text-[var(--color-text-primary)] border-b border-[var(--color-border)]/60 safe-area-top transition-colors duration-300"
       role="banner"
     >
-      <div className="flex items-center gap-3 min-w-[40px]">
+      <div className="justify-self-start">
         {showBack && (
           <button
+            type="button"
             onClick={() => router.back()}
-            className="flex items-center justify-center w-11 h-11 rounded-full hover:bg-white/10 transition-colors"
+            className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-[var(--color-surface)] text-[var(--color-text-primary)] transition-colors"
             aria-label="Retour"
           >
-            <ArrowLeft size={22} />
+            <ArrowLeft size={20} />
           </button>
         )}
       </div>
 
-      <h1 className="text-lg font-semibold flex-1 text-center truncate">{title}</h1>
+      <h1 className="col-start-2 text-base font-semibold text-center truncate px-4 text-[var(--color-text-primary)]">{title}</h1>
 
-      <div className="flex items-center min-w-[40px] justify-end">
-        {rightAction || <span className="w-9" />}
+      <div className="justify-self-end">
+        {rightAction}
       </div>
     </header>
   );

@@ -3,7 +3,11 @@
 import { useEffect, useState, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { JourneySegmentForMap } from "./journey-helpers";
+// leaflet-rotate : import à effet de bord qui patche L.Map (ajoute setBearing +
+// handler `rotate`). Compatible Leaflet 1.9. On instancie la carte en impératif
+// (L.map), pas via MapContainer/useMap, donc pas de souci d'intégration RL.
+// Pas de CSS à importer — la rotation est appliquée via transform JS par le plugin.
+import "leaflet-rotate";
 
 let iconsFixed = false;
 
@@ -36,11 +40,6 @@ export interface MapProps {
     available_bikes: number;
     available_bike_stands: number;
   }>;
-  scooterStations?: Array<{
-    position: { lat: number; lon: number };
-    operator?: string;
-    type?: "trottinette" | "bike";
-  }>;
   onMapClick?: (lat: number, lng: number) => void;
   userPosition?: { lat: number; lon: number; accuracy?: number; heading?: number | null } | null;
   onLocateUser?: () => void;
@@ -50,6 +49,20 @@ export interface MapProps {
   shapePolylines?: Array<{ points: [number, number][]; color: string; weight?: number }>;
   /** Callback appelé quand l'instance Leaflet est créée (pour JourneyLine externe) */
   onMapReady?: (map: L.Map) => void;
+  /**
+   * Cap de la carte en degrés (0 = nord en haut). Pendant la navigation, on passe
+   * le heading/device ou le bearing vers le prochain manœuvre pour orienter la
+   * carte dans le sens de marche. Hors nav → 0. Utilise `map.setBearing()` du
+   * plugin leaflet-rotate.
+   */
+  bearing?: number;
+  /**
+   * Zone à ajuster (fit) — typiquement [userPosition, prochainManoeuvre] pendant
+   * la nav pour zoomer sur l'étape active. Le fit n'est déclenché qu'au changement
+   * de `fitBoundsKey` (évite le jitter à chaque tick GPS).
+   */
+  fitBounds?: Array<[number, number]>;
+  fitBoundsKey?: string;
 }
 
 export default function MapComponent({
@@ -60,7 +73,6 @@ export default function MapComponent({
   className = "",
   showVelib = false,
   velibStations = [],
-  scooterStations = [],
   onMapClick,
   userPosition,
   onLocateUser,
@@ -69,6 +81,9 @@ export default function MapComponent({
   followUser = false,
   shapePolylines = [],
   onMapReady,
+  bearing,
+  fitBounds,
+  fitBoundsKey,
 }: MapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
@@ -86,13 +101,29 @@ export default function MapComponent({
     if (typeof window !== "undefined") {
       (window as unknown as { L?: typeof L }).L = L;
     }
-    const mapInstance = L.map("urbanflow-map", {
+    // Options leaflet-rotate (`rotate`, `touchRotate`) ne sont pas dans les types
+    // @types/leaflet → on type l'objet en `any` pour les passer.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mapOptions: any = {
       center: initialCenterRef.current,
       zoom: initialZoomRef.current,
       zoomControl: true,
       attributionControl: true,
       doubleClickZoom: onMapClick ? false : true,
-    });
+      // leaflet-rotate : active le handler `rotate` (rend setBearing disponible).
+      rotate: true,
+      // On ne veut pas que l'utilisateur pivote la carte au doigt — seulement
+      // la rotation programmatique (setBearing). Désactive le geste tactile.
+      touchRotate: false,
+    };
+    const mapInstance = L.map("urbanflow-map", mapOptions);
+
+    // Ceinture : si le handler tactile existe quand même, on le coupe.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyMap = mapInstance as any;
+    if (anyMap.touchRotate && typeof anyMap.touchRotate.disable === "function") {
+      anyMap.touchRotate.disable();
+    }
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
@@ -124,7 +155,6 @@ export default function MapComponent({
 
   const routeMarkersRef = useRef<L.Marker[]>([]);
   const velibMarkersRef = useRef<L.Marker[]>([]);
-  const scooterMarkersRef = useRef<L.Marker[]>([]);
 
   // Add markers
   useEffect(() => {
@@ -184,35 +214,6 @@ export default function MapComponent({
     }
   }, [map, showVelib, velibStations]);
 
-  // Trottinettes/vélos partagés (GBFS)
-  useEffect(() => {
-    if (!map) return;
-    scooterMarkersRef.current.forEach((m) => map.removeLayer(m));
-    scooterMarkersRef.current = [];
-
-    if (scooterStations.length > 0) {
-      scooterStations.forEach((v) => {
-        const emoji = v.type === "bike" ? "🚲" : "🛴";
-        const icon = L.divIcon({
-          className: "scooter-marker",
-          html: `<div style="
-            width: 22px; height: 22px; border-radius: 50%;
-            background: #F57C00; border: 2px solid white;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 11px;
-          ">${emoji}</div>`,
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
-        });
-        const marker = L.marker([v.position.lat, v.position.lon], { icon })
-          .addTo(map)
-          .bindPopup(`<strong>${v.operator || (v.type === "bike" ? "Vélo" : "Trottinette")}</strong>`);
-        scooterMarkersRef.current.push(marker);
-      });
-    }
-  }, [map, scooterStations]);
-
   const polylineRef = useRef<L.Polyline | null>(null);
   const shapePolylinesRef = useRef<L.Polyline[]>([]);
 
@@ -228,9 +229,13 @@ export default function MapComponent({
       weight: 4,
       opacity: 0.8,
     }).addTo(map);
-    const bounds = L.latLngBounds(polyline);
-    map.fitBounds(bounds, { padding: [50, 50] });
-  }, [map, polyline]);
+    // N'ajuste la vue sur toute la polyline que hors navigation — pendant la nav,
+    // c'est `fitBounds` (zoom segment actif) qui pilote, sinon les deux se battent.
+    if (!followUser) {
+      const bounds = L.latLngBounds(polyline);
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }, [map, polyline, followUser]);
 
   // Shape polylines
   useEffect(() => {
@@ -304,6 +309,40 @@ export default function MapComponent({
 
     if (followUser) map.panTo([userPosition.lat, userPosition.lon]);
   }, [map, userPosition, followUser]);
+
+  // ─── Rotation au cap (leaflet-rotate) ───────────────────────────────
+  // bearing en degrés (0 = nord en haut). Pendant la nav on passe le heading
+  // device (ou le bearing vers le prochain manœuvre) pour orienter la carte
+  // dans le sens de marche.
+  useEffect(() => {
+    if (!map || bearing === undefined) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyMap = map as any;
+    if (typeof anyMap.setBearing === "function") {
+      try {
+        anyMap.setBearing(bearing);
+      } catch {
+        // best-effort — si le plugin n'est pas chargé, no-op
+      }
+    }
+  }, [map, bearing]);
+
+  // ─── Zoom segment actif (fit) ───────────────────────────────────────
+  // Ne re-fit qu'au changement de `fitBoundsKey` (typiquement l'index du segment
+  // actif) pour éviter le jitter à chaque tick GPS. Entre deux fits, le panTo
+  // de suivi utilisateur garde l'utilisateur centré.
+  const prevFitKeyRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!map || !fitBounds || fitBounds.length < 2 || !fitBoundsKey) return;
+    if (prevFitKeyRef.current === fitBoundsKey) return;
+    prevFitKeyRef.current = fitBoundsKey;
+    try {
+      const bounds = L.latLngBounds(fitBounds);
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+    } catch {
+      // best-effort
+    }
+  }, [map, fitBounds, fitBoundsKey]);
 
   return (
     <div className="relative w-full h-full">

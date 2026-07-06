@@ -1,4 +1,3 @@
-import type { JourneyResult } from "@/services/api";
 import { apiService } from "./api";
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -34,7 +33,7 @@ export interface UserStats {
 }
 
 export interface UserPreferences {
-  defaultMode: "fast" | "eco" | "cheap";
+  defaultMode: "fast" | "eco";
   notifications: boolean;
   accessibility: boolean;
   darkMode: boolean;
@@ -59,11 +58,6 @@ export interface Badge {
 // Anonymous users have NO persistence (favorites/history/profile)
 // Only preferences (UI settings) are stored in localStorage
 const PREFS_KEY = "urbanflow_prefs";
-const MAX_HISTORY = 20;
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
 
 // ─── Auth check: use backend API when logged in ──────────────────
 
@@ -261,7 +255,10 @@ export async function getStats(): Promise<UserStats> {
   return { totalTrips: 0, co2Saved: 0, favoriteCount: 0 };
 }
 
-export async function incrementTrips(co2: number): Promise<UserStats> {
+export async function incrementTrips(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _co2: number,
+): Promise<UserStats> {
   // Stats are computed server-side when logged in
   return getStats();
 }

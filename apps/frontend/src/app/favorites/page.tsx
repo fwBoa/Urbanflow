@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Heart, Clock, LogIn } from "lucide-react";
+import { Heart, Clock } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import {
@@ -81,7 +81,7 @@ export default function FavoritesPage() {
           onClick={() => setActiveTab("favorites")}
           className={`flex-1 py-2 text-sm font-medium rounded-[var(--chip-radius)] transition-colors ${
             activeTab === "favorites"
-              ? "bg-white text-[var(--color-primary)] shadow-sm"
+              ? "bg-background text-[var(--color-primary)] shadow-sm"
               : "text-[var(--color-text-tertiary)]"
           }`}
         >
@@ -97,7 +97,7 @@ export default function FavoritesPage() {
           onClick={() => setActiveTab("history")}
           className={`flex-1 py-2 text-sm font-medium rounded-[var(--chip-radius)] transition-colors ${
             activeTab === "history"
-              ? "bg-white text-[var(--color-primary)] shadow-sm"
+              ? "bg-background text-[var(--color-primary)] shadow-sm"
               : "text-[var(--color-text-tertiary)]"
           }`}
         >
@@ -139,7 +139,7 @@ export default function FavoritesPage() {
             favorites.map((fav) => (
               <div
                 key={fav.id}
-                className="bg-white rounded-[var(--card-radius)] p-4 border border-[var(--color-border)] hover:shadow-sm transition-all cursor-pointer"
+                className="bg-surface rounded-[var(--card-radius)] p-4 border border-[var(--color-border)] hover:shadow-md transition-all cursor-pointer"
                 onClick={() => handleReplay(fav)}
               >
                 <div className="flex items-start justify-between">
@@ -189,7 +189,7 @@ export default function FavoritesPage() {
           {history.map((item) => (
             <div
               key={item.id}
-              className="bg-white rounded-[var(--card-radius)] p-4 border border-[var(--color-border)] hover:shadow-sm transition-all cursor-pointer"
+              className="bg-surface rounded-[var(--card-radius)] p-4 border border-[var(--color-border)] hover:shadow-md transition-all cursor-pointer"
               onClick={() => handleReplay(item)}
             >
               <div className="flex items-start justify-between">

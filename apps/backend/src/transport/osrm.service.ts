@@ -2,6 +2,20 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 
+interface OsrmRouteResult {
+  geometry: { type: string; coordinates: [number, number][] };
+  distance: number;
+  duration: number;
+}
+
+interface OsrmApiResponse {
+  routes?: Array<{
+    geometry: OsrmRouteResult['geometry'];
+    distance: number;
+    duration: number;
+  }>;
+}
+
 /**
  * Service OSRM — Routing OpenStreetMap
  *
@@ -19,12 +33,18 @@ export class OsrmService {
 
   /** Cache court-terme pour éviter de re-frapper OSRM pour des trajets identiques.
    *  Clé : "lat1,lon1,lat2,lon2,profile". TTL 5 min, max 500 entrées. */
-  private readonly cache = new Map<string, { result: any; expiry: number }>();
+  private readonly cache = new Map<
+    string,
+    { result: OsrmRouteResult; expiry: number }
+  >();
   private readonly CACHE_TTL_MS = 300_000;
   private readonly CACHE_MAX_SIZE = 500;
 
   /** In-flight requests pour déduplication : même requête lancée 2x → 1 seul appel OSRM */
-  private readonly inflight = new Map<string, Promise<any>>();
+  private readonly inflight = new Map<
+    string,
+    Promise<OsrmRouteResult | null>
+  >();
 
   constructor(private readonly httpService: HttpService) {}
 
@@ -44,12 +64,9 @@ export class OsrmService {
     destLat: number,
     destLon: number,
     profile: 'foot' | 'bike' | 'car' = 'foot',
-  ): Promise<{
-    geometry: { type: string; coordinates: [number, number][] };
-    distance: number; // mètres
-    duration: number; // secondes
-  } | null> {
-    const osrmProfile = profile === 'bike' ? 'cycling' : profile === 'car' ? 'driving' : 'foot';
+  ): Promise<OsrmRouteResult | null> {
+    const osrmProfile =
+      profile === 'bike' ? 'cycling' : profile === 'car' ? 'driving' : 'foot';
     const cacheKey = `${originLat.toFixed(5)},${originLon.toFixed(5)},${destLat.toFixed(5)},${destLon.toFixed(5)},${osrmProfile}`;
 
     // 1) Cache hit ?
@@ -67,7 +84,7 @@ export class OsrmService {
     const fetchPromise = (async () => {
       try {
         const response = await firstValueFrom(
-          this.httpService.get(url, {
+          this.httpService.get<OsrmApiResponse>(url, {
             params: {
               overview: 'full',
               geometries: 'geojson',
@@ -77,9 +94,11 @@ export class OsrmService {
           }),
         );
 
-        const route = response.data?.routes?.[0];
+        const route = response.data.routes?.[0];
         if (!route) {
-          this.logger.warn(`OSRM: aucune route trouvée pour ${originLat},${originLon} → ${destLat},${destLon}`);
+          this.logger.warn(
+            `OSRM: aucune route trouvée pour ${originLat},${originLon} → ${destLat},${destLon}`,
+          );
           return null;
         }
 
@@ -91,13 +110,18 @@ export class OsrmService {
 
         // Mise en cache
         if (this.cache.size >= this.CACHE_MAX_SIZE) {
-          const first = this.cache.keys().next().value;
+          const first = this.cache.keys().next().value as string | undefined;
           if (first !== undefined) this.cache.delete(first);
         }
-        this.cache.set(cacheKey, { result, expiry: Date.now() + this.CACHE_TTL_MS });
+        this.cache.set(cacheKey, {
+          result,
+          expiry: Date.now() + this.CACHE_TTL_MS,
+        });
         return result;
-      } catch (error: any) {
-        this.logger.error(`OSRM API error: ${error.message}`);
+      } catch (error: unknown) {
+        this.logger.error(
+          `OSRM API error: ${error instanceof Error ? error.message : String(error)}`,
+        );
         return null;
       } finally {
         this.inflight.delete(cacheKey);

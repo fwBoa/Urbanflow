@@ -3,7 +3,6 @@ import {
   Get,
   Post,
   Delete,
-  Patch,
   Param,
   Body,
   UseGuards,
@@ -70,9 +69,7 @@ export class AdminController {
 
   @Get('trips')
   @Roles('admin')
-  async getAllTrips(
-    @Body() body: { limit?: number; offset?: number },
-  ) {
+  async getAllTrips(@Body() body: { limit?: number; offset?: number }) {
     return this.adminService.getAllTrips(body.limit || 50, body.offset || 0);
   }
 
@@ -87,7 +84,13 @@ export class AdminController {
   @Post('broadcast')
   @Roles('admin')
   async broadcastNotification(
-    @Body() body: { title: string; message: string; type?: string; lineId?: string },
+    @Body()
+    body: {
+      title: string;
+      message: string;
+      type?: string;
+      lineId?: string;
+    },
   ) {
     const count = await this.adminService.broadcastNotification(body);
     return { message: 'Notification envoyée', count };

@@ -1,12 +1,13 @@
 "use client";
 
-import { Footprints, Bike, Train, TramFront, Bus, Ship, Car, Zap } from "lucide-react";
+import { Footprints, Bike, Train, TramFront, Bus, Ship, Car } from "lucide-react";
+import { UI_MODE_COLORS } from "@/constants/mode-colors";
 
 export interface ModeBadgeProps {
   /** Mode brut renvoyé par l'API : 'metro', 'rer', 'bus', 'tram', 'marche', 'velib', etc. */
   mode?: string;
-  /** Type de segment GTFS : 'walking' | 'transit' | 'velib' | 'trottinette' */
-  type?: "walking" | "transit" | "velib" | "trottinette";
+  /** Type de segment GTFS : 'walking' | 'transit' | 'velib' */
+  type?: "walking" | "transit" | "velib";
   /** Nom court de la ligne (ex: "A", "M1", "62"). Affiché à côté si fourni. */
   lineName?: string;
   /** Couleur HEX de la ligne (prioritaire sur la couleur par défaut du mode). */
@@ -27,17 +28,16 @@ interface ModeMeta {
 }
 
 const MODE_META: Record<string, ModeMeta> = {
-  metro: { label: "Métro", Icon: Train, defaultBg: "#1A5A73", defaultFg: "#FFFFFF" },
-  rer: { label: "RER", Icon: Train, defaultBg: "#9C27B0", defaultFg: "#FFFFFF" },
-  tram: { label: "Tram", Icon: TramFront, defaultBg: "#7B1FA2", defaultFg: "#FFFFFF" },
-  bus: { label: "Bus", Icon: Bus, defaultBg: "#0288D1", defaultFg: "#FFFFFF" },
-  marche: { label: "Marche", Icon: Footprints, defaultBg: "#455A64", defaultFg: "#FFFFFF" },
-  velib: { label: "Vélib'", Icon: Bike, defaultBg: "#7CB342", defaultFg: "#FFFFFF" },
-  trottinette: { label: "Trottinette", Icon: Zap, defaultBg: "#F57C00", defaultFg: "#FFFFFF" },
-  train: { label: "Train", Icon: Train, defaultBg: "#1976D2", defaultFg: "#FFFFFF" },
-  transilien: { label: "Transilien", Icon: Train, defaultBg: "#283593", defaultFg: "#FFFFFF" },
-  ferry: { label: "Ferry", Icon: Ship, defaultBg: "#00838F", defaultFg: "#FFFFFF" },
-  car: { label: "Voiture", Icon: Car, defaultBg: "#424242", defaultFg: "#FFFFFF" },
+  metro: { label: "Métro", Icon: Train, defaultBg: UI_MODE_COLORS.metro, defaultFg: "#FFFFFF" },
+  rer: { label: "RER", Icon: Train, defaultBg: UI_MODE_COLORS.rer, defaultFg: "#FFFFFF" },
+  tram: { label: "Tram", Icon: TramFront, defaultBg: UI_MODE_COLORS.tram, defaultFg: "#FFFFFF" },
+  bus: { label: "Bus", Icon: Bus, defaultBg: UI_MODE_COLORS.bus, defaultFg: "#FFFFFF" },
+  marche: { label: "Marche", Icon: Footprints, defaultBg: UI_MODE_COLORS.marche, defaultFg: "#FFFFFF" },
+  velib: { label: "Vélib'", Icon: Bike, defaultBg: UI_MODE_COLORS.velib, defaultFg: "#FFFFFF" },
+  train: { label: "Train", Icon: Train, defaultBg: UI_MODE_COLORS.train, defaultFg: "#FFFFFF" },
+  transilien: { label: "Transilien", Icon: Train, defaultBg: UI_MODE_COLORS.transilien, defaultFg: "#FFFFFF" },
+  ferry: { label: "Ferry", Icon: Ship, defaultBg: UI_MODE_COLORS.ferry, defaultFg: "#FFFFFF" },
+  car: { label: "Voiture", Icon: Car, defaultBg: UI_MODE_COLORS.car, defaultFg: "#FFFFFF" },
 };
 
 function getModeMeta(mode?: string, type?: ModeBadgeProps["type"]): ModeMeta {
@@ -46,9 +46,6 @@ function getModeMeta(mode?: string, type?: ModeBadgeProps["type"]): ModeMeta {
   }
   if (type === "velib" || mode?.toLowerCase().includes("vélib") || mode?.toLowerCase().includes("velib")) {
     return MODE_META.velib!;
-  }
-  if (type === "trottinette" || mode?.toLowerCase().includes("trottinette")) {
-    return MODE_META.trottinette!;
   }
   const m = (mode || "").toLowerCase().trim();
   // Match exact ou préfixe
@@ -59,7 +56,7 @@ function getModeMeta(mode?: string, type?: ModeBadgeProps["type"]): ModeMeta {
   if (m.includes("train")) return MODE_META.train!;
   if (m.includes("ferry") || m.includes("navette")) return MODE_META.ferry!;
   if (m.includes("bus") || m.includes("car")) return MODE_META.bus!;
-  return { label: mode || "Transit", Icon: Bus, defaultBg: "#455A64", defaultFg: "#FFFFFF" };
+  return { label: mode || "Transit", Icon: Bus, defaultBg: UI_MODE_COLORS.bus ?? "#455A64", defaultFg: "#FFFFFF" };
 }
 
 const SIZE_CLASSES = {

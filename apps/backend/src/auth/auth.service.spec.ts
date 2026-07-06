@@ -1,12 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, UpdateResult } from 'typeorm';
+import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, UnauthorizedException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  UnauthorizedException,
+  NotFoundException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { User } from './user.entity';
-import { RegisterDto, LoginDto, UpdateProfileDto, ConsentDto } from './auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  UpdateProfileDto,
+  ConsentDto,
+} from './auth.dto';
 import { FavoritesService } from '../favorites/favorites.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -15,7 +24,6 @@ jest.mock('bcrypt');
 describe('AuthService', () => {
   let service: AuthService;
   let userRepo: Repository<User>;
-  let jwtService: JwtService;
 
   const mockUser: Partial<User> = {
     id: 'user-123',
@@ -76,7 +84,6 @@ describe('AuthService', () => {
 
     service = module.get<AuthService>(AuthService);
     userRepo = module.get<Repository<User>>(getRepositoryToken(User));
-    jwtService = module.get<JwtService>(JwtService);
   });
 
   afterEach(() => {
@@ -99,7 +106,9 @@ describe('AuthService', () => {
 
       const result = await service.register(registerDto);
 
-      expect(userRepo.findOne).toHaveBeenCalledWith({ where: { email: registerDto.email } });
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { email: registerDto.email },
+      });
       expect(userRepo.create).toHaveBeenCalled();
       expect(userRepo.save).toHaveBeenCalled();
       expect(result).toHaveProperty('access_token', 'mock-jwt-token');
@@ -109,7 +118,9 @@ describe('AuthService', () => {
     it('should throw ConflictException if email already exists', async () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
 
-      await expect(service.register(registerDto)).rejects.toThrow(ConflictException);
+      await expect(service.register(registerDto)).rejects.toThrow(
+        ConflictException,
+      );
       await expect(service.register(registerDto)).rejects.toThrow(
         'Un compte avec cet email existe déjà',
       );
@@ -153,7 +164,9 @@ describe('AuthService', () => {
 
       const result = await service.login(loginDto);
 
-      expect(userRepo.findOne).toHaveBeenCalledWith({ where: { email: loginDto.email } });
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { email: loginDto.email },
+      });
       expect(result).toHaveProperty('access_token', 'mock-jwt-token');
       expect(result.user).toHaveProperty('email', loginDto.email);
     });
@@ -161,7 +174,9 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException if user not found', async () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
 
-      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
+      await expect(service.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
       await expect(service.login(loginDto)).rejects.toThrow(
         'Email ou mot de passe incorrect',
       );
@@ -171,13 +186,17 @@ describe('AuthService', () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      await expect(service.login(loginDto)).rejects.toThrow(UnauthorizedException);
+      await expect(service.login(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should update lastLoginAt on successful login', async () => {
       const mockUserWithLastLogin = { ...mockUser, lastLoginAt: new Date() };
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
-      jest.spyOn(userRepo, 'save').mockResolvedValue(mockUserWithLastLogin as User);
+      jest
+        .spyOn(userRepo, 'save')
+        .mockResolvedValue(mockUserWithLastLogin as User);
 
       await service.login(loginDto);
 
@@ -195,7 +214,9 @@ describe('AuthService', () => {
 
       const result = await service.getProfile('user-123');
 
-      expect(userRepo.findOne).toHaveBeenCalledWith({ where: { id: 'user-123' } });
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+      });
       expect(result).toHaveProperty('email', mockUser.email);
       expect(result).not.toHaveProperty('passwordHash');
     });
@@ -203,7 +224,9 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException if user not found', async () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
 
-      await expect(service.getProfile('unknown-id')).rejects.toThrow(UnauthorizedException);
+      await expect(service.getProfile('unknown-id')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -222,7 +245,9 @@ describe('AuthService', () => {
 
       const result = await service.updateProfile('user-123', updateDto);
 
-      expect(userRepo.findOne).toHaveBeenCalledWith({ where: { id: 'user-123' } });
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+      });
       expect(userRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
           displayName: 'Updated Name',
@@ -235,16 +260,20 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException if user not found', async () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
 
-      await expect(service.updateProfile('unknown-id', updateDto)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.updateProfile('unknown-id', updateDto),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
   describe('deleteAccount', () => {
     it('should soft-delete user account', async () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
-      jest.spyOn(userRepo, 'softDelete').mockResolvedValue({ affected: 1, raw: {}, generatedMaps: [] } as UpdateResult);
+      jest.spyOn(userRepo, 'softDelete').mockResolvedValue({
+        affected: 1,
+        raw: {},
+        generatedMaps: [],
+      });
 
       const result = await service.deleteAccount('user-123');
 
@@ -256,7 +285,9 @@ describe('AuthService', () => {
     it('should throw NotFoundException if user not found', async () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
 
-      await expect(service.deleteAccount('unknown-id')).rejects.toThrow(NotFoundException);
+      await expect(service.deleteAccount('unknown-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -276,7 +307,9 @@ describe('AuthService', () => {
     it('should throw NotFoundException if user not found', async () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
 
-      await expect(service.exportData('unknown-id')).rejects.toThrow(NotFoundException);
+      await expect(service.exportData('unknown-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -292,7 +325,7 @@ describe('AuthService', () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
       jest.spyOn(userRepo, 'save').mockResolvedValue(mockUser as User);
 
-      const result = await service.updateConsent('user-123', consentDto);
+      await service.updateConsent('user-123', consentDto);
 
       expect(userRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -307,9 +340,9 @@ describe('AuthService', () => {
     it('should throw NotFoundException if user not found', async () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
 
-      await expect(service.updateConsent('unknown-id', consentDto)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.updateConsent('unknown-id', consentDto),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -328,7 +361,9 @@ describe('AuthService', () => {
     it('should throw NotFoundException if user not found', async () => {
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
 
-      await expect(service.getConsent('unknown-id')).rejects.toThrow(NotFoundException);
+      await expect(service.getConsent('unknown-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
