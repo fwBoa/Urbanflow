@@ -149,13 +149,13 @@ npx web-push generate-vapid-keys
 
 ## 8. Configurer les certificats TLS (Let’s Encrypt)
 
-### 7.1 Installer Certbot
+### 8.1 Installer Certbot
 
 ```bash
 sudo apt install -y certbot
 ```
 
-### 7.2 Obtenir les certificats
+### 8.2 Obtenir les certificats
 
 ```bash
 sudo certbot certonly --standalone -d urbanflow-mobility.fr -d www.urbanflow-mobility.fr
@@ -163,7 +163,7 @@ sudo certbot certonly --standalone -d urbanflow-mobility.fr -d www.urbanflow-mob
 
 Suivre les instructions. Certbot crée les fichiers dans `/etc/letsencrypt/live/urbanflow-mobility.fr/`.
 
-### 7.3 Les copier dans le projet
+### 8.3 Les copier dans le projet
 
 ```bash
 sudo cp /etc/letsencrypt/live/urbanflow-mobility.fr/fullchain.pem /opt/urbanflow/docker/certs/fullchain.pem
@@ -171,7 +171,7 @@ sudo cp /etc/letsencrypt/live/urbanflow-mobility.fr/privkey.pem /opt/urbanflow/d
 sudo chown $USER:$USER /opt/urbanflow/docker/certs/*.pem
 ```
 
-### 7.4 Renouvellement automatique
+### 8.4 Renouvellement automatique
 
 OVHcloud ne bloque pas le port 80, donc le renouvellement standard fonctionne. Ajouter une tâche cron :
 
@@ -204,7 +204,56 @@ Puis il build les images et démarre les conteneurs.
 
 ---
 
-## 10. Vérifier le déploiement
+## 10. Déploiement continu (GitHub Actions)
+
+Le fichier `.github/workflows/ci.yml` contient un job `deploy` qui déploie automatiquement sur le VPS après chaque push sur `main`, une fois les tests passés.
+
+### 10.1 Générer une clé SSH dédiée
+
+Sur la machine locale :
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions@urbanflow-mobility.fr" -f ~/.ssh/urbanflow_github_actions
+```
+
+Ne pas mettre de passphrase.
+
+### 10.2 Ajouter la clé publique sur le VPS
+
+```bash
+ssh-copy-id -i ~/.ssh/urbanflow_github_actions.pub ubuntu@37.59.119.90
+```
+
+Ou, manuellement :
+
+```bash
+cat ~/.ssh/urbanflow_github_actions.pub | ssh ubuntu@37.59.119.90 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+
+### 10.3 Configurer les secrets GitHub
+
+Dans le dépôt GitHub, aller dans **Settings → Secrets and variables → Actions → New repository secret** :
+
+| Nom | Valeur |
+| --- | --- |
+| `VPS_HOST` | `37.59.119.90` |
+| `VPS_USER` | `ubuntu` |
+| `VPS_DEPLOY_PATH` | `/opt/urbanflow` |
+| `VPS_SSH_KEY` | Contenu complet de `~/.ssh/urbanflow_github_actions` (clé privée) |
+
+### 10.4 Vérifier le déploiement automatique
+
+Après le prochain push sur `main`, la CI exécutera automatiquement :
+
+```bash
+cd /opt/urbanflow && ./scripts/deploy.sh prod
+```
+
+Vérifier dans l’onglet **Actions** du repo que le job `Déploiement automatique sur VPS` est vert.
+
+---
+
+## 11. Vérifier le déploiement
 
 ```bash
 curl https://urbanflow-mobility.fr/api/health
@@ -224,7 +273,7 @@ cd /opt/urbanflow/docker && docker compose ps
 
 ---
 
-## 11. Créer le compte administrateur
+## 12. Créer le compte administrateur
 
 ### Identifiants par défaut
 
