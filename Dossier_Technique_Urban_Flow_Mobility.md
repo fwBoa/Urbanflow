@@ -193,27 +193,35 @@ PGPASSWORD=$POSTGRES_PASSWORD docker exec -i urbanflow-db psql -U $POSTGRES_USER
 
 Le déploiement en production est décrit pas à pas dans le guide dédié :
 
-> 📘 [`docs/deploiement-hostinger.md`](deploiement-hostinger.md) — VPS Hostinger classique avec Docker Compose, Nginx et Let’s Encrypt.
+> 📘 [`docs/deploiement-ovhcloud.md`](deploiement-ovhcloud.md) — **VPS OVHcloud** recommandé (Ubuntu 24.04, Docker Compose, Nginx, Let’s Encrypt, facturation à l’heure sans engagement, données en France).
 
 Il couvre :
+- la création du VPS dans l’espace client OVHcloud ;
 - l’installation de Docker sur Ubuntu 24.04 ;
 - la configuration de `docker/.env` ;
 - l’obtention et le renouvellement des certificats TLS ;
 - le lancement via `scripts/deploy.sh prod` ;
 - la création du compte administrateur ;
-- la mise en place d’un backup automatique.
+- la mise en place d’un backup automatique ;
+- la configuration du firewall OVHcloud / ufw.
+
+#### Pourquoi OVHcloud est privilégié
+
+- **Hébergeur français** : argumentaire RGPD / souveraineté des données pour le rendu T6.
+- **Facturation à l’heure** : pas d’engagement, on paie uniquement la consommation réelle.
+- **Données en Europe** : localisation France possible (Gravelines, Roubaix, Strasbourg).
+- **Ports ouverts** : OVHcloud n’impose pas de restrictions sur 80/443 pour Let’s Encrypt.
 
 #### Autres options de déploiement / VPS
 
 | Option | Avantage | Inconvénient | Quand l’utiliser |
 | --- | --- | --- | --- |
-| **Hostinger VPS classique** (Docker Compose + Nginx) | Contrôle total, stack documentée, coût maîtrisé | Configuration manuelle TLS, monitoring à ajouter | Rendu T6 / production légère |
-| **Dokploy sur Hostinger VPS** | Reverse proxy + SSL auto, déploiement Git, UI d’env vars | Nouvel outil à apprendre, boîte noire partielle | Si tu veux un PaaS clé en main sur ton VPS |
-| **Railway / Render** | Déploiement ultra simple, DB + services managés | Coût à l’échelle, moins de contrôle | POC rapide, pas de VPS |
-| **Fly.io** | Containers edge, scaling simple, CLI efficace | Tarification au trafic, courbe d’apprentissage | Application globale / multi-région |
-| **AWS ECS / GCP Cloud Run / Azure Container Apps** | Haute disponibilité, intégration cloud | Complexité et coût | Production professionnelle à grande échelle |
-
-Pour le rendu T6, **Hostinger VPS classique** ou **Dokploy** sont les plus pertinents car ils restent compréhensibles et cohérents avec le dépôt Docker Compose existant.
+| **OVHcloud VPS** (recommandé) | Français, facturation à l’heure, données en Europe, RGPD-friendly | Panel moins moderne | Rendu T6 / production légère |
+| **Hostinger VPS classique** | Prix très bas, panel moderne | Facturation annuelle poussée, pas français | Si le budget est très serré |
+| **Dokploy sur OVHcloud/Hostinger** | Reverse proxy + SSL auto, déploiement Git, UI d’env vars | Nouvel outil à apprendre | Si tu veux un PaaS clé en main sur ton VPS |
+| **Railway / Render** | Déploiement ultra simple, DB + services managés | Coût à l’échelle, données hors UE | POC rapide, pas de VPS |
+| **Fly.io** | Containers edge, scaling simple | Tarification au trafic, données hors UE | Application globale / multi-région |
+| **AWS ECS / GCP Cloud Run / Azure** | Haute disponibilité | Complexité et coût, données hors UE | Production professionnelle à grande échelle |
 
 ---
 
