@@ -8,12 +8,50 @@ OVHcloud est un hébergeur français : facturation à l’heure, sans engagement
 ## 1. Prérequis
 
 - Compte OVHcloud avec un moyen de paiement enregistré.
-- Nom de domaine pointant vers l’IP du VPS (ex. `urbanflow.app`).
+- Nom de domaine pointant vers l’IP du VPS : **`urbanflow-mobility.fr`**.
 - Ports ouverts : **22 (SSH)**, **80 (HTTP)** et **443 (HTTPS)**.
 
 ---
 
-## 2. Créer le VPS OVHcloud
+## 2. Configurer le nom de domaine OVHcloud
+
+Avant de déployer, faire pointer `urbanflow-mobility.fr` et `www.urbanflow-mobility.fr` vers l’IP publique du VPS.
+
+### 2.1 Informations de ce déploiement
+
+| Élément | Valeur |
+| --- | --- |
+| Domaine | `urbanflow-mobility.fr` |
+| IP publique (IPv4) | `37.59.119.90` |
+| Nom du VPS | `vps-e5cdfc52.vps.ovh.net` |
+| Utilisateur SSH | `ubuntu` |
+
+### 2.2 Modifier la zone DNS dans l’espace client OVHcloud
+
+1. Se connecter sur [https://www.ovh.com/manager/](https://www.ovh.com/manager/).
+2. Aller dans **Web Cloud → Domaines → urbanflow-mobility.fr → Zone DNS**.
+3. Supprimer ou modifier les enregistrements de type **A** pointant vers `@` et `www`.
+4. Ajouter :
+
+| Type | Sous-domaine | Cible |
+| --- | --- | --- |
+| A | `@` | `37.59.119.90` |
+| A | `www` | `37.59.119.90` |
+
+5. Sauvegarder la zone DNS.
+
+### 2.3 Vérifier la propagation
+
+```bash
+dig urbanflow-mobility.fr A +short
+dig www.urbanflow-mobility.fr A +short
+```
+
+Les deux commandes doivent retourner `37.59.119.90`. Le délai de propagation est généralement de 5 à 30 minutes.
+
+---
+
+## 3. Créer le VPS OVHcloud
 
 1. Se connecter à l’**espace client OVHcloud** : https://www.ovh.com/manager/
 2. Aller dans **Bare Metal Cloud → Serveurs virtuels privés (VPS)**.
@@ -21,28 +59,33 @@ OVHcloud est un hébergeur français : facturation à l’heure, sans engagement
 4. Choisir :
    - **Localisation** : France (Gravelines / Roubaix / Strasbourg) pour héberger les données en France.
    - **Système d’exploitation** : Ubuntu 24.04 LTS.
-   - **Offre** : minimum 1 vCPU / 2 Go RAM / 20 Go SSD (suffisant pour démarrer).
-5. Choisir la **facturation à l’heure** (pas d’engagement).
+   - **Offre retenue pour ce projet** : **VPS-2 2027**
+     - 4 vCore / 8 Go RAM / 75 Go SSD NVMe
+     - Localisation : **France — Gravelines**
+     - Facturation : **1 mois**, sans engagement
+     - Backup : **Automated Backup Standard** (offert en promotion)
+     - Coût : **8,49 €/mois**
+5. Choisir la **facturation mensuelle** (pas d’engagement).
 6. Ajouter une **clé SSH** (recommandé) ou recevoir le mot de passe root par email.
 7. Valider et attendre le provisionnement (quelques minutes).
 
-> Le prix indicatif pour un VPS Starter 1 vCPU / 2 Go RAM est d’environ **0,011 €/heure**, soit ~ **8 €/mois**.
+> Le VPS choisi pour ce déploiement : `vps-e5cdfc52.vps.ovh.net`.
 
 ---
 
-## 3. Se connecter au VPS
+## 4. Se connecter au VPS
 
 ```bash
-ssh ubuntu@IP_DU_VPS
+ssh ubuntu@37.59.119.90
 # ou, si tu as reçu un mot de passe root :
-ssh root@IP_DU_VPS
+ssh root@37.59.119.90
 ```
 
 Si tu utilises l’utilisateur `ubuntu`, passer root ou utiliser `sudo` pour les commandes administrateur.
 
 ---
 
-## 4. Installer Docker et Git
+## 5. Installer Docker et Git
 
 ```bash
 sudo apt update && sudo apt install -y docker.io docker-compose-v2 git curl
@@ -53,7 +96,7 @@ Se déconnecter puis se reconnecter pour que le groupe Docker soit actif :
 
 ```bash
 exit
-ssh ubuntu@IP_DU_VPS
+ssh ubuntu@37.59.119.90
 ```
 
 Vérifier l’installation :
@@ -65,7 +108,7 @@ docker compose version
 
 ---
 
-## 5. Cloner le projet
+## 6. Cloner le projet
 
 ```bash
 git clone https://github.com/fwBoa/Urbanflow.git /opt/urbanflow
@@ -74,7 +117,7 @@ cd /opt/urbanflow
 
 ---
 
-## 6. Configurer l’environnement de production
+## 7. Configurer l’environnement de production
 
 ```bash
 cp docker/.env.production.example docker/.env
@@ -90,10 +133,10 @@ Variables obligatoires à renseigner :
 | `PRIM_API_KEY` | Clé API PRIM Île-de-France Mobilités. |
 | `VAPID_PUBLIC_KEY` | Clé publique VAPID (Web Push). |
 | `VAPID_PRIVATE_KEY` | Clé privée VAPID. |
-| `VAPID_SUBJECT` | Adresse mail ou URL (ex. `mailto:contact@urbanflow.app`). |
+| `VAPID_SUBJECT` | `mailto:contact@urbanflow-mobility.fr` |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Identique à `VAPID_PUBLIC_KEY`. |
 | `DATABASE_URL` | `postgresql://urbanflow:<POSTGRES_PASSWORD>@postgres:5432/urbanflow` |
-| `CORS_ORIGIN` | `https://ton-domaine.com` |
+| `CORS_ORIGIN` | `https://urbanflow-mobility.fr` |
 | `NEXT_PUBLIC_API_URL` | Laisser **vide** en production. |
 
 Générer une paire VAPID si besoin :
@@ -104,7 +147,7 @@ npx web-push generate-vapid-keys
 
 ---
 
-## 7. Configurer les certificats TLS (Let’s Encrypt)
+## 8. Configurer les certificats TLS (Let’s Encrypt)
 
 ### 7.1 Installer Certbot
 
@@ -115,16 +158,16 @@ sudo apt install -y certbot
 ### 7.2 Obtenir les certificats
 
 ```bash
-sudo certbot certonly --standalone -d ton-domaine.com -d www.ton-domaine.com
+sudo certbot certonly --standalone -d urbanflow-mobility.fr -d www.urbanflow-mobility.fr
 ```
 
-Suivre les instructions. Certbot crée les fichiers dans `/etc/letsencrypt/live/ton-domaine.com/`.
+Suivre les instructions. Certbot crée les fichiers dans `/etc/letsencrypt/live/urbanflow-mobility.fr/`.
 
 ### 7.3 Les copier dans le projet
 
 ```bash
-sudo cp /etc/letsencrypt/live/ton-domaine.com/fullchain.pem /opt/urbanflow/docker/certs/fullchain.pem
-sudo cp /etc/letsencrypt/live/ton-domaine.com/privkey.pem /opt/urbanflow/docker/certs/privkey.pem
+sudo cp /etc/letsencrypt/live/urbanflow-mobility.fr/fullchain.pem /opt/urbanflow/docker/certs/fullchain.pem
+sudo cp /etc/letsencrypt/live/urbanflow-mobility.fr/privkey.pem /opt/urbanflow/docker/certs/privkey.pem
 sudo chown $USER:$USER /opt/urbanflow/docker/certs/*.pem
 ```
 
@@ -139,12 +182,12 @@ sudo crontab -e
 Ligne à ajouter :
 
 ```cron
-0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/ton-domaine.com/fullchain.pem /opt/urbanflow/docker/certs/fullchain.pem && cp /etc/letsencrypt/live/ton-domaine.com/privkey.pem /opt/urbanflow/docker/certs/privkey.pem && cd /opt/urbanflow/docker && docker compose exec nginx nginx -s reload'
+0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/urbanflow-mobility.fr/fullchain.pem /opt/urbanflow/docker/certs/fullchain.pem && cp /etc/letsencrypt/live/urbanflow-mobility.fr/privkey.pem /opt/urbanflow/docker/certs/privkey.pem && cd /opt/urbanflow/docker && docker compose exec nginx nginx -s reload'
 ```
 
 ---
 
-## 8. Déployer l’application
+## 9. Déployer l’application
 
 ```bash
 cd /opt/urbanflow
@@ -161,10 +204,10 @@ Puis il build les images et démarre les conteneurs.
 
 ---
 
-## 9. Vérifier le déploiement
+## 10. Vérifier le déploiement
 
 ```bash
-curl https://ton-domaine.com/api/health
+curl https://urbanflow-mobility.fr/api/health
 ```
 
 Réponse attendue :
@@ -181,7 +224,7 @@ cd /opt/urbanflow/docker && docker compose ps
 
 ---
 
-## 10. Créer le compte administrateur
+## 11. Créer le compte administrateur
 
 ### Identifiants par défaut
 
@@ -223,8 +266,8 @@ PGPASSWORD=$POSTGRES_PASSWORD docker exec -i urbanflow-db psql -U $POSTGRES_USER
 
 ## 11. Post-déploiement
 
-1. **Tester le frontend** : `https://ton-domaine.com`
-2. **Tester l’API** : `https://ton-domaine.com/api/health`
+1. **Tester le frontend** : `https://urbanflow-mobility.fr`
+2. **Tester l’API** : `https://urbanflow-mobility.fr/api/health`
 3. **Tester le mode offline** : activer le mode avion après avoir chargé la page.
 4. **Tester le broadcast admin** : se connecter en admin, aller sur `/admin`, envoyer une notification.
 5. **Configurer un backup automatique** de la base de données :
