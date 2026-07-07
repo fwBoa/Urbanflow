@@ -59,6 +59,28 @@ graph TD
   NotifM --> NotifC[notifications.controller.ts]
 ```
 
+### Back-office administrateur
+
+Le module `AdminModule` fournit une interface de gestion applicative (pas d’accès système) protégée par JWT + rôle `admin`.
+
+| Endpoint | Usage |
+| --- | --- |
+| `GET /api/admin/dashboard` | Statistiques globales |
+| `GET /api/admin/users` | Liste des utilisateurs |
+| `GET /api/admin/trips` | Historique des trajets |
+| `GET /api/admin/notifications` | Notifications existantes |
+| `POST /api/admin/notifications` | **Broadcast notification** à tous les utilisateurs |
+| `POST /api/admin/gtfs/reload` | Rechargement manuel du GTFS statique |
+| `GET /api/admin/gtfs/status` | État du chargement GTFS |
+
+Création du premier admin (local) :
+
+```bash
+cd apps/backend
+DATABASE_URL=postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow npx ts-node src/scripts/seed-admin.ts
+# admin@urbanflow.app / admin123 (à changer en prod)
+```
+
 ### Flux d'une recherche d'itinéraire (`GET /api/transport/journey`)
 
 **Stratégie double couche** depuis `7b8988e` : Navitia PRIM v2 (routing + alertes temps réel, géométrie embarquée) est **primaire** ; GTFS RAPTOR est en **repli silencieux** si Navitia échoue (401, quota, réseau) ou ne renvoie rien. Cf. `transport.controller.ts:457-502`.

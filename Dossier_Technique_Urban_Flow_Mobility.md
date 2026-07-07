@@ -144,7 +144,40 @@ Le workflow `.github/workflows/ci.yml` s’exécute sur chaque push et pull requ
 - `nginx` : reverse proxy SSL/CSP/rate-limit (profil `production`).
 - `nginx-dev` : HTTPS local avec certificat auto-signé.
 
-### 7.2 Scripts utilitaires
+### 7.2 Back-office administrateur
+
+Le module `AdminModule` expose un back-office applicatif sécurisé par JWT et rôle `admin`. Il ne donne **pas** accès au serveur (pas d’SSH ni de Docker), mais permet de gérer l’application sans intervention technique.
+
+| Endpoint | Méthode | Action |
+| --- | --- | --- |
+| `/api/admin/dashboard` | GET | Statistiques (utilisateurs, trajets, notifications) |
+| `/api/admin/users` | GET | Liste des utilisateurs |
+| `/api/admin/trips` | GET | Historique des trajets |
+| `/api/admin/notifications` | GET / POST | Liste ou envoi d’une notification globale |
+| `/api/admin/gtfs/reload` | POST | Rechargement manuel du GTFS statique |
+| `/api/admin/gtfs/status` | GET | État du chargement GTFS |
+
+La page frontend `/admin` est accessible uniquement aux utilisateurs connectés avec `role = 'admin'`.
+
+#### Création du premier administrateur
+
+En local :
+
+```bash
+cd apps/backend
+DATABASE_URL=postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow npx ts-node src/scripts/seed-admin.ts
+```
+
+En production (si `ts-node` n’est pas dans l’image) :
+
+```bash
+# Insérer directement un utilisateur avec role='admin' via psql
+PGPASSWORD=$POSTGRES_PASSWORD docker exec -i urbanflow-db psql -U $POSTGRES_USER -d $POSTGRES_DB -c "UPDATE users SET role='admin' WHERE email='admin@urbanflow.app';"
+```
+
+> **Par défaut le script crée** `admin@urbanflow.app` / `admin123`. Ce mot de passe doit être changé immédiatement en production.
+
+### 7.3 Scripts utilitaires
 
 | Script | Usage |
 | --- | --- |
@@ -153,7 +186,84 @@ Le workflow `.github/workflows/ci.yml` s’exécute sur chaque push et pull requ
 | `scripts/update-coverage-badge.mjs` | Génération du badge SVG de couverture |
 | `scripts/deploy.sh` | Déploiement automatisé (staging/prod) |
 | `scripts/download-gtfs.sh` | Téléchargement manuel du GTFS statique |
+| `scripts/seed-admin.ts` | Création du compte administrateur initial |
 | `docs/prod-verification.md` | Checklist de vérification avant mise en production |
+
+### 7.4 Déploiement sur un VPS Hostinger (Ubuntu 24.04)
+
+#### Prérequis
+
+- VPS Hostinger avec Ubuntu 24.04 LTS.
+- Accès SSH root ou sudo.
+- Docker Engine ≥ 25 et Docker Compose ≥ 2.20 installés.
+- Noms de domaine pointant vers le VPS (ex. `urbanflow.app` et `www.urbanflow.app`).
+- Ports 22, 80 et 443 ouverts dans le pare-feu Hostinger.
+
+#### Étapes
+
+1. **Cloner le dépôt**
+
+   ```bash
+   git clone https://github.com/fwBoa/Urbanflow.git
+   cd Urbanflow
+   ```
+
+2. **Créer l’environnement de production**
+
+   ```bash
+   cp docker/.env.production.example docker/.env
+   # Éditer docker/.env avec nano/vim et remplir les secrets réels.
+   ```
+
+   Variables critiques à renseigner :
+   - `JWT_SECRET` : chaîne aléatoire de 64+ caractères.
+   - `PRIM_API_KEY` : clé PRIM Île-de-France Mobilités valide.
+   - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` : paire générée avec `npx web-push generate-vapid-keys`.
+   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY` : identique à `VAPID_PUBLIC_KEY`.
+   - `DATABASE_URL` : `postgresql://urbanflow:<password>@postgres:5432/urbanflow`.
+
+3. **Obtenir des certificats TLS (Let’s Encrypt)**
+
+   ```bash
+   sudo apt update && sudo apt install certbot
+   sudo certbot certonly --standalone -d urbanflow.app -d www.urbanflow.app
+   sudo cp /etc/letsencrypt/live/urbanflow.app/fullchain.pem docker/certs/fullchain.pem
+   sudo cp /etc/letsencrypt/live/urbanflow.app/privkey.pem docker/certs/privkey.pem
+   ```
+
+4. **Déployer**
+
+   ```bash
+   ./scripts/deploy.sh prod
+   ```
+
+   Le script vérifie :
+   - la présence de `docker/.env` ;
+   - que `JWT_SECRET` n’est pas la valeur par défaut ;
+   - la présence des certificats TLS.
+
+5. **Vérifier le déploiement**
+
+   ```bash
+   curl https://urbanflow.app/api/health
+   # attendu : {"status":"ok"}
+   ```
+
+6. **Créer le premier administrateur**
+
+   ```bash
+   docker exec -it urbanflow-api npx ts-node dist/scripts/seed-admin.js
+   # ou, si le conteneur n’a pas ts-node en prod, utiliser psql pour promouvoir un utilisateur existant.
+   # Voir section 7.2 Back-office administrateur.
+   ```
+
+#### Renouvellement Let’s Encrypt
+
+Ajouter une tâche cron pour renouveler puis copier les certificats, puis recharger Nginx :
+
+```bash
+0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/urbanflow.app/fullchain.pem /home/ubuntu/Urbanflow/docker/certs/fullchain.pem && cp /etc/letsencrypt/live/urbanflow.app/privkey.pem /home/ubuntu/Urbanflow/docker/certs/privkey.pem && cd /home/ubuntu/Urbanflow/docker && docker compose exec nginx nginx -s reload'
+```
 
 ---
 
