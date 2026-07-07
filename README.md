@@ -191,6 +191,9 @@ cd apps/backend && DATABASE_URL=postgresql://urbanflow:urbanflow_dev@localhost:5
 
 # Vérification avant mise en production
 voir [docs/prod-verification.md](docs/prod-verification.md)
+
+# Déploiement sur VPS Hostinger
+voir [docs/deploiement-hostinger.md](docs/deploiement-hostinger.md)
 ```
 
 ## CI / CD

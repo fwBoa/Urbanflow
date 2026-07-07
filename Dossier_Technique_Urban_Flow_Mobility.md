@@ -189,81 +189,31 @@ PGPASSWORD=$POSTGRES_PASSWORD docker exec -i urbanflow-db psql -U $POSTGRES_USER
 | `scripts/seed-admin.ts` | Création du compte administrateur initial |
 | `docs/prod-verification.md` | Checklist de vérification avant mise en production |
 
-### 7.4 Déploiement sur un VPS Hostinger (Ubuntu 24.04)
+### 7.4 Déploiement
 
-#### Prérequis
+Le déploiement en production est décrit pas à pas dans le guide dédié :
 
-- VPS Hostinger avec Ubuntu 24.04 LTS.
-- Accès SSH root ou sudo.
-- Docker Engine ≥ 25 et Docker Compose ≥ 2.20 installés.
-- Noms de domaine pointant vers le VPS (ex. `urbanflow.app` et `www.urbanflow.app`).
-- Ports 22, 80 et 443 ouverts dans le pare-feu Hostinger.
+> 📘 [`docs/deploiement-hostinger.md`](deploiement-hostinger.md) — VPS Hostinger classique avec Docker Compose, Nginx et Let’s Encrypt.
 
-#### Étapes
+Il couvre :
+- l’installation de Docker sur Ubuntu 24.04 ;
+- la configuration de `docker/.env` ;
+- l’obtention et le renouvellement des certificats TLS ;
+- le lancement via `scripts/deploy.sh prod` ;
+- la création du compte administrateur ;
+- la mise en place d’un backup automatique.
 
-1. **Cloner le dépôt**
+#### Autres options de déploiement / VPS
 
-   ```bash
-   git clone https://github.com/fwBoa/Urbanflow.git
-   cd Urbanflow
-   ```
+| Option | Avantage | Inconvénient | Quand l’utiliser |
+| --- | --- | --- | --- |
+| **Hostinger VPS classique** (Docker Compose + Nginx) | Contrôle total, stack documentée, coût maîtrisé | Configuration manuelle TLS, monitoring à ajouter | Rendu T6 / production légère |
+| **Dokploy sur Hostinger VPS** | Reverse proxy + SSL auto, déploiement Git, UI d’env vars | Nouvel outil à apprendre, boîte noire partielle | Si tu veux un PaaS clé en main sur ton VPS |
+| **Railway / Render** | Déploiement ultra simple, DB + services managés | Coût à l’échelle, moins de contrôle | POC rapide, pas de VPS |
+| **Fly.io** | Containers edge, scaling simple, CLI efficace | Tarification au trafic, courbe d’apprentissage | Application globale / multi-région |
+| **AWS ECS / GCP Cloud Run / Azure Container Apps** | Haute disponibilité, intégration cloud | Complexité et coût | Production professionnelle à grande échelle |
 
-2. **Créer l’environnement de production**
-
-   ```bash
-   cp docker/.env.production.example docker/.env
-   # Éditer docker/.env avec nano/vim et remplir les secrets réels.
-   ```
-
-   Variables critiques à renseigner :
-   - `JWT_SECRET` : chaîne aléatoire de 64+ caractères.
-   - `PRIM_API_KEY` : clé PRIM Île-de-France Mobilités valide.
-   - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` : paire générée avec `npx web-push generate-vapid-keys`.
-   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY` : identique à `VAPID_PUBLIC_KEY`.
-   - `DATABASE_URL` : `postgresql://urbanflow:<password>@postgres:5432/urbanflow`.
-
-3. **Obtenir des certificats TLS (Let’s Encrypt)**
-
-   ```bash
-   sudo apt update && sudo apt install certbot
-   sudo certbot certonly --standalone -d urbanflow.app -d www.urbanflow.app
-   sudo cp /etc/letsencrypt/live/urbanflow.app/fullchain.pem docker/certs/fullchain.pem
-   sudo cp /etc/letsencrypt/live/urbanflow.app/privkey.pem docker/certs/privkey.pem
-   ```
-
-4. **Déployer**
-
-   ```bash
-   ./scripts/deploy.sh prod
-   ```
-
-   Le script vérifie :
-   - la présence de `docker/.env` ;
-   - que `JWT_SECRET` n’est pas la valeur par défaut ;
-   - la présence des certificats TLS.
-
-5. **Vérifier le déploiement**
-
-   ```bash
-   curl https://urbanflow.app/api/health
-   # attendu : {"status":"ok"}
-   ```
-
-6. **Créer le premier administrateur**
-
-   ```bash
-   docker exec -it urbanflow-api npx ts-node dist/scripts/seed-admin.js
-   # ou, si le conteneur n’a pas ts-node en prod, utiliser psql pour promouvoir un utilisateur existant.
-   # Voir section 7.2 Back-office administrateur.
-   ```
-
-#### Renouvellement Let’s Encrypt
-
-Ajouter une tâche cron pour renouveler puis copier les certificats, puis recharger Nginx :
-
-```bash
-0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/urbanflow.app/fullchain.pem /home/ubuntu/Urbanflow/docker/certs/fullchain.pem && cp /etc/letsencrypt/live/urbanflow.app/privkey.pem /home/ubuntu/Urbanflow/docker/certs/privkey.pem && cd /home/ubuntu/Urbanflow/docker && docker compose exec nginx nginx -s reload'
-```
+Pour le rendu T6, **Hostinger VPS classique** ou **Dokploy** sont les plus pertinents car ils restent compréhensibles et cohérents avec le dépôt Docker Compose existant.
 
 ---
 
