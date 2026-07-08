@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, MapPin, Footprints, Bike, Train, TramFront, Bus, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw, Loader2 } from "lucide-react";
+import { Clock, MapPin, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw, Loader2 } from "lucide-react";
+import { getModeIcon } from "@/lib/modeMeta";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
@@ -63,23 +64,24 @@ function CO2Comparison({ co2, distanceKm }: { co2: number; distanceKm?: number }
   );
 }
 
-// ─── Mode metadata (label FR, icône, couleur de fond, couleur d'accent) ─────
+// ─── Mode metadata (label FR, icône) — utilisation du mapping unifié IDFM ────
 function getModeInfo(mode?: string, type?: string): {
   label: string;
   Icon: React.ComponentType<{ size?: number }>;
   bgColor: string;
   ringColor: string;
 } {
-  const m = (mode || "").toLowerCase();
+  const resolvedMode = type === "walking" ? "walking" : type === "velib" ? "velib" : mode;
+  const Icon = getModeIcon(resolvedMode);
   const t = type || "";
-  if (t === "walking") return { label: "Marche", Icon: Footprints, bgColor: "bg-slate-100 dark:bg-slate-800", ringColor: "ring-slate-300" };
-  if (t === "velib" || m.includes("vélib") || m.includes("velib")) return { label: "Vélib'", Icon: Bike, bgColor: "bg-[var(--color-eco-green)]/10", ringColor: "ring-[var(--color-eco-green)]" };
-  if (m.includes("tram")) return { label: "Tram", Icon: TramFront, bgColor: "bg-purple-100 dark:bg-purple-900/30", ringColor: "ring-purple-300" };
-  if (m.includes("bus")) return { label: "Bus", Icon: Bus, bgColor: "bg-sky-100 dark:bg-sky-900/30", ringColor: "ring-sky-300" };
-  if (m.includes("rer")) return { label: "RER", Icon: Train, bgColor: "bg-pink-100 dark:bg-pink-900/30", ringColor: "ring-pink-300" };
-  if (m.includes("métro") || m.includes("metro")) return { label: "Métro", Icon: Train, bgColor: "bg-blue-100 dark:bg-blue-900/30", ringColor: "ring-blue-300" };
-  if (m.includes("transilien") || m.includes("train")) return { label: "Train", Icon: Train, bgColor: "bg-indigo-100 dark:bg-indigo-900/30", ringColor: "ring-indigo-300" };
-  return { label: "Transit", Icon: Bus, bgColor: "bg-slate-100", ringColor: "ring-slate-300" };
+  if (t === "walking") return { label: "Marche", Icon, bgColor: "bg-slate-100 dark:bg-slate-800", ringColor: "ring-slate-300" };
+  if (t === "velib") return { label: "Vélib'", Icon, bgColor: "bg-[var(--color-eco-green)]/10", ringColor: "ring-[var(--color-eco-green)]" };
+  if (resolvedMode?.includes("tram")) return { label: "Tram", Icon, bgColor: "bg-purple-100 dark:bg-purple-900/30", ringColor: "ring-purple-300" };
+  if (resolvedMode?.includes("bus")) return { label: "Bus", Icon, bgColor: "bg-sky-100 dark:bg-sky-900/30", ringColor: "ring-sky-300" };
+  if (resolvedMode?.includes("rer")) return { label: "RER", Icon, bgColor: "bg-pink-100 dark:bg-pink-900/30", ringColor: "ring-pink-300" };
+  if (resolvedMode?.includes("metro") || resolvedMode?.includes("métro")) return { label: "Métro", Icon, bgColor: "bg-blue-100 dark:bg-blue-900/30", ringColor: "ring-blue-300" };
+  if (resolvedMode?.includes("transilien") || resolvedMode?.includes("train")) return { label: "Train", Icon, bgColor: "bg-indigo-100 dark:bg-indigo-900/30", ringColor: "ring-indigo-300" };
+  return { label: "Transit", Icon, bgColor: "bg-slate-100", ringColor: "ring-slate-300" };
 }
 
 // Fallback data when no journey data is passed
@@ -136,6 +138,14 @@ export default function TripDetailPage() {
   const tripId = typeof params.id === "string" ? params.id : null;
 
   // ─── Trip : state (init depuis sessionStorage puis fallback sur `data` URL) ──
+  // Coordonnées présentes dans l'URL pour recalcul éventuel
+  const originLatParam = searchParams.get("originLat");
+  const originLonParam = searchParams.get("originLon");
+  const destLatParam = searchParams.get("destLat");
+  const destLonParam = searchParams.get("destLon");
+  const hasRecalcCoords =
+    !!originLatParam && !!originLonParam && !!destLatParam && !!destLonParam;
+
   const [trip, setTrip] = useState<JourneyResult | null>(() => {
     try {
       if (typeof window === "undefined" || !tripId) return null;
@@ -152,27 +162,22 @@ export default function TripDetailPage() {
     return null;
   });
 
-  const [tripLoading, setTripLoading] = useState(false);
+  // Le recalcul est automatiquement en cours si on n'a pas de trip mais qu'on a les coords.
+  const [tripLoading, setTripLoading] = useState(() => !trip && hasRecalcCoords);
 
   // ─── Recalcul du trajet si sessionStorage est vide (refresh, nouvel onglet) ──
   useEffect(() => {
-    if (trip) return;
-    const originLat = searchParams.get("originLat");
-    const originLon = searchParams.get("originLon");
-    const destLat = searchParams.get("destLat");
-    const destLon = searchParams.get("destLon");
-    if (!originLat || !originLon || !destLat || !destLon) return;
+    if (trip || !hasRecalcCoords) return;
 
-    setTripLoading(true);
     let cancelled = false;
     const controller = new AbortController();
     apiService
       .searchJourney(
         {
-          originLat: parseFloat(originLat),
-          originLon: parseFloat(originLon),
-          destLat: parseFloat(destLat),
-          destLon: parseFloat(destLon),
+          originLat: parseFloat(originLat!),
+          originLon: parseFloat(originLon!),
+          destLat: parseFloat(destLat!),
+          destLon: parseFloat(destLon!),
         },
         controller.signal,
       )

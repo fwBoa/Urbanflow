@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useId, useCallback, ReactNode } from "react";
 import { MapPin, Building2 } from "lucide-react";
+import { getModeIcon, getModeColor } from "@/lib/modeMeta";
 import SearchBar from "./SearchBar";
 import type { PrimStop, GeocodeResult } from "@/services/api";
 
@@ -30,13 +31,9 @@ interface SearchAutocompleteProps {
 }
 
 function StopIcon({ arrtype }: { arrtype: string }) {
-  const color =
-    arrtype === "metro" ? "var(--color-metro)"
-    : arrtype === "bus" ? "var(--color-bus)"
-    : arrtype === "rer" || arrtype === "train" ? "var(--color-rer)"
-    : arrtype === "tram" ? "var(--color-tram)"
-    : "var(--color-primary)";
-  return <MapPin size={14} style={{ color }} />;
+  const Icon = getModeIcon(arrtype);
+  const color = getModeColor(arrtype);
+  return <Icon size={14} style={{ color }} />;
 }
 
 export default function SearchAutocomplete({

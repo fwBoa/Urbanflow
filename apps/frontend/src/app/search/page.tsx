@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Zap, Leaf, MapPin, Loader2, Train, Bus, Bike, AlertTriangle, AlertOctagon } from "lucide-react";
+import { Zap, Leaf, MapPin, Loader2, Train, TrainFront, TramFront, Bus, Bike, Footprints, AlertTriangle, AlertOctagon } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import SearchAutocomplete from "@/components/SearchAutocomplete";
 import FilterChip from "@/components/FilterChip";
@@ -60,12 +60,12 @@ function SearchPageContent() {
   const [selectedModes, setSelectedModes] = useState<string[]>([]);
 
   const transportModes = [
-    { key: "metro", label: "Métro", icon: <Train size={14} /> },
+    { key: "metro", label: "Métro", icon: <TrainFront size={14} /> },
     { key: "rer", label: "RER", icon: <Train size={14} /> },
     { key: "bus", label: "Bus", icon: <Bus size={14} /> },
-    { key: "tram", label: "Tram", icon: <Train size={14} /> },
+    { key: "tram", label: "Tram", icon: <TramFront size={14} /> },
     { key: "velib", label: "Vélib'", icon: <Bike size={14} /> },
-    { key: "marche", label: "Marche", icon: <MapPin size={14} /> },
+    { key: "marche", label: "Marche", icon: <Footprints size={14} /> },
   ];
 
   const toggleMode = (mode: string) => {
@@ -564,15 +564,10 @@ function SearchPageContent() {
             {sortedJourneys.map((trip, i) => (
               <TripCard
                 key={i}
+                journey={trip}
                 departure={trip.segments[0]?.fromStop || "Départ"}
                 arrival={trip.segments[trip.segments.length - 1]?.toStop || "Arrivée"}
-                duration={`${trip.durationMinutes} min`}
-                transfers={trip.transfers}
-                co2={trip.co2Ggrams}
-                mode={getModeLabel(trip)}
-                modeColor={getModeColor(trip)}
-                hasAlert={!!trip.alerts && trip.alerts.length > 0}
-                alertCount={trip.alerts?.length}
+                index={i}
                 onClick={() => handleTripClick(trip, i)}
               />
             ))}

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, MapPin, Loader2, AlertTriangle } from "lucide-react";
+import ModeBadge from "./ModeBadge";
 
 interface Departure {
   tripId: string;
@@ -157,12 +158,12 @@ export default function NearbyStopDrawer({
                       className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]"
                     >
                       {/* Badge ligne */}
-                      <span
-                        className="shrink-0 inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-bold text-white min-w-[3rem]"
-                        style={{ backgroundColor: dep.lineColor }}
-                      >
-                        {dep.lineName}
-                      </span>
+                      <ModeBadge
+                        mode={dep.lineName.toLowerCase().startsWith("rer") ? "rer" : dep.lineName.toLowerCase().startsWith("m") ? "metro" : "bus"}
+                        lineName={dep.lineName}
+                        lineColor={dep.lineColor}
+                        size="sm"
+                      />
 
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">

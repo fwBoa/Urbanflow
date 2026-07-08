@@ -1,22 +1,16 @@
 "use client";
 
-import { Clock, ArrowRight, AlertTriangle } from "lucide-react";
+import { Clock, ArrowRight, AlertTriangle, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
 import CO2Badge from "./CO2Badge";
 import ModeBadge from "./ModeBadge";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import type { JourneyResult, JourneySegment } from "@/services/api";
 
 interface TripCardProps {
+  journey: JourneyResult;
   departure: string;
   arrival: string;
-  duration: string;
-  transfers: number;
-  co2: number;
-  mode: string;
-  modeColor: string;
-  hasAlert?: boolean;
-  alertCount?: number;
-  /** Indice dans la liste — pour stagger animation */
   index?: number;
   onClick?: () => void;
 }
@@ -36,22 +30,32 @@ const cardVariants = {
   tap: { scale: 0.98 },
 };
 
+function formatTime(iso?: string): string {
+  if (!iso) return "--:--";
+  try {
+    return iso.slice(0, 5);
+  } catch {
+    return "--:--";
+  }
+}
+
+/** Retourne les segments de transit avec une ligne identifiable pour les badges. */
+function transitSegments(segments: JourneySegment[]): JourneySegment[] {
+  return segments.filter((s) => s.type === "transit" || s.type === "velib");
+}
+
 export default function TripCard({
+  journey,
   departure,
   arrival,
-  duration,
-  transfers,
-  co2,
-  mode,
-  modeColor,
-  hasAlert,
-  alertCount,
   index = 0,
   onClick,
 }: TripCardProps) {
   const reducedMotion = usePrefersReducedMotion();
   const transferLabel =
-    transfers === 0 ? "Direct" : `${transfers} correspondance${transfers > 1 ? "s" : ""}`;
+    journey.transfers === 0
+      ? "Direct"
+      : `${journey.transfers} correspondance${journey.transfers > 1 ? "s" : ""}`;
 
   const motionProps = reducedMotion
     ? { initial: false, animate: false, whileTap: undefined, whileHover: undefined }
@@ -64,29 +68,36 @@ export default function TripCard({
         custom: index,
       };
 
+  const lines = transitSegments(journey.segments);
+  const hasAlert = !!journey.alerts && journey.alerts.length > 0;
+  const alertCount = journey.alerts?.length ?? 0;
+
   return (
     <motion.button
       onClick={onClick}
       type="button"
       className="group w-full text-left bg-surface rounded-[var(--card-radius)] border border-[var(--color-border)] p-4 hover:shadow-md hover:border-[var(--color-primary)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-all overflow-hidden relative"
-      aria-label={`Itinéraire ${mode}, ${duration}, ${transferLabel}, départ ${departure}, arrivée ${arrival}`}
+      aria-label={`Itinéraire ${lines.map((s) => s.lineName || s.mode).join(", ")}, ${journey.durationMinutes} min, ${transferLabel}, départ ${departure}, arrivée ${arrival}`}
       {...motionProps}
     >
-      {/* Ligne colorée sur la gauche */}
-      <motion.div
-        aria-hidden
-        className="absolute left-0 top-0 bottom-0 w-1 origin-top"
-        style={{ backgroundColor: modeColor }}
-        initial={reducedMotion ? false : { scaleY: 0 }}
-        animate={reducedMotion ? false : { scaleY: 1 }}
-        transition={reducedMotion ? undefined : { duration: 0.4, delay: index * 0.06 + 0.1 }}
-      />
-
       <div className="flex items-start justify-between gap-3">
         {/* Colonne principale */}
         <div className="flex-1 min-w-0">
+          {/* Ligne de pastilles de lignes + alerte */}
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <ModeBadge mode={mode} lineName={mode} lineColor={modeColor} size="sm" />
+            {lines.length > 0 ? (
+              lines.map((seg, idx) => (
+                <ModeBadge
+                  key={idx}
+                  mode={seg.mode}
+                  lineName={seg.lineName}
+                  lineColor={seg.lineColor}
+                  size="sm"
+                />
+              ))
+            ) : (
+              <ModeBadge mode="walking" size="sm" />
+            )}
             <span className="text-xs text-[var(--color-text-tertiary)]">
               {transferLabel}
             </span>
@@ -96,12 +107,13 @@ export default function TripCard({
                 title="Perturbation sur une ligne de ce trajet"
               >
                 <AlertTriangle size={10} aria-hidden="true" />
-                {alertCount && alertCount > 1 ? `${alertCount}` : ""}
+                {alertCount > 1 ? `${alertCount}` : ""}
                 <span className="sr-only">Perturbation sur une ligne de ce trajet</span>
               </span>
             )}
           </div>
 
+          {/* Départ → Arrivée */}
           <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
             <span className="truncate">{departure}</span>
             <span
@@ -112,15 +124,23 @@ export default function TripCard({
             </span>
             <span className="truncate">{arrival}</span>
           </div>
+
+          {/* Horaires */}
+          <div className="flex items-center gap-2 mt-2 text-[11px] text-[var(--color-text-tertiary)]">
+            <Calendar size={12} aria-hidden="true" />
+            <span>
+              {formatTime(journey.departureTime)} → {formatTime(journey.arrivalTime)}
+            </span>
+          </div>
         </div>
 
         {/* Colonne durée + CO₂ */}
         <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <div className="flex items-center gap-1 text-sm font-semibold text-[var(--color-primary)]">
-            <Clock size={14} aria-hidden="true" />
-            <span>{duration}</span>
+          <div className="flex items-center gap-1 text-base font-bold text-[var(--color-primary)]">
+            <Clock size={16} aria-hidden="true" />
+            <span>{journey.durationMinutes} min</span>
           </div>
-          <CO2Badge grams={co2} />
+          <CO2Badge grams={journey.co2Ggrams} />
         </div>
       </div>
     </motion.button>

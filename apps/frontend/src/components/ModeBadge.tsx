@@ -1,7 +1,6 @@
 "use client";
 
-import { Footprints, Bike, Train, TramFront, Bus, Ship, Car } from "lucide-react";
-import { UI_MODE_COLORS } from "@/constants/mode-colors";
+import { getModeIcon, getModeColor, getModeLabel, getTextColorForBackground } from "@/lib/modeMeta";
 
 export interface ModeBadgeProps {
   /** Mode brut renvoyé par l'API : 'metro', 'rer', 'bus', 'tram', 'marche', 'velib', etc. */
@@ -10,65 +9,24 @@ export interface ModeBadgeProps {
   type?: "walking" | "transit" | "velib";
   /** Nom court de la ligne (ex: "A", "M1", "62"). Affiché à côté si fourni. */
   lineName?: string;
-  /** Couleur HEX de la ligne (prioritaire sur la couleur par défaut du mode). */
+  /** Couleur HEX de la ligne (prioritaire sur la couleur calculée). */
   lineColor?: string;
   /** Taille du badge */
   size?: "sm" | "md" | "lg";
-  /** Afficher le label texte sous l'icône */
+  /** Afficher le label texte à côté de l'icône */
   showLabel?: boolean;
 }
 
-interface ModeMeta {
-  label: string;
-  Icon: React.ComponentType<{ size?: number }>;
-  /** Couleur de fond par défaut (fallback si pas de lineColor) */
-  defaultBg: string;
-  /** Couleur de texte par défaut */
-  defaultFg: string;
-}
-
-const MODE_META: Record<string, ModeMeta> = {
-  metro: { label: "Métro", Icon: Train, defaultBg: UI_MODE_COLORS.metro, defaultFg: "#FFFFFF" },
-  rer: { label: "RER", Icon: Train, defaultBg: UI_MODE_COLORS.rer, defaultFg: "#FFFFFF" },
-  tram: { label: "Tram", Icon: TramFront, defaultBg: UI_MODE_COLORS.tram, defaultFg: "#FFFFFF" },
-  bus: { label: "Bus", Icon: Bus, defaultBg: UI_MODE_COLORS.bus, defaultFg: "#FFFFFF" },
-  marche: { label: "Marche", Icon: Footprints, defaultBg: UI_MODE_COLORS.marche, defaultFg: "#FFFFFF" },
-  velib: { label: "Vélib'", Icon: Bike, defaultBg: UI_MODE_COLORS.velib, defaultFg: "#FFFFFF" },
-  train: { label: "Train", Icon: Train, defaultBg: UI_MODE_COLORS.train, defaultFg: "#FFFFFF" },
-  transilien: { label: "Transilien", Icon: Train, defaultBg: UI_MODE_COLORS.transilien, defaultFg: "#FFFFFF" },
-  ferry: { label: "Ferry", Icon: Ship, defaultBg: UI_MODE_COLORS.ferry, defaultFg: "#FFFFFF" },
-  car: { label: "Voiture", Icon: Car, defaultBg: UI_MODE_COLORS.car, defaultFg: "#FFFFFF" },
-};
-
-function getModeMeta(mode?: string, type?: ModeBadgeProps["type"]): ModeMeta {
-  if (type === "walking" || mode?.toLowerCase() === "marche" || mode?.toLowerCase() === "walking") {
-    return MODE_META.marche!;
-  }
-  if (type === "velib" || mode?.toLowerCase().includes("vélib") || mode?.toLowerCase().includes("velib")) {
-    return MODE_META.velib!;
-  }
-  const m = (mode || "").toLowerCase().trim();
-  // Match exact ou préfixe
-  if (m === "metro" || m.includes("métro")) return MODE_META.metro!;
-  if (m.includes("rer")) return MODE_META.rer!;
-  if (m.includes("tram")) return MODE_META.tram!;
-  if (m.includes("transilien")) return MODE_META.transilien!;
-  if (m.includes("train")) return MODE_META.train!;
-  if (m.includes("ferry") || m.includes("navette")) return MODE_META.ferry!;
-  if (m.includes("bus") || m.includes("car")) return MODE_META.bus!;
-  return { label: mode || "Transit", Icon: Bus, defaultBg: UI_MODE_COLORS.bus ?? "#455A64", defaultFg: "#FFFFFF" };
-}
-
 const SIZE_CLASSES = {
-  sm: { wrapper: "h-7 px-2 text-[11px] gap-1.5", icon: 12, lineText: "text-[11px]" },
-  md: { wrapper: "h-9 px-3 text-xs gap-2", icon: 14, lineText: "text-xs" },
-  lg: { wrapper: "h-11 px-4 text-sm gap-2", icon: 16, lineText: "text-sm" },
+  sm: { wrapper: "h-6 px-1.5 text-[10px] gap-1", icon: 12, lineText: "text-[10px]" },
+  md: { wrapper: "h-8 px-2.5 text-xs gap-1.5", icon: 14, lineText: "text-xs" },
+  lg: { wrapper: "h-10 px-3.5 text-sm gap-2", icon: 16, lineText: "text-sm" },
 } as const;
 
 /**
  * Badge de mode de transport — affichage unifié pour tous les types de segment.
- * - Si lineColor fourni : utilise la couleur de la ligne (ex: RER A rouge, M1 jaune)
- * - Sinon : utilise la couleur par défaut du mode
+ * - Couleur fidèle au réseau IDFM (lineColor > couleur de ligne connue > couleur par mode).
+ * - Texte ajusté automatiquement selon la luminance du fond pour garder un bon contraste.
  */
 export default function ModeBadge({
   mode,
@@ -78,19 +36,20 @@ export default function ModeBadge({
   size = "md",
   showLabel = false,
 }: ModeBadgeProps) {
-  const meta = getModeMeta(mode, type);
-  const Icon = meta.Icon;
+  const resolvedMode = type === "walking" ? "walking" : type === "velib" ? "velib" : mode;
+  const Icon = getModeIcon(resolvedMode);
   const sizes = SIZE_CLASSES[size];
 
-  const bg = lineColor ?? meta.defaultBg;
-  const fg = "#FFFFFF";
+  const bg = lineColor || getModeColor(resolvedMode, lineName);
+  const fg = getTextColorForBackground(bg);
+  const label = getModeLabel(resolvedMode, lineName);
 
   return (
     <span
-      className={`inline-flex items-center justify-center ${sizes.wrapper} font-semibold rounded-full shadow-sm`}
+      className={`inline-flex items-center justify-center ${sizes.wrapper} font-semibold rounded-full shadow-sm shrink-0`}
       style={{ backgroundColor: bg, color: fg }}
       role="img"
-      aria-label={`${meta.label}${lineName ? ` ligne ${lineName}` : ""}`}
+      aria-label={label}
     >
       <Icon size={sizes.icon} />
       {lineName && (
@@ -98,9 +57,9 @@ export default function ModeBadge({
           {lineName}
         </span>
       )}
-      {showLabel && (
+      {showLabel && !lineName && (
         <span className={`font-semibold ${sizes.lineText}`} style={{ color: fg }}>
-          {meta.label}
+          {label.split(" ")[0]}
         </span>
       )}
     </span>
