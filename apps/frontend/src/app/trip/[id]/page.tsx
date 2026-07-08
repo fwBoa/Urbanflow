@@ -127,9 +127,17 @@ export default function TripDetailPage() {
   const router = useRouter();
   const reducedMotion = usePrefersReducedMotion();
 
-  // ─── Trip : state (init depuis le `data` param) pour permettre le reroutage ──
+  // ─── Trip : state (init depuis sessionStorage puis fallback sur `data` URL) ──
   const [trip, setTrip] = useState<JourneyResult | null>(() => {
     try {
+      // Kaizen : les données volumineuses sont stockées en sessionStorage pour
+      // éviter les URLs de plusieurs dizaines de ko qui cassent les proxies/navigateurs.
+      const id = typeof window !== "undefined" ? window.location.pathname.split("/").pop() : null;
+      if (id) {
+        const stored = sessionStorage.getItem(`uf:trip:${id}`);
+        if (stored) return JSON.parse(stored);
+      }
+      // Fallback legacy (liens partagés/bookmarks)
       const data = searchParams.get("data");
       if (data) return JSON.parse(decodeURIComponent(data));
     } catch {
@@ -348,9 +356,13 @@ export default function TripDetailPage() {
         setOriginPos(fromPos);
         hasFetchedRef.current = false; // re-fetch OSRM polyline depuis la nouvelle origine
         lastRerouteOriginRef.current = fromPos;
-        // Resync URL (best-effort, peut échouer si le payload est trop long).
+        // Resync sessionStorage + URL (URL ne contient que les coords, pas le trip).
         try {
-          const query = new URLSearchParams({ data: JSON.stringify(newTrip) });
+          const id = window.location.pathname.split("/").pop();
+          if (id) {
+            sessionStorage.setItem(`uf:trip:${id}`, JSON.stringify(newTrip));
+          }
+          const query = new URLSearchParams();
           query.set("originLat", String(fromPos.lat));
           query.set("originLon", String(fromPos.lon));
           query.set("destLat", String(destPos.lat));

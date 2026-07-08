@@ -324,8 +324,16 @@ function SearchPageContent() {
       duration: `${journey.durationMinutes} min`,
       co2: journey.co2Ggrams,
     });
-    // Pass origin/dest coordinates for real routing on trip page
-    const query = new URLSearchParams({ data: JSON.stringify(journey) });
+    // Store bulky journey state in sessionStorage instead of URL query string
+    // to avoid exceeding browser/proxy URL length limits (Kaizen).
+    const tripKey = `uf:trip:${index}`;
+    try {
+      sessionStorage.setItem(tripKey, JSON.stringify(journey));
+    } catch {
+      // best-effort: if storage fails, we still keep origin/dest coords in URL
+    }
+    // Pass only origin/dest coordinates in URL for real routing on trip page
+    const query = new URLSearchParams();
     if (selectedOrigin) {
       query.set("originLat", String(selectedOrigin.lat));
       query.set("originLon", String(selectedOrigin.lon));
