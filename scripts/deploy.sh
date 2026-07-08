@@ -79,7 +79,7 @@ echo "⏳ Attente du démarrage des services..."
 # Le premier démarrage charge le GTFS et peut prendre 20-40s.
 MAX_WAIT=60
 ELAPSED=0
-while ! docker compose ps | grep -iq "urbanflow-db.*healthy"; do
+while ! docker compose ps --format json | grep -q '"Name":"urbanflow-db".*"Health":"healthy"'; do
   sleep 2
   ELAPSED=$((ELAPSED + 2))
   if [ $ELAPSED -ge $MAX_WAIT ]; then
@@ -90,13 +90,13 @@ while ! docker compose ps | grep -iq "urbanflow-db.*healthy"; do
 done
 
 # Vérifier que l'API et le frontend sont running
-if ! docker compose ps | grep -iq "urbanflow-api.*\(running\|started\|healthy\)"; then
+if ! docker compose ps --format json | grep -q '"Name":"urbanflow-api".*"State":"running"'; then
   echo "❌ Le backend n'a pas démarré !"
   docker compose logs backend --tail=20
   exit 1
 fi
 
-if ! docker compose ps | grep -iq "urbanflow-web.*\(running\|started\|healthy\)"; then
+if ! docker compose ps --format json | grep -q '"Name":"urbanflow-web".*"State":"running"'; then
   echo "❌ Le frontend n'a pas démarré !"
   docker compose logs frontend --tail=20
   exit 1
