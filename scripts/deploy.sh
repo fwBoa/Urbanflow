@@ -90,13 +90,13 @@ while ! docker compose ps | grep -iq "urbanflow-db.*healthy"; do
 done
 
 # Vérifier que l'API et le frontend sont running
-if ! docker compose ps | grep -q "urbanflow-api.*running"; then
+if ! docker compose ps | grep -iq "urbanflow-api.*\(running\|started\|healthy\)"; then
   echo "❌ Le backend n'a pas démarré !"
   docker compose logs backend --tail=20
   exit 1
 fi
 
-if ! docker compose ps | grep -q "urbanflow-web.*running"; then
+if ! docker compose ps | grep -iq "urbanflow-web.*\(running\|started\|healthy\)"; then
   echo "❌ Le frontend n'a pas démarré !"
   docker compose logs frontend --tail=20
   exit 1
