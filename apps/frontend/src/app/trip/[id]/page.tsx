@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, MapPin, Footprints, Bike, Train, TramFront, Bus, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw } from "lucide-react";
+import { Clock, MapPin, Footprints, Bike, Train, TramFront, Bus, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw, Loader2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
@@ -95,6 +95,8 @@ const fallbackTrip = {
       mode: "marche",
       from: "Votre position",
       to: "Châtelet",
+      fromStop: "Votre position",
+      toStop: "Châtelet",
       durationMinutes: 3,
       distanceKm: 0.2,
       instruction: "Marcher jusqu'à Châtelet (200m)",
@@ -106,6 +108,8 @@ const fallbackTrip = {
       lineColor: MAP_MODE_COLORS.rer,
       from: "Châtelet",
       to: "La Défense",
+      fromStop: "Châtelet",
+      toStop: "La Défense",
       durationMinutes: 18,
       numStops: 4,
       instruction: "Prendre RER A de Châtelet à La Défense",
@@ -115,6 +119,8 @@ const fallbackTrip = {
       mode: "marche",
       from: "La Défense",
       to: "Destination",
+      fromStop: "La Défense",
+      toStop: "Destination",
       durationMinutes: 1,
       distanceKm: 0.1,
       instruction: "Marcher jusqu'à destination (100m)",
@@ -125,18 +131,18 @@ const fallbackTrip = {
 export default function TripDetailPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const params = useParams();
   const reducedMotion = usePrefersReducedMotion();
+  const tripId = typeof params.id === "string" ? params.id : null;
 
   // ─── Trip : state (init depuis sessionStorage puis fallback sur `data` URL) ──
   const [trip, setTrip] = useState<JourneyResult | null>(() => {
     try {
+      if (typeof window === "undefined" || !tripId) return null;
       // Kaizen : les données volumineuses sont stockées en sessionStorage pour
       // éviter les URLs de plusieurs dizaines de ko qui cassent les proxies/navigateurs.
-      const id = typeof window !== "undefined" ? window.location.pathname.split("/").pop() : null;
-      if (id) {
-        const stored = sessionStorage.getItem(`uf:trip:${id}`);
-        if (stored) return JSON.parse(stored);
-      }
+      const stored = sessionStorage.getItem(`uf:trip:${tripId}`);
+      if (stored) return JSON.parse(stored);
       // Fallback legacy (liens partagés/bookmarks)
       const data = searchParams.get("data");
       if (data) return JSON.parse(decodeURIComponent(data));
@@ -145,6 +151,50 @@ export default function TripDetailPage() {
     }
     return null;
   });
+
+  const [tripLoading, setTripLoading] = useState(false);
+
+  // ─── Recalcul du trajet si sessionStorage est vide (refresh, nouvel onglet) ──
+  useEffect(() => {
+    if (trip || tripLoading) return;
+    const originLat = searchParams.get("originLat");
+    const originLon = searchParams.get("originLon");
+    const destLat = searchParams.get("destLat");
+    const destLon = searchParams.get("destLon");
+    if (!originLat || !originLon || !destLat || !destLon) return;
+
+    setTripLoading(true);
+    const controller = new AbortController();
+    apiService
+      .searchJourney(
+        {
+          originLat: parseFloat(originLat),
+          originLon: parseFloat(originLon),
+          destLat: parseFloat(destLat),
+          destLon: parseFloat(destLon),
+        },
+        controller.signal,
+      )
+      .then((results) => {
+        if (controller.signal.aborted) return;
+        const best = results[0];
+        if (!best) return;
+        setTrip(best);
+        try {
+          if (tripId) sessionStorage.setItem(`uf:trip:${tripId}`, JSON.stringify(best));
+        } catch {
+          // best-effort
+        }
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        console.warn("Trip recalculation failed:", err);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setTripLoading(false);
+      });
+    return () => controller.abort();
+  }, [trip, tripLoading, searchParams, tripId]);
 
   const segments = (trip?.segments || fallbackTrip.segments) as JourneyResult["segments"];
   const firstSeg = segments[0];
@@ -435,6 +485,14 @@ export default function TripDetailPage() {
         </button>
       }
     >
+      {/* Chargement si le trajet est en cours de recalcul (refresh / nouvel onglet) */}
+      {tripLoading && !trip && (
+        <div className="flex flex-col items-center justify-center py-12 text-[var(--color-text-secondary)]">
+          <Loader2 className="animate-spin text-[var(--color-primary)] mb-3" size={32} />
+          <p className="text-sm">Recalcul de l&apos;itinéraire…</p>
+        </div>
+      )}
+
       {/* Bannière turn-by-turn (overlay fixed sous le header, nav only) */}
       {isNavigating && instruction && (
         <TurnByTurnBanner
