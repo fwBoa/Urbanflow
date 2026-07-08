@@ -156,7 +156,7 @@ export default function TripDetailPage() {
 
   // ─── Recalcul du trajet si sessionStorage est vide (refresh, nouvel onglet) ──
   useEffect(() => {
-    if (trip || tripLoading) return;
+    if (trip) return;
     const originLat = searchParams.get("originLat");
     const originLon = searchParams.get("originLon");
     const destLat = searchParams.get("destLat");
@@ -164,6 +164,7 @@ export default function TripDetailPage() {
     if (!originLat || !originLon || !destLat || !destLon) return;
 
     setTripLoading(true);
+    let cancelled = false;
     const controller = new AbortController();
     apiService
       .searchJourney(
@@ -176,7 +177,7 @@ export default function TripDetailPage() {
         controller.signal,
       )
       .then((results) => {
-        if (controller.signal.aborted) return;
+        if (cancelled || controller.signal.aborted) return;
         const best = results[0];
         if (!best) return;
         setTrip(best);
@@ -187,14 +188,17 @@ export default function TripDetailPage() {
         }
       })
       .catch((err) => {
-        if (controller.signal.aborted) return;
+        if (cancelled || controller.signal.aborted) return;
         console.warn("Trip recalculation failed:", err);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setTripLoading(false);
+        if (!cancelled && !controller.signal.aborted) setTripLoading(false);
       });
-    return () => controller.abort();
-  }, [trip, tripLoading, searchParams, tripId]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [trip, searchParams, tripId]);
 
   const segments = (trip?.segments || fallbackTrip.segments) as JourneyResult["segments"];
   const firstSeg = segments[0];
