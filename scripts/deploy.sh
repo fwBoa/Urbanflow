@@ -79,7 +79,7 @@ echo "⏳ Attente du démarrage des services..."
 # Le premier démarrage charge le GTFS et peut prendre 20-40s.
 MAX_WAIT=60
 ELAPSED=0
-while ! docker compose ps --format json | grep -q '"Name":"urbanflow-db".*"Health":"healthy"'; do
+while ! docker compose ps --format json | grep -iq '"Health":"healthy"'; do
   sleep 2
   ELAPSED=$((ELAPSED + 2))
   if [ $ELAPSED -ge $MAX_WAIT ]; then
