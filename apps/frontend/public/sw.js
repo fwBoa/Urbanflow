@@ -1,4 +1,4 @@
-const CACHE_NAME = "urbanflow-v3";
+const CACHE_NAME = "urbanflow-v4";
 const STATIC_ASSETS = [
   "/",
   "/search",
