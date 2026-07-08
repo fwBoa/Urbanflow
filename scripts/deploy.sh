@@ -105,11 +105,14 @@ fi
 echo "✅ Déploiement $ENV terminé !"
 echo ""
 echo "Services :"
-echo "  - Frontend : http://localhost:3000"
-echo "  - Backend  : http://localhost:4000"
-echo "  - Database : localhost:5432"
 if [ "$ENV" = "prod" ]; then
-  echo "  - Nginx    : http://localhost:80 (proxy)"
+  echo "  - Public   : https://urbanflow-mobility.fr"
+  echo "  - API      : https://urbanflow-mobility.fr/api"
+  echo "  - Nginx    : https://urbanflow-mobility.fr (reverse proxy)"
+else
+  echo "  - Frontend : http://localhost:3000"
+  echo "  - Backend  : http://localhost:4000"
+  echo "  - Database : localhost:5432"
 fi
 echo ""
 echo "Logs : docker compose logs -f"
