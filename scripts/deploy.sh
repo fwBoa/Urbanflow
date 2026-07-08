@@ -79,7 +79,7 @@ echo "⏳ Attente du démarrage des services..."
 # Le premier démarrage charge le GTFS et peut prendre 20-40s.
 MAX_WAIT=60
 ELAPSED=0
-while ! docker compose ps | grep -q "urbanflow-db.*healthy"; do
+while ! docker compose ps | grep -iq "urbanflow-db.*healthy"; do
   sleep 2
   ELAPSED=$((ELAPSED + 2))
   if [ $ELAPSED -ge $MAX_WAIT ]; then
