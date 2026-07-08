@@ -1,4 +1,4 @@
-const CACHE_NAME = "urbanflow-v2";
+const CACHE_NAME = "urbanflow-v3";
 const STATIC_ASSETS = [
   "/",
   "/search",
@@ -67,10 +67,10 @@ self.addEventListener("fetch", (event) => {
   // Navigation requests: network-first
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
+      fetch(request, { credentials: "same-origin" })
         .then((response) => {
-          // Cache successful navigation responses
-          if (response.ok) {
+          // Cache successful navigation responses, but never cache the offline page as /
+          if (response.ok && new URL(request.url).pathname !== "/offline") {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
               if (new URL(request.url).protocol.startsWith("http")) {
@@ -80,10 +80,16 @@ self.addEventListener("fetch", (event) => {
           }
           return response;
         })
-        .catch(() => {
+        .catch((err) => {
           // Fallback to cache if offline, then to offline page
           return caches.match(request).then((cached) => {
-            return cached || caches.match("/offline") || caches.match("/");
+            if (cached) return cached;
+            // Only serve offline page if the browser is actually offline
+            if (!self.navigator.onLine) {
+              return caches.match("/offline") || Response.error();
+            }
+            // We are online but fetch failed (e.g. CSP blocked sub-resource): do not show offline page
+            throw err;
           });
         })
     );
