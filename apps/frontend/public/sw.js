@@ -61,6 +61,10 @@ self.addEventListener("fetch", (event) => {
   // API calls: network-only (fresh data required)
   if (url.pathname.startsWith("/api")) return;
 
+  // Dynamic Next.js pages with large state in URL: bypass Service Worker to avoid
+  // timeouts/hydration mismatches and let the browser handle the request directly.
+  if (url.pathname.startsWith("/trip/")) return;
+
   // En dev : tout passe en network-only pour préserver HMR.
   if (IS_DEV) return;
 
