@@ -74,15 +74,22 @@ fi
 docker compose $PROFILE up -d
 
 echo "⏳ Attente du démarrage des services..."
-sleep 5
 
-# Vérifier que les services sont actifs
-if ! docker compose ps | grep -q "urbanflow-db.*running"; then
-  echo "❌ La base de données n'a pas démarré !"
-  docker compose logs postgres --tail=20
-  exit 1
-fi
+# Attendre que le conteneur postgres soit healthy (jusqu'à 60s).
+# Le premier démarrage charge le GTFS et peut prendre 20-40s.
+MAX_WAIT=60
+ELAPSED=0
+while ! docker compose ps | grep -q "urbanflow-db.*healthy"; do
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
+  if [ $ELAPSED -ge $MAX_WAIT ]; then
+    echo "❌ La base de données n'a pas démarré dans le délai imparti !"
+    docker compose logs postgres --tail=30
+    exit 1
+  fi
+done
 
+# Vérifier que l'API et le frontend sont running
 if ! docker compose ps | grep -q "urbanflow-api.*running"; then
   echo "❌ Le backend n'a pas démarré !"
   docker compose logs backend --tail=20
