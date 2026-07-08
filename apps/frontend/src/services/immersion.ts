@@ -101,27 +101,23 @@ export function blip(freq = 440, duration = 0.08): void {
  * Patterns d'immersion prédéfinis.
  */
 export const Immersion = {
-  /** Nouveau segment de trajet : tap + voix */
-  segmentChange: (instruction: string) => {
-    haptic([100, 50, 100]);
+  /** Nouveau segment de trajet : retour audio (blip) + voix optionnelle. */
+  segmentChange: (instruction: string, voiceEnabled = true) => {
     blip(660, 0.06);
-    speak(instruction);
+    if (voiceEnabled) speak(instruction);
   },
-  /** Arrivée à destination : double vibration + son aigu */
-  arrived: () => {
-    haptic([200, 80, 200, 80, 200]);
+  /** Arrivée à destination : retour audio + voix optionnelle. */
+  arrived: (voiceEnabled = true) => {
     blip(880, 0.15);
-    speak("Vous êtes arrivé à destination.");
+    if (voiceEnabled) speak("Vous êtes arrivé à destination.");
   },
-  /** Hors trajet : tap simple + voix d'alerte */
-  offRoute: () => {
-    haptic([300, 100, 300]);
+  /** Hors trajet : retour audio grave + voix d'alerte optionnelle. */
+  offRoute: (voiceEnabled = true) => {
     blip(220, 0.2);
-    speak("Vous vous êtes écarté de l'itinéraire. Recalcul en cours.");
+    if (voiceEnabled) speak("Vous vous êtes écarté de l'itinéraire. Recalcul en cours.");
   },
   /** Recalcul en cours */
   recalculating: () => {
-    haptic(60);
     blip(440, 0.04);
   },
 };

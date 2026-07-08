@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, MapPin, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw, Loader2 } from "lucide-react";
+import { Clock, MapPin, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw, Loader2, Volume2, VolumeX, Trophy, PartyPopper } from "lucide-react";
 import ModeIcon from "@/components/ModeIcon";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
@@ -17,6 +17,7 @@ import { MAP_MODE_COLORS } from "@/constants/mode-colors";
 import { apiService } from "@/services/api";
 import type { JourneyResult } from "@/services/api";
 import { Immersion } from "@/services/immersion";
+import { addToHistory } from "@/services/favorites";
 
 // ─── Facteur d'émission moyen voiture particulière en France (thermique) ───
 // Source : ADEME ~170 g CO₂/km (valeur conservative pour comparaison)
@@ -164,6 +165,25 @@ export default function TripDetailPage() {
   // ─── Segments de timeline dont les alertes sont dépliées ─────────────
   const [expandedAlertSegments, setExpandedAlertSegments] = useState<Set<number>>(new Set());
 
+  // ─── Voix de navigation (toggle persistant) ──────────────────────────
+  const [voiceEnabled, setVoiceEnabled] = useState(() => {
+    try {
+      return typeof window === "undefined" || localStorage.getItem("uf:voice") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("uf:voice", String(voiceEnabled));
+    } catch {
+      // ignore
+    }
+  }, [voiceEnabled]);
+
+  // ─── Écran de succès à l'arrivée ─────────────────────────────────────
+  const [showSuccess, setShowSuccess] = useState(false);
+
   // Le recalcul est automatiquement en cours si on n'a pas de trip mais qu'on a les coords.
   const [recalcDone, setRecalcDone] = useState(false);
   const tripLoading = !trip && hasRecalcCoords && !recalcDone;
@@ -224,6 +244,10 @@ export default function TripDetailPage() {
   const duration = trip ? `${trip.durationMinutes} min` : fallbackTrip.duration;
   const co2 = trip?.co2Ggrams || fallbackTrip.co2;
   const transfers = trip?.transfers ?? fallbackTrip.transfers;
+
+  const mainTransitSegment = segments.find((s) => s.type === "transit");
+  const historyMode = mainTransitSegment?.mode || segments[0]?.mode || "walking";
+  const historyModeColor = mainTransitSegment?.lineColor || "#2E7D9B";
 
   // ─── Coordinates from search page ────────────────────────────────────
   const originLat = searchParams.get("originLat");
@@ -369,7 +393,17 @@ export default function TripDetailPage() {
     tripPolyline,
     originPos,
     destPos,
+    voiceEnabled,
   );
+
+  // Affiche l'écran de succès automatiquement à l'arrivée (une seule fois par trajet).
+  const autoSuccessShownRef = useRef(false);
+  useEffect(() => {
+    if (arrived && isNavigating && !autoSuccessShownRef.current) {
+      autoSuccessShownRef.current = true;
+      setShowSuccess(true);
+    }
+  }, [arrived, isNavigating]);
 
   // Build map markers from real coordinates
   const mapMarkers = useMemo(() => {
@@ -519,12 +553,16 @@ export default function TripDetailPage() {
 
   return (
     <AppShell
-      title="Détail itinéraire"
-      showBack
+      title={isNavigating ? "Navigation" : "Détail itinéraire"}
+      showBack={!isNavigating}
+      hideNav={isNavigating}
+      fullBleed={isNavigating}
       rightAction={
-        <button className="text-white/80 hover:text-white transition-colors" aria-label="Partager">
-          <Navigation2 size={20} />
-        </button>
+        !isNavigating ? (
+          <button className="text-white/80 hover:text-white transition-colors" aria-label="Partager">
+            <Navigation2 size={20} />
+          </button>
+        ) : null
       }
     >
       {/* Chargement si le trajet est en cours de recalcul (refresh / nouvel onglet) */}
@@ -543,8 +581,11 @@ export default function TripDetailPage() {
         />
       )}
 
-      {/* Summary Card */}
-      <motion.div
+      {/* Mode normal : résumé, timeline, carte, CTA */}
+      {!isNavigating && (
+        <>
+          {/* Summary Card */}
+          <motion.div
         initial={reducedMotion ? false : { opacity: 0, y: -8 }}
         animate={reducedMotion ? false : { opacity: 1, y: 0 }}
         transition={reducedMotion ? undefined : { duration: 0.4, ease: "easeOut" }}
@@ -1020,6 +1061,167 @@ export default function TripDetailPage() {
               </div>
             </div>
           )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+        </>
+      )}
+
+      {/* Mode navigation : carte plein écran + overlays */}
+      {isNavigating && (
+        <div className="absolute inset-0 flex flex-col">
+          <div className="relative flex-1 min-h-0">
+            <DynamicMap
+              center={mapCenter}
+              zoom={16}
+              markers={mapMarkers}
+              polyline={tripPolyline.length > 0 ? tripPolyline : undefined}
+              shapePolylines={shapePolylines}
+              userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined, heading } : undefined}
+              onLocateUser={() => {}}
+              isWatching={isNavigating}
+              onToggleWatch={stopNavigation}
+              followUser={isNavigating}
+              bearing={mapBearing}
+              fitBounds={activeFitBounds}
+              fitBoundsKey={fitBoundsKey}
+            />
+
+            {/* Boutons flottants */}
+            <div className="absolute top-3 right-3 flex flex-col gap-2">
+              <button
+                onClick={() => setVoiceEnabled((v) => !v)}
+                className={`w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-colors ${
+                  voiceEnabled
+                    ? "bg-[var(--color-primary)] text-white"
+                    : "bg-white text-[var(--color-text-secondary)]"
+                }`}
+                aria-label={voiceEnabled ? "Désactiver la voix" : "Activer la voix"}
+              >
+                {voiceEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+              </button>
+            </div>
+
+            {/* Contrôles de navigation en bas */}
+            <div className="absolute bottom-6 left-4 right-4 space-y-3">
+              {/* Progress bar */}
+              <div className="bg-black/50 backdrop-blur-sm rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-full bg-[var(--color-primary)] transition-all duration-1000 ease-linear rounded-full"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between bg-[var(--color-primary)] rounded-[var(--card-radius)] p-4 text-white shadow-lg">
+                <div>
+                  <p className="text-xs text-white/70">Temps écoulé</p>
+                  <p className="text-2xl font-bold font-mono">{formatTime(elapsedSeconds)}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={isPaused ? resumeNavigation : pauseNavigation}
+                    className="w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+                    aria-label={isPaused ? "Reprendre" : "Pause"}
+                  >
+                    {isPaused ? <Play size={20} /> : <Pause size={20} />}
+                  </button>
+                  <button
+                    onClick={() => setShowSuccess(true)}
+                    className="w-12 h-12 rounded-full bg-white text-[var(--color-primary)] hover:bg-white/90 flex items-center justify-center transition-colors"
+                    aria-label="Terminer le trajet"
+                  >
+                    <CheckCircle2 size={20} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Écran de succès / récap à l'arrivée */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={reducedMotion ? undefined : { opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={reducedMotion ? false : { scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={reducedMotion ? undefined : { scale: 0.95, opacity: 0, y: 20 }}
+              transition={reducedMotion ? undefined : { type: "spring", stiffness: 300, damping: 25 }}
+              className="w-full max-w-sm bg-[var(--color-surface)] rounded-[var(--card-radius)] p-6 shadow-2xl text-center"
+            >
+              <div className="mb-4 flex justify-center">
+                {!reducedMotion ? (
+                  <motion.div
+                    animate={{ rotate: [0, -10, 10, 0], scale: [1, 1.2, 1] }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                    className="w-20 h-20 rounded-full bg-[var(--color-eco-green)]/15 flex items-center justify-center"
+                  >
+                    <PartyPopper size={40} className="text-[var(--color-eco-green)]" />
+                  </motion.div>
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-[var(--color-eco-green)]/15 flex items-center justify-center">
+                    <PartyPopper size={40} className="text-[var(--color-eco-green)]" />
+                  </div>
+                )}
+              </div>
+              <h2 className="text-2xl font-bold text-[var(--color-text-primary)] mb-1">Vous êtes arrivé !</h2>
+              <p className="text-sm text-[var(--color-text-secondary)] mb-5">{arrival}</p>
+
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="rounded-xl bg-[var(--color-primary)]/5 p-3">
+                  <p className="text-xs text-[var(--color-text-tertiary)]">Temps de trajet</p>
+                  <p className="text-lg font-bold text-[var(--color-primary)]">{formatTime(elapsedSeconds)}</p>
+                </div>
+                <div className="rounded-xl bg-[var(--color-primary)]/5 p-3">
+                  <p className="text-xs text-[var(--color-text-tertiary)]">Distance</p>
+                  <p className="text-lg font-bold text-[var(--color-primary)]">{(trip?.distanceKm ?? 0) > 0 ? `${(trip?.distanceKm ?? 0).toFixed(1)} km` : "—"}</p>
+                </div>
+                <div className="rounded-xl bg-[var(--color-eco-green)]/10 p-3 col-span-2">
+                  <p className="text-xs text-[var(--color-eco-green)]/80">CO₂ économisé vs voiture</p>
+                  <p className="text-2xl font-bold text-[var(--color-eco-green)]">
+                    {(() => {
+                      const km = trip?.distanceKm ?? 0;
+                      const saved = Math.max(0, Math.round(km * CAR_EMISSION_G_PER_KM - co2));
+                      return saved > 0 ? `${saved} g` : "Bravo !";
+                    })()}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  stopNavigation();
+                  setShowSuccess(false);
+                  // Sauvegarde le trajet dans l'historique utilisateur (si connecté).
+                  addToHistory({
+                    from: departure,
+                    to: arrival,
+                    mode: historyMode,
+                    modeColor: historyModeColor,
+                    duration,
+                    co2,
+                  }).catch(() => {
+                    // Silencieux : l'historique n'est pas bloquant.
+                  });
+                }}
+                className="w-full h-[52px] rounded-[var(--cta-radius)] bg-[var(--color-primary)] text-white font-semibold text-base hover:bg-[var(--color-primary-dark)] transition-colors flex items-center justify-center gap-2"
+              >
+                <Trophy size={20} />
+                Terminer le trajet
+              </button>
+              <button
+                onClick={() => setShowSuccess(false)}
+                className="w-full mt-2 h-10 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+              >
+                Retour à la carte
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

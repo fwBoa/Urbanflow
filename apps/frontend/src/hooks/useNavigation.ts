@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useGeolocation } from "./useGeolocation";
 import type { JourneySegment } from "@/services/api";
-import { Immersion, stopSpeaking, haptic as _haptic } from "@/services/immersion";
+import { Immersion, stopSpeaking } from "@/services/immersion";
 
 // ─── Types ──────────────────────────────────────────────────────────
 export interface NavigationState {
@@ -135,6 +135,7 @@ export function useNavigation(
   routePoints: [number, number][], // [lat, lon][]
   origin: { lat: number; lon: number } | null,
   destination: { lat: number; lon: number } | null,
+  voiceEnabled = true,
 ) {
   const { lat, lon, accuracy, heading, speed, startWatch, stopWatch } = useGeolocation();
   const [isNavigating, setIsNavigating] = useState(false);
@@ -163,9 +164,8 @@ export function useNavigation(
     lastSpokenRef.current = -1;
     stopWatch(); // Désactiver le GPS
     if (timerRef.current) clearInterval(timerRef.current);
-    // Stop voice & haptic
+    // Stop voice
     stopSpeaking();
-    _haptic(0); // cancel ongoing vibration
     // Release wake lock
     if (wakeLockRef.current) {
       wakeLockRef.current.release().catch(() => {});
@@ -331,23 +331,23 @@ export function useNavigation(
         seg.type === "walking"
           ? `Étape ${segIdx + 1} : ${seg.instruction}`
           : `Montez dans le ${seg.mode || "transit"} direction ${seg.direction || seg.toStop || ""}`;
-      Immersion.segmentChange(text);
+      Immersion.segmentChange(text, voiceEnabled);
     }
-  }, [navState.activeSegment, isNavigating, isPaused, segments]);
+  }, [navState.activeSegment, isNavigating, isPaused, segments, voiceEnabled]);
 
   // ─── Annonce arrivée ─────────────────────────────────────────────
   useEffect(() => {
     if (navState.arrived && isNavigating) {
-      Immersion.arrived();
+      Immersion.arrived(voiceEnabled);
     }
-  }, [navState.arrived, isNavigating]);
+  }, [navState.arrived, isNavigating, voiceEnabled]);
 
   // ─── Alerte hors trajet ──────────────────────────────────────────
   useEffect(() => {
     if (navState.offRoute && isNavigating) {
-      Immersion.offRoute();
+      Immersion.offRoute(voiceEnabled);
     }
-  }, [navState.offRoute, isNavigating]);
+  }, [navState.offRoute, isNavigating, voiceEnabled]);
 
   // ─── Point de manœuvre (extrémité du segment actif) ──────────────────
   // Source privilégiée : dernier point du geojson du segment actif (présent côté

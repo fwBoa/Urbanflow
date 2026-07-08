@@ -9,9 +9,13 @@ interface AppShellProps {
   title: string;
   showBack?: boolean;
   rightAction?: React.ReactNode;
+  /** Supprime le container centré pour permettre un contenu plein écran. */
+  fullBleed?: boolean;
+  /** Masque la barre de navigation (utile en mode navigation plein écran). */
+  hideNav?: boolean;
 }
 
-export default function AppShell({ children, title, showBack, rightAction }: AppShellProps) {
+export default function AppShell({ children, title, showBack, rightAction, fullBleed, hideNav }: AppShellProps) {
   return (
     <div className="min-h-screen flex flex-col">
       {/* WCAG 2.4.1: Skip navigation link */}
@@ -22,10 +26,15 @@ export default function AppShell({ children, title, showBack, rightAction }: App
         Aller au contenu principal
       </a>
       <Header title={title} showBack={showBack} rightAction={rightAction} />
-      <main id="main-content" className="flex-1 px-4 py-4 pb-[96px] max-w-lg mx-auto w-full">
+      <main
+        id="main-content"
+        className={`flex-1 w-full ${
+          fullBleed ? "relative p-0 pb-0" : "px-4 py-4 pb-[96px] max-w-lg mx-auto"
+        }`}
+      >
         {children}
       </main>
-      <NavBar />
+      {!hideNav && <NavBar />}
     </div>
   );
 }

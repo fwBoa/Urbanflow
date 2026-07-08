@@ -18,6 +18,10 @@ import {
   Shield,
   FileText,
   AlertTriangle,
+  X,
+  Sparkles,
+  TrainFront,
+  ChevronRight,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
@@ -67,6 +71,7 @@ export default function ProfilePage() {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [newBadges, setNewBadges] = useState<Badge[]>([]);
 
   const { isDark, toggleDarkMode } = useDarkMode();
   const {
@@ -96,6 +101,18 @@ export default function ProfilePage() {
       const [s, b] = await Promise.all([getStats(), getBadges()]);
       setStats(s);
       setBadges(b);
+      // Détecte les nouveaux badges débloqués depuis la dernière visite du profil.
+      try {
+        const seenKey = "uf:seen-badges";
+        const seen = JSON.parse(localStorage.getItem(seenKey) || "[]") as string[];
+        const freshlyUnlocked = b.filter((badge) => badge.unlocked && !seen.includes(badge.key));
+        if (freshlyUnlocked.length > 0) {
+          setNewBadges(freshlyUnlocked);
+        }
+        localStorage.setItem(seenKey, JSON.stringify(b.map((badge) => badge.key)));
+      } catch {
+        // ignore
+      }
     }
     /* eslint-disable react-hooks/set-state-in-effect */
     if (isAuthenticated && user) {
@@ -193,6 +210,41 @@ export default function ProfilePage() {
 
   return (
     <AppShell title="Profil">
+      {/* Notification de nouveaux badges */}
+      {newBadges.length > 0 && (
+        <div className="mb-4 rounded-[var(--card-radius)] bg-[var(--color-mobility-orange)]/10 border border-[var(--color-mobility-orange)]/20 p-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-[var(--color-mobility-orange)]/15 flex items-center justify-center shrink-0">
+              <Sparkles size={16} className="text-[var(--color-mobility-orange)]" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                {newBadges.length > 1
+                  ? `${newBadges.length} nouveaux succès débloqués !`
+                  : "Nouveau succès débloqué !"}
+              </p>
+              <div className="flex flex-wrap gap-2 mt-1.5">
+                {newBadges.map((b) => (
+                  <span
+                    key={b.key}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text-primary)] border border-[var(--color-border)]"
+                  >
+                    <span>{b.emoji}</span> {b.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => setNewBadges([])}
+              className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] p-1"
+              aria-label="Fermer"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Avatar & Info */}
       <div className="flex flex-col items-center mb-6">
         {/* Avatar - editable only for authenticated users */}
@@ -453,6 +505,18 @@ export default function ProfilePage() {
         >
           {isDark ? "Mode clair" : "Mode sombre"}
         </Switch>
+
+        <button
+          onClick={() => router.push("/lines")}
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--color-border)]/30 transition-colors border-t border-[var(--color-border)]"
+        >
+          <TrainFront size={18} className="text-[var(--color-text-tertiary)]" />
+          <div className="flex-1">
+            <p className="text-sm text-[var(--color-text-primary)]">Lignes en temps réel</p>
+            <p className="text-xs text-[var(--color-text-tertiary)]">État du trafic sur le réseau</p>
+          </div>
+          <ChevronRight size={16} className="text-[var(--color-text-tertiary)]" />
+        </button>
       </div>
 
       {/* Auth section */}
