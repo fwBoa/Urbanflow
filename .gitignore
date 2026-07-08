@@ -55,3 +55,12 @@ docker/certs/*.crt
 AUDIT_PROJET.md
 KAIZEN.md
 PLAN.md
+
+# ─── Dossiers et documents techniques du rendu académique ───
+# Ces fichiers ne doivent pas être versionnés dans le dépôt applicatif.
+docs/
+Dossier_Technique_*.md
+Rendu_*.md
+*.pdf
+*.docx
+*.pptx
