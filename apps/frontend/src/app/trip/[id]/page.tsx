@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock, MapPin, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw, Loader2 } from "lucide-react";
-import { getModeIcon } from "@/lib/modeMeta";
+import ModeIcon from "@/components/ModeIcon";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
@@ -64,24 +64,23 @@ function CO2Comparison({ co2, distanceKm }: { co2: number; distanceKm?: number }
   );
 }
 
-// ─── Mode metadata (label FR, icône) — utilisation du mapping unifié IDFM ────
+// ─── Mode metadata (label FR, mode résolu) — utilisation du mapping unifié IDFM ─
 function getModeInfo(mode?: string, type?: string): {
   label: string;
-  Icon: React.ComponentType<{ size?: number }>;
+  resolvedMode: string;
   bgColor: string;
   ringColor: string;
 } {
   const resolvedMode = type === "walking" ? "walking" : type === "velib" ? "velib" : mode;
-  const Icon = getModeIcon(resolvedMode);
   const t = type || "";
-  if (t === "walking") return { label: "Marche", Icon, bgColor: "bg-slate-100 dark:bg-slate-800", ringColor: "ring-slate-300" };
-  if (t === "velib") return { label: "Vélib'", Icon, bgColor: "bg-[var(--color-eco-green)]/10", ringColor: "ring-[var(--color-eco-green)]" };
-  if (resolvedMode?.includes("tram")) return { label: "Tram", Icon, bgColor: "bg-purple-100 dark:bg-purple-900/30", ringColor: "ring-purple-300" };
-  if (resolvedMode?.includes("bus")) return { label: "Bus", Icon, bgColor: "bg-sky-100 dark:bg-sky-900/30", ringColor: "ring-sky-300" };
-  if (resolvedMode?.includes("rer")) return { label: "RER", Icon, bgColor: "bg-pink-100 dark:bg-pink-900/30", ringColor: "ring-pink-300" };
-  if (resolvedMode?.includes("metro") || resolvedMode?.includes("métro")) return { label: "Métro", Icon, bgColor: "bg-blue-100 dark:bg-blue-900/30", ringColor: "ring-blue-300" };
-  if (resolvedMode?.includes("transilien") || resolvedMode?.includes("train")) return { label: "Train", Icon, bgColor: "bg-indigo-100 dark:bg-indigo-900/30", ringColor: "ring-indigo-300" };
-  return { label: "Transit", Icon, bgColor: "bg-slate-100", ringColor: "ring-slate-300" };
+  if (t === "walking") return { label: "Marche", resolvedMode: "walking", bgColor: "bg-slate-100 dark:bg-slate-800", ringColor: "ring-slate-300" };
+  if (t === "velib") return { label: "Vélib'", resolvedMode: "velib", bgColor: "bg-[var(--color-eco-green)]/10", ringColor: "ring-[var(--color-eco-green)]" };
+  if (resolvedMode?.includes("tram")) return { label: "Tram", resolvedMode: resolvedMode || "tram", bgColor: "bg-purple-100 dark:bg-purple-900/30", ringColor: "ring-purple-300" };
+  if (resolvedMode?.includes("bus")) return { label: "Bus", resolvedMode: resolvedMode || "bus", bgColor: "bg-sky-100 dark:bg-sky-900/30", ringColor: "ring-sky-300" };
+  if (resolvedMode?.includes("rer")) return { label: "RER", resolvedMode: resolvedMode || "rer", bgColor: "bg-pink-100 dark:bg-pink-900/30", ringColor: "ring-pink-300" };
+  if (resolvedMode?.includes("metro") || resolvedMode?.includes("métro")) return { label: "Métro", resolvedMode: resolvedMode || "metro", bgColor: "bg-blue-100 dark:bg-blue-900/30", ringColor: "ring-blue-300" };
+  if (resolvedMode?.includes("transilien") || resolvedMode?.includes("train")) return { label: "Train", resolvedMode: resolvedMode || "train", bgColor: "bg-indigo-100 dark:bg-indigo-900/30", ringColor: "ring-indigo-300" };
+  return { label: "Transit", resolvedMode: resolvedMode || "transit", bgColor: "bg-slate-100", ringColor: "ring-slate-300" };
 }
 
 // Fallback data when no journey data is passed
@@ -162,8 +161,12 @@ export default function TripDetailPage() {
     return null;
   });
 
+  // ─── Segments de timeline dont les alertes sont dépliées ─────────────
+  const [expandedAlertSegments, setExpandedAlertSegments] = useState<Set<number>>(new Set());
+
   // Le recalcul est automatiquement en cours si on n'a pas de trip mais qu'on a les coords.
-  const [tripLoading, setTripLoading] = useState(() => !trip && hasRecalcCoords);
+  const [recalcDone, setRecalcDone] = useState(false);
+  const tripLoading = !trip && hasRecalcCoords && !recalcDone;
 
   // ─── Recalcul du trajet si sessionStorage est vide (refresh, nouvel onglet) ──
   useEffect(() => {
@@ -174,10 +177,10 @@ export default function TripDetailPage() {
     apiService
       .searchJourney(
         {
-          originLat: parseFloat(originLat!),
-          originLon: parseFloat(originLon!),
-          destLat: parseFloat(destLat!),
-          destLon: parseFloat(destLon!),
+          originLat: parseFloat(originLatParam!),
+          originLon: parseFloat(originLonParam!),
+          destLat: parseFloat(destLatParam!),
+          destLon: parseFloat(destLonParam!),
         },
         controller.signal,
       )
@@ -197,13 +200,13 @@ export default function TripDetailPage() {
         console.warn("Trip recalculation failed:", err);
       })
       .finally(() => {
-        if (!cancelled && !controller.signal.aborted) setTripLoading(false);
+        if (!cancelled && !controller.signal.aborted) setRecalcDone(true);
       });
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, [trip, searchParams, tripId]);
+  }, [trip, searchParams, tripId, hasRecalcCoords, originLatParam, originLonParam, destLatParam, destLonParam]);
 
   const segments = (trip?.segments || fallbackTrip.segments) as JourneyResult["segments"];
   const firstSeg = segments[0];
@@ -239,7 +242,37 @@ export default function TripDetailPage() {
   );
 
   // ─── Alertes temps réel sur ce trajet ────────────────────────────────
-  const alerts = trip?.alerts || [];
+  const alerts = useMemo(() => trip?.alerts || [], [trip?.alerts]);
+
+  /** Alertes qui concernent explicitement une ligne empruntée par ce trajet. */
+  const relevantAlerts = useMemo(() => {
+    if (!trip) return [];
+    const transitLines = new Set(
+      segments
+        .filter((s) => s.type === "transit")
+        .map((s) => (s.lineName || s.mode || "").toLowerCase()),
+    );
+    return alerts.filter((alert) =>
+      alert.affectedRoutes.some((route) =>
+        transitLines.has(route.toLowerCase()),
+      ),
+    );
+  }, [trip, segments, alerts]);
+
+  const hasRelevantAlerts = relevantAlerts.length > 0;
+  const hasOtherAlerts = alerts.length > relevantAlerts.length;
+
+  /** Retourne les alertes affectant une ligne de segment donné. */
+  const getAlertsForSegment = useCallback(
+    (segment: (typeof segments)[number]) => {
+      if (segment.type !== "transit") return [];
+      const lineKey = (segment.lineName || segment.mode || "").toLowerCase();
+      return alerts.filter((alert) =>
+        alert.affectedRoutes.some((route) => route.toLowerCase() === lineKey),
+      );
+    },
+    [alerts],
+  );
 
   // ─── OSRM Routing for real geometry ─────────────────────────────────
   const { fetchRoute } = useRoute();
@@ -554,37 +587,44 @@ export default function TripDetailPage() {
       {/* CO2 Comparison */}
       <CO2Comparison co2={co2} distanceKm={trip?.distanceKm} />
 
-      {/* Alertes temps réel */}
-      {alerts.length > 0 && (
-        <div className="mb-4 space-y-2">
-          <h2 className="text-sm font-semibold text-amber-700 flex items-center gap-1.5">
-            <AlertTriangle size={16} />
-            Perturbation{alerts.length > 1 ? "s" : ""} en cours
-          </h2>
-          {alerts.map((alert) => (
-            <div
-              key={alert.id}
-              className={`rounded-[var(--card-radius)] p-3 border text-sm ${
-                alert.severity === 'severe'
-                  ? 'bg-red-50 border-red-200 text-red-800'
-                  : alert.severity === 'warning'
-                    ? 'bg-amber-50 border-amber-200 text-amber-800'
-                    : 'bg-blue-50 border-blue-200 text-blue-800'
-              }`}
-            >
-              <p className="font-medium">{alert.headerText}</p>
-              {alert.descriptionText && (
-                <p className="text-xs mt-1 opacity-80">{alert.descriptionText}</p>
-              )}
-              {alert.affectedRoutes?.length > 0 && (
-                <p className="text-[11px] mt-1.5 opacity-70">
-                  Lignes concernées : {alert.affectedRoutes.join(', ')}
+      {/* Bandeau récapitulatif des alertes */}
+      <div className="mb-4">
+        {hasRelevantAlerts ? (
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: -4 }}
+            animate={reducedMotion ? false : { opacity: 1, y: 0 }}
+            className="rounded-[var(--card-radius)] border border-amber-200 bg-amber-50 dark:bg-amber-900/20 p-3"
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="shrink-0 text-amber-600" size={18} />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                  {relevantAlerts.length} perturbation{relevantAlerts.length > 1 ? "s" : ""} sur votre trajet
                 </p>
-              )}
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                  Cliquez sur les segments concernés dans la timeline pour voir les détails.
+                </p>
+                {hasOtherAlerts && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                    D&apos;autres alertes affectent le réseau — consultez l&apos;onglet Alertes.
+                  </p>
+                )}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          </motion.div>
+        ) : trip ? (
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: -4 }}
+            animate={reducedMotion ? false : { opacity: 1, y: 0 }}
+            className="rounded-[var(--card-radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 flex items-center gap-2"
+          >
+            <CheckCircle2 className="shrink-0 text-[var(--color-eco-green)]" size={18} />
+            <p className="text-sm text-[var(--color-text-secondary)]">
+              Aucune perturbation observée sur votre trajet.
+            </p>
+          </motion.div>
+        ) : null}
+      </div>
 
       {/* Timeline */}
       <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-3">
@@ -595,8 +635,10 @@ export default function TripDetailPage() {
           const isActive = isNavigating && i === activeSegment;
           const isDone = isNavigating && i < activeSegment;
           const modeMeta = getModeInfo(segment.mode, segment.type);
-          const ModeIcon = modeMeta.Icon;
           const lineColor = segment.lineColor;
+          const segmentAlerts = getAlertsForSegment(segment);
+          const segmentHasAlerts = segmentAlerts.length > 0;
+          const segmentExpanded = expandedAlertSegments.has(i);
 
           return (
             <motion.div
@@ -604,11 +646,20 @@ export default function TripDetailPage() {
               initial={reducedMotion ? false : { opacity: 0, x: -12 }}
               animate={reducedMotion ? false : { opacity: 1, x: 0 }}
               transition={reducedMotion ? undefined : { type: "spring" as const, stiffness: 300, damping: 28 }}
+              onClick={() => {
+                if (!segmentHasAlerts) return;
+                setExpandedAlertSegments((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(i)) next.delete(i);
+                  else next.add(i);
+                  return next;
+                });
+              }}
               className={`relative flex gap-3 rounded-xl p-3 border ${
                 isActive ? "bg-[var(--color-primary)]/5 border-[var(--color-primary)]/30 shadow-sm"
                   : isDone ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200/50"
                   : "bg-surface border-[var(--color-border)]"
-              }`}
+              } ${segmentHasAlerts ? "cursor-pointer" : ""}`}
             >
               {/* Timeline node : icône + couleur de la ligne */}
               <div className="flex flex-col items-center pt-0.5">
@@ -618,7 +669,7 @@ export default function TripDetailPage() {
                   } ${isActive ? "scale-110" : ""}`}
                   style={!isDone ? { backgroundColor: lineColor || "#2E7D9B" } : {}}
                 >
-                  {isDone ? <CheckCircle2 size={18} /> : <ModeIcon size={18} />}
+                  {isDone ? <CheckCircle2 size={18} /> : <ModeIcon mode={modeMeta.resolvedMode} size={18} />}
                 </div>
                 {i < segments.length - 1 && (
                   <div
@@ -655,6 +706,20 @@ export default function TripDetailPage() {
                   {isActive && (
                     <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--color-primary)] text-white shrink-0">
                       <CircleDot size={10} /> En cours
+                    </span>
+                  )}
+                  {segmentHasAlerts && !isActive && (
+                    <span
+                      className={`ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                        segmentAlerts.some((a) => a.severity === "severe")
+                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-200"
+                          : segmentAlerts.some((a) => a.severity === "warning")
+                            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+                            : "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200"
+                      }`}
+                    >
+                      <AlertTriangle size={10} />
+                      {segmentAlerts.length} alerte{segmentAlerts.length > 1 ? "s" : ""}
                     </span>
                   )}
                 </div>
@@ -717,6 +782,65 @@ export default function TripDetailPage() {
                     )}
                   </div>
                 )}
+
+                {/* Alertes contextualisées pour ce segment */}
+                <AnimatePresence>
+                  {segmentExpanded && segmentHasAlerts && (
+                    <motion.div
+                      initial={reducedMotion ? false : { opacity: 0, height: 0 }}
+                      animate={reducedMotion ? false : { opacity: 1, height: "auto" }}
+                      exit={reducedMotion ? undefined : { opacity: 0, height: 0 }}
+                      className="mt-2 space-y-2 overflow-hidden"
+                    >
+                      {segmentAlerts.map((alert, idx) => (
+                        <div
+                          key={idx}
+                          className={`rounded-lg border p-2.5 text-xs ${
+                            alert.severity === "severe"
+                              ? "border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800"
+                              : alert.severity === "warning"
+                                ? "border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800"
+                                : "border-sky-200 bg-sky-50 dark:bg-sky-900/20 dark:border-sky-800"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle
+                              size={14}
+                              className={`shrink-0 mt-0.5 ${
+                                alert.severity === "severe"
+                                  ? "text-red-600 dark:text-red-300"
+                                  : alert.severity === "warning"
+                                    ? "text-amber-600 dark:text-amber-300"
+                                    : "text-sky-600 dark:text-sky-300"
+                              }`}
+                            />
+                            <div className="flex-1">
+                              <p
+                                className={`font-semibold ${
+                                  alert.severity === "severe"
+                                    ? "text-red-800 dark:text-red-200"
+                                    : alert.severity === "warning"
+                                      ? "text-amber-800 dark:text-amber-200"
+                                      : "text-sky-800 dark:text-sky-200"
+                                }`}
+                              >
+                                {alert.headerText || alert.effect || "Perturbation"}
+                                {alert.severity && (
+                                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide font-bold bg-white/60 dark:bg-black/20">
+                                    {alert.severity}
+                                  </span>
+                                )}
+                              </p>
+                              {alert.descriptionText && alert.descriptionText !== alert.headerText && (
+                                <p className="mt-1 text-[var(--color-text-secondary)]">{alert.descriptionText}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           );

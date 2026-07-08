@@ -1,6 +1,7 @@
 "use client";
 
-import { getModeIcon, getModeColor, getModeLabel, getTextColorForBackground } from "@/lib/modeMeta";
+import { getModeColor, getModeLabel, getTextColorForBackground } from "@/lib/modeMeta";
+import ModeIcon from "./ModeIcon";
 
 export interface ModeBadgeProps {
   /** Mode brut renvoyé par l'API : 'metro', 'rer', 'bus', 'tram', 'marche', 'velib', etc. */
@@ -37,7 +38,6 @@ export default function ModeBadge({
   showLabel = false,
 }: ModeBadgeProps) {
   const resolvedMode = type === "walking" ? "walking" : type === "velib" ? "velib" : mode;
-  const Icon = getModeIcon(resolvedMode);
   const sizes = SIZE_CLASSES[size];
 
   const bg = lineColor || getModeColor(resolvedMode, lineName);
@@ -51,7 +51,7 @@ export default function ModeBadge({
       role="img"
       aria-label={label}
     >
-      <Icon size={sizes.icon} />
+      <ModeIcon mode={resolvedMode} size={sizes.icon} />
       {lineName && (
         <span className={`font-bold ${sizes.lineText}`} style={{ color: fg }}>
           {lineName}

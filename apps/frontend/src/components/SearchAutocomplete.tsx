@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect, useId, useCallback, ReactNode } from "react";
-import { MapPin, Building2 } from "lucide-react";
-import { getModeIcon, getModeColor } from "@/lib/modeMeta";
+import { Building2 } from "lucide-react";
+import { getModeColor } from "@/lib/modeMeta";
+import ModeIcon from "./ModeIcon";
 import SearchBar from "./SearchBar";
 import type { PrimStop, GeocodeResult } from "@/services/api";
 
@@ -31,9 +32,8 @@ interface SearchAutocompleteProps {
 }
 
 function StopIcon({ arrtype }: { arrtype: string }) {
-  const Icon = getModeIcon(arrtype);
   const color = getModeColor(arrtype);
-  return <Icon size={14} style={{ color }} />;
+  return <ModeIcon mode={arrtype} size={14} style={{ color }} />;
 }
 
 export default function SearchAutocomplete({
