@@ -109,12 +109,14 @@ services:
       - backend
       - frontend
 
-  # ─── Nginx dev (HTTPS local, pas de profile) ───
+  # ─── Nginx dev (HTTPS local uniquement) ───
   nginx-dev:
     image: nginx:alpine
     container_name: urbanflow-nginx-dev
     restart: unless-stopped
     logging: *default-logging
+    profiles:
+      - dev
     ports:
       - '443:443'
     volumes:
