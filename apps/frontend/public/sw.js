@@ -105,18 +105,24 @@ self.addEventListener("fetch", (event) => {
     caches.match(request).then((cached) => {
       if (cached) return cached;
 
-      return fetch(request).then((response) => {
-        // Cache successful responses for static assets
-        if (response.ok && isCacheable(request)) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            if (new URL(request.url).protocol.startsWith("http")) {
-              cache.put(request, responseClone);
-            }
-          });
-        }
-        return response;
-      });
+      return fetch(request)
+        .then((response) => {
+          // Cache successful responses for static assets
+          if (response.ok && isCacheable(request)) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              if (new URL(request.url).protocol.startsWith("http")) {
+                cache.put(request, responseClone);
+              }
+            });
+          }
+          return response;
+        })
+        .catch((err) => {
+          // Asset manquant ou requête bloquée : ne pas planter la promesse.
+          console.warn("[SW] Static asset fetch failed:", request.url, err);
+          return Response.error();
+        });
     })
   );
 });

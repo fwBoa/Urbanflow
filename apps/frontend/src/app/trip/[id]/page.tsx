@@ -23,6 +23,9 @@ import { addToHistory } from "@/services/favorites";
 // Source : ADEME ~170 g CO₂/km (valeur conservative pour comparaison)
 const CAR_EMISSION_G_PER_KM = 170;
 
+// ─── Modes de transport en commun par défaut (exclut Vélib' sauf demande explicite) ───
+const DEFAULT_TRANSIT_MODES = "metro,rer,tram,bus,transilien";
+
 // ─── Haversine local (distance en mètres) pour le garde déplacement reroute ──
 function haversinePage(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -201,6 +204,7 @@ export default function TripDetailPage() {
           originLon: parseFloat(originLonParam!),
           destLat: parseFloat(destLatParam!),
           destLon: parseFloat(destLonParam!),
+          modes: DEFAULT_TRANSIT_MODES,
         },
         controller.signal,
       )
@@ -469,6 +473,7 @@ export default function TripDetailPage() {
             originLon: fromPos.lon,
             destLat: destPos.lat,
             destLon: destPos.lon,
+            modes: DEFAULT_TRANSIT_MODES,
           },
           controller.signal,
         );
