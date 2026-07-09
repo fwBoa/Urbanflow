@@ -1,5 +1,5 @@
-# ─── Deploy: manual, gated, via SSH to the Docker host ──────────────────────
-# Triggered manually (workflow_dispatch) with an environment choice.
+# ─── Deploy: auto on push to main or manual, gated via SSH ───────────────
+# Triggered automatically on every push to main, or manually (workflow_dispatch).
 # Production is gated by the GitHub "prod" environment (configure required
 # reviewers in repo Settings → Environments). The job SSHes into the host
 # and runs scripts/deploy.sh, which pulls the branch and rebuilds the stack.
@@ -12,22 +12,25 @@
 name: Deploy
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       environment:
         description: Target environment
         required: true
         type: choice
-        default: staging
+        default: prod
         options:
           - staging
           - prod
 
 jobs:
   deploy:
-    name: Deploy (${{ github.event.inputs.environment }})
+    name: Deploy (${{ github.event.inputs.environment || 'prod' }})
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment || 'prod' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -56,4 +59,4 @@ jobs:
             git fetch --prune
             git checkout ${{ github.ref_name }}
             git reset --hard origin/${{ github.ref_name }}
-            ./scripts/deploy.sh ${{ github.event.inputs.environment }}
+            ./scripts/deploy.sh ${{ github.event.inputs.environment || 'prod' }}
