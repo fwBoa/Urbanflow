@@ -56,6 +56,10 @@ services:
       PRIM_API_KEY: ${PRIM_API_KEY:-}
       PRIM_API_URL: ${PRIM_API_URL:-https://prim.iledefrance-mobilites.fr}
       GTFS_RADIUS_KM: ${GTFS_RADIUS_KM:-15}
+      # Web Push VAPID credentials (required for push notifications)
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:contact@urbanflow.app}
       # GTFS désormais en PostgreSQL : Node ne conserve plus les ~6,8 M
       # stop_times en heap (consommation réelle ~100 Mo). L'ancienne limite
       # 3584 Mo (ère Maps en mémoire → OOM exit 137 sur la VM 3,826 Gio) est
@@ -80,6 +84,7 @@ services:
       # vide dans l'env → API_BASE="" → URLs relatives "/api" proxifiées par nginx.
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
     container_name: urbanflow-web
     restart: unless-stopped
     logging: *default-logging
