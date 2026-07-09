@@ -1080,7 +1080,7 @@ export default function TripDetailPage() {
               userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined, heading } : undefined}
               onLocateUser={() => {}}
               isWatching={isNavigating}
-              onToggleWatch={stopNavigation}
+              onToggleWatch={() => {}}
               followUser={isNavigating}
               bearing={mapBearing}
               fitBounds={activeFitBounds}
