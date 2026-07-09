@@ -210,6 +210,7 @@ describe("TripDetailPage", () => {
         originLon: 2.3522,
         destLat: 48.8474,
         destLon: 2.4358,
+        modes: "metro,rer,tram,bus,transilien",
       },
       expect.any(AbortSignal),
     );
