@@ -14,6 +14,7 @@ export default function ServiceWorkerRegistration() {
 
     async function registerSW() {
       try {
+        const hadController = Boolean(navigator.serviceWorker.controller);
         registration = await navigator.serviceWorker.register("/sw.js", {
           scope: "/",
         });
@@ -23,8 +24,12 @@ export default function ServiceWorkerRegistration() {
           if (!newWorker) return;
 
           newWorker.addEventListener("statechange", () => {
+            // On n'affiche la bannière de mise à jour que s'il y avait déjà un
+            // Service Worker actif (vraie mise à jour), pas lors de la première
+            // visite ou de l'installation initiale.
             if (
               newWorker.state === "activated" &&
+              hadController &&
               navigator.serviceWorker.controller
             ) {
               setUpdateAvailable(true);
