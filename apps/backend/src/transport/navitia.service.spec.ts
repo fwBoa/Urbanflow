@@ -235,7 +235,7 @@ describe('NavitiaService', () => {
   });
 
   describe('forbiddenUrisForModes', () => {
-    it('returns empty array when no modes specified', async () => {
+    it('forbids bike-sharing by default when no modes specified', async () => {
       await service.findJourneys(
         { lat: 48.85, lon: 2.35 },
         { lat: 48.86, lon: 2.36 },
@@ -243,8 +243,8 @@ describe('NavitiaService', () => {
       expect(httpService.get).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          params: expect.not.objectContaining({
-            forbidden_uris: expect.anything(),
+          params: expect.objectContaining({
+            forbidden_uris: ['physical_mode:Bike'],
           }),
         }),
       );

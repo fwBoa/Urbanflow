@@ -408,11 +408,24 @@ export class NavitiaService {
    * à interdire). Navitia interdit par liste : on interdit tout ce qui n'est
    * pas explicitement demandé (quand une liste de modes est fournie).
    * Marche toujours autorisée (transit/accès impossible sinon).
+   *
+   * Par défaut (aucun mode précisé), on autorise tous les transports en commun
+   * mais PAS le Vélib' (bike-sharing). Il faut explicitement demander 'velib'
+   * pour l'inclure.
    */
   private forbiddenUrisForModes(modes?: TransportMode[]): string[] {
-    if (!modes || modes.length === 0) return [];
+    const all = [
+      'Metro',
+      'Bus',
+      'Tramway',
+      'Rail',
+      'RapidTransit',
+      'Funicular',
+      'Shuttle',
+      'Bike',
+    ];
     const want = new Set<string>();
-    for (const m of modes) {
+    for (const m of modes || []) {
       if (m === 'metro') want.add('Metro');
       if (m === 'rer' || m === 'transilien') {
         want.add('RapidTransit');
@@ -422,25 +435,25 @@ export class NavitiaService {
       if (m === 'bus') want.add('Bus');
       if (m === 'velib') want.add('Bike');
     }
-    // Si l'utilisateur ne demande que marche/velib, on interdit tout transit.
+
+    // Aucun mode précisé → transport en commun uniquement, Vélib' interdit.
     if (want.size === 0) {
-      return [
-        'physical_mode:Metro',
-        'physical_mode:Bus',
-        'physical_mode:Tramway',
-        'physical_mode:Rail',
-        'physical_mode:RapidTransit',
-      ];
+      return ['physical_mode:Bike'];
     }
-    const all = [
-      'Metro',
-      'Bus',
-      'Tramway',
-      'Rail',
-      'RapidTransit',
-      'Funicular',
-      'Shuttle',
-    ];
+
+    // Si l'utilisateur demande seulement marche/velib (pas de transit),
+    // on interdit tous les modes de transport en commun.
+    const hasTransit =
+      want.has('Metro') ||
+      want.has('Bus') ||
+      want.has('Tramway') ||
+      want.has('Rail') ||
+      want.has('RapidTransit');
+    if (!hasTransit) {
+      return all.filter((m) => !want.has(m)).map((m) => `physical_mode:${m}`);
+    }
+
+    // Sinon on filtre normalement : on interdit ce qui n'est pas demandé.
     return all.filter((m) => !want.has(m)).map((m) => `physical_mode:${m}`);
   }
 
