@@ -60,6 +60,7 @@ export class Notification {
     type: 'varchar',
     length: 255,
     nullable: true,
+    default: null,
   })
   externalAlertId: string | null;
 
