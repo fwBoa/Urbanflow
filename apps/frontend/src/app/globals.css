@@ -139,3 +139,36 @@ html {
     padding-top: env(safe-area-inset-top, 20px);
   }
 }
+
+/* ─── Disable double-tap zoom on interactive elements ───
+   touch-action: manipulation keeps scrolling/panning but removes the
+   300 ms double-tap zoom gesture on buttons, links and form controls. */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+[role="switch"],
+[role="tab"],
+[role="option"] {
+  touch-action: manipulation;
+}
+
+/* ─── Minimum tap target size (WCAG 2.5.5) ─── */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+[role="switch"] {
+  min-height: 44px;
+}
+
+/* ─── Prevent iOS auto-zoom on focus for inputs smaller than 16px ─── */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
