@@ -1069,8 +1069,8 @@ export default function TripDetailPage() {
 
       {/* Mode navigation : carte plein écran + overlays */}
       {isNavigating && (
-        <div className="absolute inset-0 flex flex-col">
-          <div className="relative flex-1 min-h-0">
+        <div className="absolute inset-0 flex flex-col z-0">
+          <div className="relative flex-1 min-h-0 isolate">
             <DynamicMap
               center={mapCenter}
               zoom={16}
@@ -1088,7 +1088,7 @@ export default function TripDetailPage() {
             />
 
             {/* Boutons flottants */}
-            <div className="absolute top-3 right-3 flex flex-col gap-2">
+            <div className="absolute top-3 right-3 z-[500] flex flex-col gap-2">
               <button
                 onClick={() => setVoiceEnabled((v) => !v)}
                 className={`w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-colors ${
@@ -1103,7 +1103,7 @@ export default function TripDetailPage() {
             </div>
 
             {/* Contrôles de navigation en bas */}
-            <div className="absolute bottom-6 left-4 right-4 space-y-3">
+            <div className="absolute bottom-6 left-4 right-4 z-[500] space-y-3">
               {/* Progress bar */}
               <div className="bg-black/50 backdrop-blur-sm rounded-full h-2 overflow-hidden">
                 <div
