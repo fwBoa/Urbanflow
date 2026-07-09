@@ -35,7 +35,7 @@ export class History {
   @Column({ name: 'mode_color' })
   modeColor: string;
 
-  @Column()
+  @Column({ type: 'varchar', length: 255 })
   duration: string;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
