@@ -12,10 +12,10 @@ export default function PrivacyPage() {
             1. Responsable du traitement
           </h2>
           <p>
-            <strong>UrbanFlow Mobility</strong> — Projet académique de plateforme de mobilité multimodale.
+            <strong>UrbanFlow Mobility</strong> — plateforme de mobilité multimodale.
           </p>
           <p>
-            Contact : <a href="mailto:privacy@urbanflow.app" className="text-[var(--color-primary)] underline">privacy@urbanflow.app</a>
+            Contact : <a href="mailto:jeandavidzamblezie@outlook.fr" className="text-[var(--color-primary)] underline">jeandavidzamblezie@outlook.fr</a>
           </p>
         </section>
 
@@ -142,7 +142,7 @@ export default function PrivacyPage() {
             5. Sous-traitants
           </h2>
           <ul className="list-disc list-inside space-y-1">
-            <li><strong>Hostinger</strong> (hébergeur VPS) — données sur serveurs en UE, DPA disponible</li>
+            <li><strong>OVH</strong> (hébergeur VPS) — données sur serveurs en UE, DPA disponible</li>
             <li><strong>OpenStreetMap</strong> (cartographie) — aucune donnée personnelle transmise</li>
             <li><strong>PRIM / IDF Mobilités</strong> (données transport) — API publiques Open Data</li>
           </ul>
@@ -186,7 +186,7 @@ export default function PrivacyPage() {
             La date de dernière mise à jour est indiquée ci-dessous.
           </p>
           <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">
-            Dernière mise à jour : 20 mai 2026 — Version 1.0
+            Dernière mise à jour : 10 juillet 2026 — Version 1.1
           </p>
         </section>
       </div>
