@@ -63,38 +63,4 @@ export class NotificationsService {
       order: { createdAt: 'DESC' },
     });
   }
-
-  /**
-   * Create disruption alerts for users whose favorites match a given line.
-   * Called by the GTFS-RT watcher when a disruption is detected.
-   */
-  async notifyUsersForLine(
-    lineId: string,
-    type: 'disruption' | 'delay',
-    title: string,
-    message: string,
-    userIds: string[],
-  ): Promise<void> {
-    const notifications = userIds.map((userId) =>
-      this.notifRepo.create({
-        userId,
-        type,
-        title,
-        message,
-        relatedLine: lineId,
-      }),
-    );
-    await this.notifRepo.save(notifications);
-
-    // Envoyes web push en parallèle sans bloquer la transaction in-app.
-    await Promise.all(
-      userIds.map((userId) =>
-        this.pushService.sendToUser(userId, {
-          title,
-          body: message,
-          actionUrl: `/line/${lineId}`,
-        }),
-      ),
-    );
-  }
 }

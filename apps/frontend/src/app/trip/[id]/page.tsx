@@ -10,7 +10,6 @@ import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
 import ModeBadge from "@/components/ModeBadge";
 import TurnByTurnBanner from "@/components/TurnByTurnBanner";
-import { useRoute } from "@/hooks/useTransport";
 import { useNavigation } from "@/hooks/useNavigation";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { MAP_MODE_COLORS } from "@/constants/mode-colors";
@@ -302,27 +301,35 @@ export default function TripDetailPage() {
     [alerts],
   );
 
-  // ─── OSRM Routing for real geometry ─────────────────────────────────
-  const { fetchRoute } = useRoute();
-  const [tripPolyline, setTripPolyline] = useState<[number, number][]>([]);
-  const hasFetchedRef = useRef(false);
+  // ─── Trip polyline from Navitia segment geometry ──────────────────────
+  // On préfère les geojson embarqués dans chaque segment (fournis par Navitia)
+  // à la polyligne OSRM globale, qui emprunte trop souvent des voies véhiculées.
+  const tripPolyline = useMemo(() => {
+    if (!trip || segments.length === 0) return [];
 
-  useEffect(() => {
-    if (originPos && destPos && !hasFetchedRef.current) {
-      hasFetchedRef.current = true;
-      fetchRoute(originPos.lat, originPos.lon, destPos.lat, destPos.lon, 'foot')
-        .then((coords) => {
-          if (coords.length > 0) {
-            setTripPolyline(coords);
-          } else {
-            setTripPolyline([
-              [originPos.lat, originPos.lon],
-              [destPos.lat, destPos.lon],
-            ]);
+    const points: [number, number][] = [];
+    for (const seg of segments) {
+      if (seg.geojson && seg.geojson.length >= 2) {
+        for (const c of seg.geojson) {
+          const lat = c[1];
+          const lon = c[0];
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            points.push([lat, lon]);
           }
-        });
+        }
+      }
     }
-  }, [originPos, destPos, fetchRoute]);
+
+    // Si aucune géométrie n'est disponible, repli sur une ligne droite.
+    if (points.length === 0 && originPos && destPos) {
+      points.push(
+        [originPos.lat, originPos.lon],
+        [destPos.lat, destPos.lon],
+      );
+    }
+
+    return points;
+  }, [trip, segments, originPos, destPos]);
 
   // ─── Shapes (trajectoires réelles) ────────────────────────────────
   //  1. Privilégie la géométrie Navitia embarquée dans `seg.geojson` ([lon, lat]).
@@ -485,7 +492,6 @@ export default function TripDetailPage() {
         }
         setTrip(newTrip);
         setOriginPos(fromPos);
-        hasFetchedRef.current = false; // re-fetch OSRM polyline depuis la nouvelle origine
         lastRerouteOriginRef.current = fromPos;
         // Resync sessionStorage + URL (URL ne contient que les coords, pas le trip).
         try {

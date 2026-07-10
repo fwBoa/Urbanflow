@@ -508,6 +508,3 @@ Le backend autorise les requêtes depuis :
 
 Configuré dans `src/main.ts` via `app.enableCors()`.
 
-## Licence
-
-Projet académique — T6 CDSD Septembre 2026

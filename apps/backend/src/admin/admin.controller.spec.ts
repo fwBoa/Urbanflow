@@ -107,7 +107,7 @@ describe('AdminController', () => {
       const trips = { data: [], total: 0, limit: 50, offset: 0 };
       mockAdminService.getAllTrips.mockResolvedValue(trips);
 
-      const result = await controller.getAllTrips({});
+      const result = await controller.getAllTrips(undefined, undefined);
 
       expect(adminService.getAllTrips).toHaveBeenCalledWith(50, 0);
       expect(result).toEqual(trips);
@@ -117,7 +117,7 @@ describe('AdminController', () => {
       const trips = { data: [], total: 0, limit: 20, offset: 10 };
       mockAdminService.getAllTrips.mockResolvedValue(trips);
 
-      const result = await controller.getAllTrips({ limit: 20, offset: 10 });
+      const result = await controller.getAllTrips('20', '10');
 
       expect(adminService.getAllTrips).toHaveBeenCalledWith(20, 10);
       expect(result).toEqual(trips);

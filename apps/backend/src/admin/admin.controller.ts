@@ -5,6 +5,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
   HttpException,
   HttpStatus,
@@ -69,8 +70,13 @@ export class AdminController {
 
   @Get('trips')
   @Roles('admin')
-  async getAllTrips(@Body() body: { limit?: number; offset?: number }) {
-    return this.adminService.getAllTrips(body.limit || 50, body.offset || 0);
+  async getAllTrips(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 50;
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    return this.adminService.getAllTrips(parsedLimit, parsedOffset);
   }
 
   // ─── Notifications ──────────────────────────────────────────────────────

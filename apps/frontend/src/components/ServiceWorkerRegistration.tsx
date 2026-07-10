@@ -11,31 +11,52 @@ export default function ServiceWorkerRegistration() {
     }
 
     let registration: ServiceWorkerRegistration | undefined;
+    let previousController: ServiceWorker | null =
+      navigator.serviceWorker.controller;
 
     async function registerSW() {
       try {
-        const hadController = Boolean(navigator.serviceWorker.controller);
         registration = await navigator.serviceWorker.register("/sw.js", {
           scope: "/",
         });
 
+        // Logue l'installation d'une nouvelle version du worker.
         registration.addEventListener("updatefound", () => {
           const newWorker = registration?.installing;
           if (!newWorker) return;
 
-          newWorker.addEventListener("statechange", () => {
-            // On n'affiche la bannière de mise à jour que s'il y avait déjà un
-            // Service Worker actif (vraie mise à jour), pas lors de la première
-            // visite ou de l'installation initiale.
-            if (
-              newWorker.state === "activated" &&
-              hadController &&
-              navigator.serviceWorker.controller
-            ) {
-              setUpdateAvailable(true);
-            }
-          });
+          if (process.env.NODE_ENV === "development") {
+            console.log("[SW] updatefound:", newWorker.state);
+          }
         });
+
+        // Événement canonique déclenché quand le controller actif change.
+        // C'est le signal fiable qu'une nouvelle version du SW a pris le relais.
+        const onControllerChange = () => {
+          const newController = navigator.serviceWorker.controller;
+          const hadController = Boolean(previousController);
+          const controllerChanged = previousController !== newController;
+
+          if (process.env.NODE_ENV === "development") {
+            console.log("[SW] controllerchange", {
+              hadController,
+              controllerChanged,
+              previous: previousController?.scriptURL,
+              current: newController?.scriptURL,
+            });
+          }
+
+          if (hadController && controllerChanged && newController) {
+            setUpdateAvailable(true);
+          }
+
+          previousController = newController;
+        };
+
+        navigator.serviceWorker.addEventListener(
+          "controllerchange",
+          onControllerChange,
+        );
 
         // En dev on logue pour faciliter le debug PWA/push ; en prod on reste silencieux.
         if (process.env.NODE_ENV === "development") {
