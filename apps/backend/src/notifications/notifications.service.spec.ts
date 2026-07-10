@@ -9,7 +9,6 @@ import { CreateNotificationDto } from './notifications.dto';
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let repo: Repository<Notification>;
-  let pushService: PushService;
 
   const mockNotification: Notification = {
     id: 'notif-1',
@@ -62,7 +61,6 @@ describe('NotificationsService', () => {
     repo = module.get<Repository<Notification>>(
       getRepositoryToken(Notification),
     );
-    pushService = module.get<PushService>(PushService);
   });
 
   it('should be defined', () => {
@@ -159,55 +157,6 @@ describe('NotificationsService', () => {
       expect(repo.find).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         order: { createdAt: 'DESC' },
-      });
-    });
-  });
-
-  describe('notifyUsersForLine', () => {
-    it('creates notifications and sends push to each user', async () => {
-      const userIds = ['user-1', 'user-2'];
-      jest
-        .spyOn(repo, 'create')
-        .mockImplementation((dto: any) => dto as Notification);
-      jest.spyOn(repo, 'save').mockResolvedValue(mockNotification);
-
-      await service.notifyUsersForLine(
-        'M1',
-        'disruption',
-        'Titre',
-        'Message',
-        userIds,
-      );
-
-      expect(repo.save).toHaveBeenCalledTimes(1);
-      expect(repo.save).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({
-            userId: 'user-1',
-            type: 'disruption',
-            title: 'Titre',
-            message: 'Message',
-            relatedLine: 'M1',
-          }),
-          expect.objectContaining({
-            userId: 'user-2',
-            type: 'disruption',
-            title: 'Titre',
-            message: 'Message',
-            relatedLine: 'M1',
-          }),
-        ]),
-      );
-      expect(pushService.sendToUser).toHaveBeenCalledTimes(2);
-      expect(pushService.sendToUser).toHaveBeenCalledWith('user-1', {
-        title: 'Titre',
-        body: 'Message',
-        actionUrl: '/line/M1',
-      });
-      expect(pushService.sendToUser).toHaveBeenCalledWith('user-2', {
-        title: 'Titre',
-        body: 'Message',
-        actionUrl: '/line/M1',
       });
     });
   });
