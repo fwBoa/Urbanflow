@@ -2,9 +2,10 @@
 
 Plateforme intelligente de mobilité multimodale pour Paris et son agglomération.
 
-> **État au 2026-07-06** : backend = NestJS 11 + PostgreSQL 16 + **Navitia PRIM v2 (primaire) + GTFS RAPTOR (repli silencieux)** ; frontend = Next.js 16 + Tailwind v4 + Leaflet. PR `feat/gtfs-postgres` fermée et fusionnée dans `main`.
+> **État au 2026-07-10** : backend = NestJS 11 + PostgreSQL 16 + **Navitia PRIM v2 (primaire) + GTFS RAPTOR (repli silencieux)** ; frontend = Next.js 16 + Tailwind v4 + Leaflet. Navigation GPS immersive (turn-by-turn, reroutage, rotation au cap), PWA offline + Web Push VAPID, CI/CD auto-déploiement OVHcloud.
 >
 > [![CI](https://github.com/fwBoa/Urbanflow/actions/workflows/ci.yml/badge.svg)](https://github.com/fwBoa/Urbanflow/actions/workflows/ci.yml)
+> [![Deploy](https://github.com/fwBoa/Urbanflow/actions/workflows/deploy.yml/badge.svg)](https://github.com/fwBoa/Urbanflow/actions/workflows/deploy.yml)
 > ![Coverage backend](badge/coverage-backend.svg)
 
 ## Stack technique
@@ -16,11 +17,12 @@ Plateforme intelligente de mobilité multimodale pour Paris et son agglomératio
 | Routing | **Navitia PRIM v2** (primaire — itinéraires + alertes + géométrie embarquée) + **GTFS RAPTOR PostgreSQL** (repli silencieux) |
 | Base de données | PostgreSQL 16 (10 tables `gtfs_*` + 4 entités TypeORM : User, Favorite, History, Notification) |
 | Cartographie | Leaflet + OpenStreetMap |
-| Données transport | PRIM IDFM (référentiels + Navitia v2) + Open Data Paris (Vélib') + OSRM (routing piéton/vélo) + GBFS (trottinettes) |
+| Données transport | PRIM IDFM (référentiels + Navitia v2) + Open Data Paris (Vélib') + OSRM (routing piéton/vélo) |
 | Données GTFS statiques | PostgreSQL via `gtfs-db.service.ts` (pool `pg` + `pg-copy-streams` + `pg_prewarm` + cache trip LRU 20k) |
 | Auth | Passport JWT (httpOnly cookies) + bcrypt + RBAC + RGPD (consentGeoloc/Cookies/History + soft delete) |
-| PWA | manifest.json + Service Worker (cache-first / network-first) |
-| DevOps | Docker Compose (4 services) + Nginx (SSL, CSP, rate limiting) |
+| PWA | manifest.json + Service Worker enrichi (offline `/offline`, push VAPID, update banner) |
+| Notifications | Web Push VAPID (`web-push`) + notifications in-app event-driven |
+| DevOps | Docker Compose (4 services) + Nginx + GitHub Actions (`ci.yml` + `deploy.yml` avec approval gate) + VPS OVHcloud |
 
 ## Structure du projet
 
@@ -32,17 +34,22 @@ urbanflow/
 │   │       ├── app/                          # Pages (App Router)
 │   │       │   ├── page.tsx                  # Accueil / landing
 │   │       │   ├── search/page.tsx           # Recherche itinéraire
-│   │       │   ├── trip/[id]/page.tsx        # Détail itinéraire + mode navigation
+│   │       │   ├── trip/[id]/page.tsx        # Détail itinéraire + navigation GPS immersive (plein écran, turn-by-turn)
 │   │       │   ├── favorites/page.tsx
-│   │       │   ├── profile/page.tsx
-│   │       │   └── admin/page.tsx
-│   │       ├── components/                   # 17+ composants
+│   │       │   ├── profile/page.tsx          # RGPD + notifications push VAPID
+│   │       │   ├── admin/page.tsx
+│   │       │   ├── offline/page.tsx          # ⭐ page fallback hors ligne (servie par le SW)
+│   │       │   └── legal/page.tsx            # Mentions légales
+│   │       ├── components/                   # 20+ composants
 │   │       │   ├── NavBar, Header, MapComponent, SearchBar, FilterChip,
 │   │       │   │   TripCard, VelibStationCard, NotificationBell, ConsentBanner,
-│   │       │   │   PwaInstallBanner, ModeBadge, journey-helpers
+│   │       │   │   PwaInstallBanner, ModeBadge, journey-helpers, AppShell, CO2Badge
 │   │       │   ├── SearchAutocomplete.tsx    # ⭐ fusion arrêts + adresses (AbortController)
 │   │       │   ├── NearbyStopDrawer.tsx      # ⭐ drawer prochains départs
-│   │       │   └── Switch.tsx                # ⭐ toggle UI accessible
+│   │       │   ├── Switch.tsx                # ⭐ toggle UI accessible
+│   │       │   ├── TurnByTurnBanner.tsx      # ⭐ banner directionnel (gauche/droite/straight/board/alight/arrive)
+│   │       │   ├── ServiceWorkerRegistration.tsx # ⭐ enregistrement SW + banner update PWA
+│   │       │   └── ModeIcon.tsx              # ⭐ icônes IDFM unifiées
 │   │       ├── constants/mode-colors.ts      # ⭐ MAP_MODE_COLORS + UI_MODE_COLORS (source unique)
 │   │       ├── contexts/
 │   │       │   ├── AuthContext.tsx
@@ -50,10 +57,11 @@ urbanflow/
 │   │       ├── hooks/
 │   │       │   ├── useTransport.ts           # ⭐ AbortController intégré
 │   │       │   ├── useGeolocation.ts
-│   │       │   ├── useNavigation.ts
+│   │       │   ├── useNavigation.ts          # ⭐ navigation GPS (cap, reroutage, voice, wake lock)
+│   │       │   ├── usePushNotifications.ts   # ⭐ subscribe/unsubscribe Web Push VAPID
 │   │       │   ├── useDarkMode.ts
 │   │       │   └── usePrefersReducedMotion.ts # ⭐ a11y OS preference
-│   │       └── services/api.ts, favorites.ts
+│   │       └── services/api.ts, favorites.ts, immersion.ts
 │   └── backend/           # NestJS (port 4000) — voir apps/backend/README.md
 ├── packages/shared/       # Types et constantes partagés
 ├── diagrammes/            # 7 .mmd + .png (cas utilisation, classes, séquence, architecture, IA, déploiement)
@@ -72,9 +80,9 @@ urbanflow/
 - `GET /api/transport/shape/:shapeId` — Géométrie tracé GTFS
 
 **Données de référence :**
-- `GET /api/transport/lines` / `lines-by-mode` / `stops` / `gtfs-stops/search` / `stop-lines`
+- `GET /api/transport/lines-by-mode` / `stops` / `gtfs-stops/search`
 - `GET /api/transport/nearby` (arrêts proches) / `stop-times` (prochains passages)
-- `GET /api/transport/velib` / `velib-nearby` / `elevators` / `traffic`
+- `GET /api/transport/velib` / `velib-nearby`
 - `GET /api/transport/geocode` / `reverse-geocode`
 
 **Auth, profil, RGPD :** `/api/auth/{register,login,me,me/export,consent,...}` (JWT)
@@ -83,9 +91,12 @@ urbanflow/
 
 **Admin (JWT + rôle admin) :** `/api/admin/{dashboard,users,trips,notifications,broadcast,gtfs/reload,gtfs/status}`
 
-**Health et config :** `/api/health`, `/api/transport/{health,gtfs-url,gtfs-status}`, `POST /api/transport/gtfs-reload`
+**Health et config :** `/api/health`, `/api/transport/gtfs-status`, `POST /api/admin/gtfs/reload`
+
+**Notifications push :** `/api/notifications/push/{subscribe,send-test}` (VAPID)
 
 📖 **Liste complète + signatures** : voir [`apps/backend/README.md`](apps/backend/README.md) (3 diagrammes Mermaid : modules NestJS, séquence journey, swap atomique GTFS).
+📦 **Déploiement production** : voir [`GUIDE_DEPLOIEMENT.md`](../GUIDE_DEPLOIEMENT.md) (OVHcloud, Docker Compose, GitHub Actions, required reviewers).
 
 ## Démarrage rapide
 
@@ -180,10 +191,13 @@ cd packages/shared && npm run build
 cd apps/backend && npm run test
 
 # Tests + couverture + badge SVG
-npm run test:cov        # génère coverage-summary.json + badge/coverage-backend.svg
+cd apps/backend && npm run test:cov   # génère coverage-summary.json + badge/coverage-backend.svg
 
 # Tests e2e backend (requiert urbanflow-db running)
 cd apps/backend && DATABASE_URL=postgresql://urbanflow:urbanflow_dev@localhost:5432/urbanflow npm run test:e2e -- --runInBand
+
+# Lancer les tests frontend
+cd apps/frontend && npm test
 
 # Sauvegarder / restaurer la base PostgreSQL
 ./scripts/backup-db.sh ./backups
@@ -192,20 +206,27 @@ cd apps/backend && DATABASE_URL=postgresql://urbanflow:urbanflow_dev@localhost:5
 # Vérification avant mise en production
 voir [docs/prod-verification.md](docs/prod-verification.md)
 
-# Déploiement recommandé sur VPS OVHcloud
-voir [docs/deploiement-ovhcloud.md](docs/deploiement-ovhcloud.md)
+# Déploiement production (guide le plus récent, à la racine du repo T6)
+voir [GUIDE_DEPLOIEMENT.md](../GUIDE_DEPLOIEMENT.md)
 
-# Déploiement alternatif sur VPS Hostinger
+# Anciens guides détaillés
+voir [docs/deploiement-ovhcloud.md](docs/deploiement-ovhcloud.md)
 voir [docs/deploiement-hostinger.md](docs/deploiement-hostinger.md)
 ```
 
 ## CI / CD
 
-Le workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) s'exécute sur chaque push/PR vers `main` :
+Deux workflows GitHub Actions :
 
-1. **Backend** : build → lint bloquant (`--max-warnings 0`) → tests unitaires avec couverture → artefact coverage.
-2. **Backend e2e** : monte un conteneur PostgreSQL 16 et exécute la suite e2e (33 tests) en base réelle.
-3. **Frontend** : lint bloquant → tests → build production.
+1. **`.github/workflows/ci.yml`** sur chaque push/PR vers `main` :
+   - **Backend** : build → lint bloquant (`--max-warnings 0`) → tests unitaires avec couverture → artefact coverage.
+   - **Backend e2e** : monte un conteneur PostgreSQL 16 et exécute la suite e2e (33 tests) en base réelle.
+   - **Frontend** : lint bloquant → tests (Jest + RTL) → build production.
+
+2. **`.github/workflows/deploy.yml`** sur push vers `main` (et `workflow_dispatch`) :
+   - Se déclenche uniquement après le succès de `ci.yml`.
+   - Déploie automatiquement sur le VPS OVHcloud via SSH (`appleboy/ssh-action`).
+   - Gated par l’environnement GitHub `prod` avec **required reviewers**.
 
 ## Licence
 
