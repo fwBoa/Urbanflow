@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
+import { Repository, MoreThan, In, Raw } from 'typeorm';
 import { User } from '../auth/user.entity';
+import { Favorite } from '../favorites/favorite.entity';
 import { Notification } from './notification.entity';
 import { PushService } from './push.service';
 import {
@@ -14,10 +15,14 @@ import {
 /**
  * Consommateur d'événements métier pour les notifications.
  *
- * À chaque événement `alerts.updated` ou `broadcast.notification`, on :
- *  1. Persiste une notification in-app par utilisateur concerné (dédoublonnage
+ * Pour `alerts.updated` (GTFS-RT) :
+ *  1. Filtre les utilisateurs cibles : notifications activées ET favori sur
+ *     une ligne affectée par l'alerte.
+ *  2. Persiste une notification in-app par utilisateur concerné (dédoublonnage
  *     via `externalAlertId` sur 24 h).
- *  2. Envoie une notification push asynchrone aux utilisateurs abonnés.
+ *  3. Envoie une notification push asynchrone aux utilisateurs cibles.
+ *
+ * Pour `broadcast.notification` (admin) : notifie tous les utilisateurs abonnés.
  *
  * Cette approche événementielle découple le polling GTFS-RT du push et
  * permet de traiter les envois en arrière-plan sans bloquer la requête
@@ -32,6 +37,8 @@ export class NotificationsEventsListener {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Notification)
     private readonly notifRepo: Repository<Notification>,
+    @InjectRepository(Favorite)
+    private readonly favoriteRepo: Repository<Favorite>,
     private readonly pushService: PushService,
   ) {}
 
@@ -39,8 +46,38 @@ export class NotificationsEventsListener {
   async handleAlertsUpdated({ alerts }: AlertsUpdatedEvent): Promise<void> {
     if (alerts.length === 0) return;
 
+    // Normalise les lignes affectées pour matcher les favoris (mode = nom de ligne).
+    const affectedRoutes = new Set<string>();
+    for (const alert of alerts) {
+      for (const route of alert.affectedRoutes) {
+        affectedRoutes.add(route.toLowerCase());
+      }
+    }
+    if (affectedRoutes.size === 0) {
+      this.logger.debug(
+        'Alerts have no affected routes, skipping targeted notifications',
+      );
+      return;
+    }
+
+    const matchingFavorites = await this.favoriteRepo.find({
+      where: {
+        mode: Raw((alias) => `LOWER(${alias}) IN (:...routes)`, {
+          routes: Array.from(affectedRoutes),
+        }),
+      },
+      select: ['userId'],
+    });
+
+    const candidateUserIds = [
+      ...new Set(matchingFavorites.map((f) => f.userId)),
+    ];
+    if (candidateUserIds.length === 0) return;
+
+    // On ne pousse que les utilisateurs qui ont activé les notifications ET
+    // ont un favori sur une ligne perturbée.
     const users = await this.userRepo.find({
-      where: { notificationsEnabled: true },
+      where: { id: In(candidateUserIds), notificationsEnabled: true },
       select: ['id'],
     });
     if (users.length === 0) return;
@@ -86,7 +123,7 @@ export class NotificationsEventsListener {
 
     await this.notifRepo.save(notifications, { chunk: 500 });
 
-    // Push asynchrone : un seul message par utilisateur, le détail est in-app.
+    // Push asynchrone : un seul message par utilisateur concerné, le détail est in-app.
     const notifiedUserIds = [...new Set(notifications.map((n) => n.userId))];
     await Promise.all(
       notifiedUserIds.map((userId) =>

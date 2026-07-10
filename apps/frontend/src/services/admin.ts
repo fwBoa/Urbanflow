@@ -127,9 +127,8 @@ export const adminApi = {
 
   // Trips
   getTrips: (limit = 50, offset = 0) =>
-    postAdmin<{ data: Trip[]; total: number; limit: number; offset: number }>(
-      '/api/admin/trips',
-      { limit, offset },
+    fetchAdmin<{ data: Trip[]; total: number; limit: number; offset: number }>(
+      `/api/admin/trips?limit=${limit}&offset=${offset}`,
     ),
 
   // Notifications

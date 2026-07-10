@@ -1,16 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { NotificationsEventsListener } from './notifications-events.listener';
 import { PushService } from './push.service';
 import { Notification } from './notification.entity';
 import { User } from '../auth/user.entity';
+import { Favorite } from '../favorites/favorite.entity';
 import { AlertsUpdatedEvent, BroadcastNotificationEvent } from './events';
 
 describe('NotificationsEventsListener', () => {
   let listener: NotificationsEventsListener;
   let userRepo: Repository<User>;
   let notifRepo: Repository<Notification>;
+  let favoriteRepo: Repository<Favorite>;
   let pushService: PushService;
 
   const users = [{ id: 'user-1' }, { id: 'user-2' }] as User[];
@@ -40,6 +42,12 @@ describe('NotificationsEventsListener', () => {
           },
         },
         {
+          provide: getRepositoryToken(Favorite),
+          useValue: {
+            find: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
           provide: PushService,
           useValue: {
             sendToUser: jest.fn().mockResolvedValue(undefined),
@@ -55,6 +63,9 @@ describe('NotificationsEventsListener', () => {
     notifRepo = module.get<Repository<Notification>>(
       getRepositoryToken(Notification),
     );
+    favoriteRepo = module.get<Repository<Favorite>>(
+      getRepositoryToken(Favorite),
+    );
     pushService = module.get<PushService>(PushService);
   });
 
@@ -67,7 +78,12 @@ describe('NotificationsEventsListener', () => {
   });
 
   describe('handleAlertsUpdated', () => {
-    it('creates in-app notifications and sends push for new alerts', async () => {
+    it('creates in-app notifications and sends push for matching favorites', async () => {
+      (favoriteRepo.find as jest.Mock).mockResolvedValue([
+        { userId: 'user-1', mode: 'M1' },
+        { userId: 'user-2', mode: 'M1' },
+      ]);
+
       const event = new AlertsUpdatedEvent([
         {
           id: 'alert-1',
@@ -81,8 +97,9 @@ describe('NotificationsEventsListener', () => {
 
       await listener.handleAlertsUpdated(event);
 
+      expect(favoriteRepo.find).toHaveBeenCalled();
       expect(userRepo.find).toHaveBeenCalledWith({
-        where: { notificationsEnabled: true },
+        where: { id: In(['user-1', 'user-2']), notificationsEnabled: true },
         select: ['id'],
       });
       expect(notifRepo.create).toHaveBeenCalledTimes(2);
@@ -97,7 +114,31 @@ describe('NotificationsEventsListener', () => {
       );
     });
 
+    it('skips users without matching favorites', async () => {
+      (favoriteRepo.find as jest.Mock).mockResolvedValue([]);
+
+      const event = new AlertsUpdatedEvent([
+        {
+          id: 'alert-1',
+          headerText: 'Perturbation M1',
+          severity: 'severe',
+          affectedRoutes: ['M1'],
+          activePeriod: [{ start: new Date().toISOString(), end: '' }],
+        },
+      ]);
+
+      await listener.handleAlertsUpdated(event);
+
+      expect(userRepo.find).not.toHaveBeenCalled();
+      expect(notifRepo.create).not.toHaveBeenCalled();
+      expect(pushService.sendToUser).not.toHaveBeenCalled();
+    });
+
     it('skips duplicate alerts within the dedup window', async () => {
+      (favoriteRepo.find as jest.Mock).mockResolvedValue([
+        { userId: 'user-1', mode: 'M1' },
+        { userId: 'user-2', mode: 'M1' },
+      ]);
       (notifRepo.findOne as jest.Mock).mockResolvedValue({
         id: 'existing',
       });
@@ -124,12 +165,32 @@ describe('NotificationsEventsListener', () => {
     });
 
     it('does nothing when no users have notifications enabled', async () => {
+      (favoriteRepo.find as jest.Mock).mockResolvedValue([
+        { userId: 'user-1', mode: 'M1' },
+      ]);
       (userRepo.find as jest.Mock).mockResolvedValue([]);
 
       const event = new AlertsUpdatedEvent([
         {
           id: 'alert-1',
           headerText: 'Info',
+          severity: 'info',
+          affectedRoutes: ['M1'],
+          activePeriod: [{ start: new Date().toISOString(), end: '' }],
+        },
+      ]);
+
+      await listener.handleAlertsUpdated(event);
+
+      expect(notifRepo.create).not.toHaveBeenCalled();
+      expect(pushService.sendToUser).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when alert has no affected routes', async () => {
+      const event = new AlertsUpdatedEvent([
+        {
+          id: 'alert-1',
+          headerText: 'Info générale',
           severity: 'info',
           affectedRoutes: [],
           activePeriod: [{ start: new Date().toISOString(), end: '' }],
@@ -138,6 +199,7 @@ describe('NotificationsEventsListener', () => {
 
       await listener.handleAlertsUpdated(event);
 
+      expect(favoriteRepo.find).not.toHaveBeenCalled();
       expect(notifRepo.create).not.toHaveBeenCalled();
       expect(pushService.sendToUser).not.toHaveBeenCalled();
     });
