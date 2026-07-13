@@ -231,7 +231,7 @@ Deux workflows GitHub Actions :
 ## Sécurité
 
 UrbanFlow applique une politique de sécurité en profondeur, auditée régulièrement (SAST Semgrep + `npm audit`).
-Résumé des mesures en place — le détail opérationnel est dans [`SECURITY.md`](SECURITY.md).
+Résumé des mesures appliquées dans cette codebase :
 
 | Domaine | Mesure appliquée |
 |---|---|
