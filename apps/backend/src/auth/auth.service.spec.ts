@@ -15,6 +15,7 @@ import {
   LoginDto,
   UpdateProfileDto,
   ConsentDto,
+  ChangePasswordDto,
 } from './auth.dto';
 import { FavoritesService } from '../favorites/favorites.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -39,6 +40,7 @@ describe('AuthService', () => {
     consentDate: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
+    passwordHash: 'hashed-old-password',
   };
 
   const mockFavoritesService = {
@@ -364,6 +366,72 @@ describe('AuthService', () => {
       await expect(service.getConsent('unknown-id')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('changePassword', () => {
+    const changePasswordDto: ChangePasswordDto = {
+      currentPassword: 'old-password',
+      newPassword: 'new-password123',
+      confirmPassword: 'new-password123',
+    };
+
+    it('should update password when current password is valid', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
+      jest.spyOn(userRepo, 'save').mockResolvedValue(mockUser as User);
+
+      const result = await service.changePassword(
+        'user-123',
+        changePasswordDto,
+      );
+
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+        select: ['id', 'passwordHash'],
+      });
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        changePasswordDto.currentPassword,
+        'hashed-old-password',
+      );
+      expect(bcrypt.hash).toHaveBeenCalledWith(
+        changePasswordDto.newPassword,
+        12,
+      );
+      expect(result).toEqual({ message: 'Mot de passe mis à jour' });
+    });
+
+    it('should throw UnauthorizedException when current password is invalid', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        service.changePassword('user-123', changePasswordDto),
+      ).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.changePassword('user-123', changePasswordDto),
+      ).rejects.toThrow('Mot de passe actuel incorrect');
+    });
+
+    it('should throw UnauthorizedException when new password and confirmation do not match', async () => {
+      const dtoWithMismatch: ChangePasswordDto = {
+        ...changePasswordDto,
+        confirmPassword: 'different-password',
+      };
+
+      await expect(
+        service.changePassword('user-123', dtoWithMismatch),
+      ).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.changePassword('user-123', dtoWithMismatch),
+      ).rejects.toThrow('Les nouveaux mots de passe ne correspondent pas');
+    });
+
+    it('should throw UnauthorizedException when user is not found', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
+
+      await expect(
+        service.changePassword('unknown-id', changePasswordDto),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 

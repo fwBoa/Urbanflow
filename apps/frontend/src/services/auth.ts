@@ -113,3 +113,23 @@ export async function logout(): Promise<void> {
   }).catch(() => {});
   clearAuthFlag();
 }
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+  confirmPassword: string,
+): Promise<{ message: string }> {
+  const res = await fetch(`${apiService.getBaseUrl()}/api/auth/password`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || 'Erreur lors du changement de mot de passe');
+  }
+
+  return data;
+}

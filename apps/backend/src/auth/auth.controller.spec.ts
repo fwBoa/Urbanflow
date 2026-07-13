@@ -9,6 +9,7 @@ import {
   LoginDto,
   UpdateProfileDto,
   ConsentDto,
+  ChangePasswordDto,
 } from './auth.dto';
 
 describe('AuthController', () => {
@@ -32,6 +33,7 @@ describe('AuthController', () => {
     updateConsent: jest.fn(),
     getConsent: jest.fn(),
     updateNotificationsPreference: jest.fn(),
+    changePassword: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -265,6 +267,29 @@ describe('AuthController', () => {
 
       expect(authService.getConsent).toHaveBeenCalledWith('user-123');
       expect(result).toEqual(mockConsent);
+    });
+  });
+
+  describe('changePassword', () => {
+    const changePasswordDto: ChangePasswordDto = {
+      currentPassword: 'old-password',
+      newPassword: 'new-password123',
+      confirmPassword: 'new-password123',
+    };
+
+    it('should change user password', async () => {
+      mockAuthService.changePassword.mockResolvedValue({
+        message: 'Mot de passe mis à jour',
+      });
+      const req = { user: { id: 'user-123' } };
+
+      const result = await controller.changePassword(req, changePasswordDto);
+
+      expect(authService.changePassword).toHaveBeenCalledWith(
+        'user-123',
+        changePasswordDto,
+      );
+      expect(result).toEqual({ message: 'Mot de passe mis à jour' });
     });
   });
 

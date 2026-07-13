@@ -14,6 +14,7 @@ import {
   LoginDto,
   UpdateProfileDto,
   ConsentDto,
+  ChangePasswordDto,
 } from './auth.dto';
 import { FavoritesService } from '../favorites/favorites.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -109,6 +110,39 @@ export class AuthService {
 
     const saved = await this.userRepo.save(user);
     return this.sanitizeUser(saved);
+  }
+
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new UnauthorizedException(
+        'Les nouveaux mots de passe ne correspondent pas',
+      );
+    }
+
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'passwordHash'],
+    });
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('Utilisateur non trouvé');
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('Mot de passe actuel incorrect');
+    }
+
+    user.passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    user.updatedAt = new Date();
+    await this.userRepo.save(user);
+
+    return { message: 'Mot de passe mis à jour' };
   }
 
   async validateUser(userId: string): Promise<User | null> {

@@ -22,6 +22,7 @@ import {
   Sparkles,
   TrainFront,
   ChevronRight,
+  Lock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
@@ -38,7 +39,7 @@ import {
   type Badge,
 } from "@/services/favorites";
 import { useAuth } from "@/contexts/AuthContext";
-import { updateProfile as updateRemoteProfile } from "@/services/auth";
+import { updateProfile as updateRemoteProfile, changePassword } from "@/services/auth";
 import { apiService } from "@/services/api";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -72,6 +73,15 @@ export default function ProfilePage() {
   const [nameInput, setNameInput] = useState("");
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [newBadges, setNewBadges] = useState<Badge[]>([]);
+
+  // ─── Changement de mot de passe ───
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   const { isDark, toggleDarkMode } = useDarkMode();
   const {
@@ -192,6 +202,34 @@ export default function ProfilePage() {
     }
     setProfile((p) => ({ ...p, avatar }));
     setShowAvatarPicker(false);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (newPassword.length < 8) {
+      setPasswordError("Le nouveau mot de passe doit contenir au moins 8 caractères");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Les nouveaux mots de passe ne correspondent pas");
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      const result = await changePassword(currentPassword, newPassword, confirmPassword);
+      setPasswordSuccess(result.message);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Erreur lors du changement de mot de passe");
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   const handleLogout = () => {
@@ -522,13 +560,103 @@ export default function ProfilePage() {
       {/* Auth section */}
       <div className="mt-4 space-y-2">
         {isAuthenticated ? (
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-3 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors"
-          >
-            <LogOut size={14} />
-            Se déconnecter
-          </button>
+          <>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 py-3 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors"
+            >
+              <LogOut size={14} />
+              Se déconnecter
+            </button>
+
+            {/* ─── Changement de mot de passe ─── */}
+            <div className="bg-[var(--color-surface)] rounded-[var(--card-radius)] border border-[var(--color-border)] overflow-hidden">
+              <button
+                onClick={() => setShowPasswordForm((s) => !s)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--color-border)]/30 transition-colors"
+              >
+                <Lock size={18} className="text-[var(--color-text-tertiary)]" />
+                <div className="flex-1">
+                  <p className="text-sm text-[var(--color-text-primary)]">Mot de passe</p>
+                  <p className="text-xs text-[var(--color-text-tertiary)]">
+                    Modifier votre mot de passe
+                  </p>
+                </div>
+                <ChevronRight
+                  size={16}
+                  className={`text-[var(--color-text-tertiary)] transition-transform ${
+                    showPasswordForm ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+
+              {showPasswordForm && (
+                <form onSubmit={handleChangePassword} className="px-4 pb-4 border-t border-[var(--color-border)]">
+                  <div className="space-y-3 pt-3">
+                    <div>
+                      <label htmlFor="currentPassword" className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                        Mot de passe actuel
+                      </label>
+                      <input
+                        id="currentPassword"
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-background border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                        autoComplete="current-password"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="newPassword" className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                        Nouveau mot de passe
+                      </label>
+                      <input
+                        id="newPassword"
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-background border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="confirmPassword" className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+                        Confirmer le nouveau mot de passe
+                      </label>
+                      <input
+                        id="confirmPassword"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-background border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                        autoComplete="new-password"
+                      />
+                    </div>
+
+                    {passwordError && (
+                      <p className="text-xs text-[var(--color-favorite-red)]">{passwordError}</p>
+                    )}
+                    {passwordSuccess && (
+                      <p className="text-xs text-[var(--color-eco-green)]">{passwordSuccess}</p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={
+                        passwordLoading ||
+                        !currentPassword ||
+                        !newPassword ||
+                        !confirmPassword
+                      }
+                      className="w-full py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {passwordLoading ? "Mise à jour..." : "Mettre à jour le mot de passe"}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </>
         ) : (
           <button
             onClick={() => router.push("/login")}
