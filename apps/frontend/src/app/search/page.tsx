@@ -123,14 +123,14 @@ function SearchPageContent() {
     }
   }, [isWatching, startWatch, stopWatch]);
 
-  // Utiliser ma position comme origine — bloqué si hors zone (>>15 km de Paris)
+  // Utiliser ma position comme origine — bloqué si hors zone (>>10 km de Paris)
   const useMyPosition = () => {
     setPositionError(null);
     if (userLat && userLon) {
       const dist = haversineKm(userLat, userLon, 48.8566, 2.3522);
-      if (dist > 15) {
+      if (dist > 10) {
         setPositionError(
-          `Votre position est à ${Math.round(dist)} km de Paris. UrbanFlow couvre uniquement Paris et sa proche banlieue (≤ 15 km).`,
+          `Votre position est à ${Math.round(dist)} km de Paris. UrbanFlow couvre uniquement Paris et sa proche banlieue (≤ 10 km).`,
         );
         return;
       }
