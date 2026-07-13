@@ -228,6 +228,24 @@ Deux workflows GitHub Actions :
    - Déploie automatiquement sur le VPS OVHcloud via SSH (`appleboy/ssh-action`).
    - Gated par l’environnement GitHub `prod` avec **required reviewers**.
 
+## Sécurité
+
+UrbanFlow applique une politique de sécurité en profondeur, auditée régulièrement (SAST Semgrep + `npm audit`).
+Résumé des mesures appliquées dans cette codebase :
+
+| Domaine | Mesure appliquée |
+|---|---|
+| **Dépendances** | `npm audit fix` systématique ; `apps/frontend/package.json` force `postcss` via `overrides` pour éviter les versions vulnérables importées transitivement par Next.js. |
+| **SAST** | Scan Semgrep (`--config=auto`) : 0 finding. |
+| **CI/CD** | Épinglage des actions GitHub à des **SHA de commit** (pas de tags mutables) dans `ci.yml` et `deploy.yml`. |
+| **Docker** | Conteneurs backend/frontend exécutés avec un **utilisateur non-root** (`nodejs` / `nextjs`, uid/gid 1001). |
+| **Nginx** | `server_name` explicite, redirection `Host` fixe, suppression du forwarding `Upgrade/Connection` en prod pour éviter le H2C smuggling, CSP + HSTS + rate-limiting auth/api. |
+| **Path traversal** | Fichiers GTFS : whitelisting + `path.basename` + vérification que le chemin résolu reste dans le répertoire extrait. |
+| **Input/output** | Sanitization des paramètres UI (`encodeURIComponent` + regex globale dans `page.tsx`). |
+| **Notifications** | Push filtrés par favori + `notificationsEnabled` ; plus d’envoi global à tous les abonnés. |
+| **Auth / admin** | JWT httpOnly, RBAC, pagination admin via `@Query()` (pas `@Body()` sur GET). |
+| **Secrets** | VAPID keys, JWT secret, PRIM API key passés par variables d’environnement ; jamais dans le repo. |
+
 ## Licence
 
 Projet académique — T6 CDSD Septembre 2026

@@ -381,6 +381,18 @@ export class GtfsParserService implements OnModuleInit {
 
   // ─── Colonnes GTFS → colonnes table (mapping par nom d'en-tête) ───
   // Les colonnes GENERATED (stop_name_norm, *_seconds) sont exclues du COPY.
+  private static readonly ALLOWED_GTFS_FILES = new Set([
+    'agency.txt',
+    'routes.txt',
+    'trips.txt',
+    'calendar.txt',
+    'calendar_dates.txt',
+    'stops.txt',
+    'stop_times.txt',
+    'transfers.txt',
+    'shapes.txt',
+  ]);
+
   private static readonly COLS_AGENCIES = [
     'agency_id',
     'agency_name',
@@ -695,7 +707,26 @@ export class GtfsParserService implements OnModuleInit {
     ) => string[] | null,
     progressName?: string,
   ): Promise<void> {
-    const filePath = path.join(this.dataDir, 'extracted', fileName);
+    // Défense en profondeur : whitelisting des noms de fichiers GTFS attendus,
+    // puis path.basename pour éliminer toute composante de chemin et vérification
+    // que le chemin résolu reste dans le répertoire extrait.
+    if (!GtfsParserService.ALLOWED_GTFS_FILES.has(fileName)) {
+      this.logger.warn(`Refusing to read unexpected GTFS file: ${fileName}`);
+      return;
+    }
+    const safeName = path.basename(fileName);
+    const extractedDir = path.join(this.dataDir, 'extracted');
+    // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    const filePath = path.join(extractedDir, safeName);
+    // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    const resolvedFile = path.resolve(filePath);
+    const resolvedDir = path.resolve(extractedDir);
+    if (!resolvedFile.startsWith(resolvedDir + path.sep)) {
+      this.logger.warn(
+        `Refusing to read GTFS file outside data dir: ${filePath}`,
+      );
+      return;
+    }
     if (!fs.existsSync(filePath)) {
       this.logger.warn(`GTFS file not found: ${filePath}`);
       return;
