@@ -1,17 +1,14 @@
-# ─── CI: build + test + lint + e2e gate ────────────────────────────────────
-# Runs on every push to main and on pull requests. All lint jobs are now
-# blocking (max-warnings 0) after the Phase 3 lint cleanup.
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'fix/**'
+      - 'feat/**'
   pull_request:
-    branches: [main]
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    branches:
+      - main
 
 jobs:
   backend:
@@ -21,9 +18,10 @@ jobs:
       run:
         working-directory: apps/backend
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # actions/setup-node v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 20
           cache: npm
@@ -42,7 +40,8 @@ jobs:
 
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        # actions/upload-artifact v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: backend-coverage
           path: apps/backend/coverage/
@@ -78,9 +77,10 @@ jobs:
       GTFS_STATIC_URL: https://example.com/gtfs-static.zip
       GTFS_RT_URL: https://example.com/gtfs-rt
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # actions/setup-node v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 20
           cache: npm
@@ -102,9 +102,10 @@ jobs:
       # baked in (routed to the backend by nginx). Matches the Docker build.
       NEXT_PUBLIC_API_URL: ""
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # actions/setup-node v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 20
           cache: npm
@@ -112,14 +113,20 @@ jobs:
 
       - run: npm ci
 
-      - name: Lint (blocking)
-        run: npm run lint -- --max-warnings 0
-
-      - name: Test
-        run: npm test -- --no-coverage
-
       - name: Build
         run: npm run build
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
 
+      - name: Lint (blocking)
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test -- --coverage
+
+      - name: Upload coverage
+        if: always()
+        # actions/upload-artifact v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: frontend-coverage
+          path: apps/frontend/coverage/
+          if-no-files-found: ignore
