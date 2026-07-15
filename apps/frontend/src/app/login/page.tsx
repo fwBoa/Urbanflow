@@ -105,8 +105,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Register link */}
-        <div className="mt-6 text-center">
+        {/* Register / forgot password links */}
+        <div className="mt-6 text-center space-y-2">
           <p className="text-sm text-[var(--color-text-tertiary)]">
             Pas encore de compte ?{" "}
             <button
@@ -115,6 +115,14 @@ export default function LoginPage() {
             >
               Créer un compte
               <UserPlus size={14} />
+            </button>
+          </p>
+          <p className="text-sm text-[var(--color-text-tertiary)]">
+            <button
+              onClick={() => router.push("/forgot-password")}
+              className="text-[var(--color-primary)] hover:underline"
+            >
+              Mot de passe oublié ?
             </button>
           </p>
         </div>

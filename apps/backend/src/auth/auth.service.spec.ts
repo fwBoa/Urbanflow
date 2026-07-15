@@ -16,15 +16,22 @@ import {
   UpdateProfileDto,
   ConsentDto,
   ChangePasswordDto,
+  ForgotPasswordDto,
 } from './auth.dto';
 import { FavoritesService } from '../favorites/favorites.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
+import { ConfigService } from '@nestjs/config';
+import { PasswordResetToken } from './password-reset-token.entity';
 
 jest.mock('bcrypt');
 
 describe('AuthService', () => {
   let service: AuthService;
   let userRepo: Repository<User>;
+  let resetTokenRepo: Repository<PasswordResetToken>;
+  let mailService: MailService;
+  let configService: ConfigService;
 
   const mockUser: Partial<User> = {
     id: 'user-123',
@@ -68,6 +75,14 @@ describe('AuthService', () => {
           },
         },
         {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+          },
+        },
+        {
           provide: JwtService,
           useValue: {
             sign: jest.fn().mockReturnValue('mock-jwt-token'),
@@ -81,11 +96,29 @@ describe('AuthService', () => {
           provide: NotificationsService,
           useValue: mockNotificationsService,
         },
+        {
+          provide: MailService,
+          useValue: {
+            send: jest.fn().mockResolvedValue({ messageId: 'mock-message-id' }),
+            isConfigured: jest.fn().mockReturnValue(true),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue('https://urbanflow-mobility.fr'),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     userRepo = module.get<Repository<User>>(getRepositoryToken(User));
+    resetTokenRepo = module.get<Repository<PasswordResetToken>>(
+      getRepositoryToken(PasswordResetToken),
+    );
+    mailService = module.get<MailService>(MailService);
+    configService = module.get<ConfigService>(ConfigService);
   });
 
   afterEach(() => {
@@ -431,6 +464,115 @@ describe('AuthService', () => {
 
       await expect(
         service.changePassword('unknown-id', changePasswordDto),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('forgotPassword', () => {
+    const forgotPasswordDto: ForgotPasswordDto = {
+      email: 'test@example.com',
+    };
+
+    it('should send reset email when user exists', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
+      jest
+        .spyOn(resetTokenRepo, 'create')
+        .mockReturnValue({ id: 'token-123' } as PasswordResetToken);
+      jest
+        .spyOn(resetTokenRepo, 'save')
+        .mockResolvedValue({ id: 'token-123' } as PasswordResetToken);
+
+      const result = await service.forgotPassword(forgotPasswordDto);
+
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { email: forgotPasswordDto.email },
+      });
+      expect(resetTokenRepo.create).toHaveBeenCalled();
+      expect(resetTokenRepo.save).toHaveBeenCalled();
+      expect(mailService.send).toHaveBeenCalled();
+      expect(result.message).toContain('Si un compte existe');
+    });
+
+    it('should return generic message when user does not exist', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue(null);
+
+      const result = await service.forgotPassword(forgotPasswordDto);
+
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { email: forgotPasswordDto.email },
+      });
+      expect(mailService.send).not.toHaveBeenCalled();
+      expect(result.message).toContain('Si un compte existe');
+    });
+
+    it('should return generic message when mail service is not configured', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
+      jest.spyOn(mailService, 'isConfigured').mockReturnValue(false);
+
+      const result = await service.forgotPassword(forgotPasswordDto);
+
+      expect(mailService.send).not.toHaveBeenCalled();
+      expect(result.message).toContain('Si un compte existe');
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('should reset password with valid token', async () => {
+      const mockToken: Partial<PasswordResetToken> = {
+        id: 'token-123',
+        userId: 'user-123',
+        tokenHash: 'hashed-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        usedAt: undefined,
+      };
+      jest
+        .spyOn(resetTokenRepo, 'findOne')
+        .mockResolvedValue(mockToken as PasswordResetToken);
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
+      jest.spyOn(userRepo, 'save').mockResolvedValue(mockUser as User);
+      jest
+        .spyOn(resetTokenRepo, 'save')
+        .mockResolvedValue({ ...mockToken, usedAt: new Date() } as PasswordResetToken);
+
+      const result = await service.resetPassword({
+        token: 'valid-token',
+        newPassword: 'new-password123',
+        confirmPassword: 'new-password123',
+      });
+
+      expect(bcrypt.compare).toHaveBeenCalledWith('valid-token', 'hashed-token');
+      expect(userRepo.save).toHaveBeenCalled();
+      expect(result.message).toBe('Mot de passe réinitialisé avec succès');
+    });
+
+    it('should throw when passwords do not match', async () => {
+      await expect(
+        service.resetPassword({
+          token: 'valid-token',
+          newPassword: 'new-password123',
+          confirmPassword: 'different-password',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw when token is expired', async () => {
+      const expiredToken: Partial<PasswordResetToken> = {
+        id: 'token-123',
+        userId: 'user-123',
+        tokenHash: 'hashed-token',
+        expiresAt: new Date(Date.now() - 60 * 60 * 1000),
+        usedAt: undefined,
+      };
+      jest
+        .spyOn(resetTokenRepo, 'findOne')
+        .mockResolvedValue(expiredToken as PasswordResetToken);
+
+      await expect(
+        service.resetPassword({
+          token: 'valid-token',
+          newPassword: 'new-password123',
+          confirmPassword: 'new-password123',
+        }),
       ).rejects.toThrow(UnauthorizedException);
     });
   });

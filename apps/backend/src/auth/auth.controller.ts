@@ -19,6 +19,8 @@ import {
   UpdateProfileDto,
   ConsentDto,
   ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
 } from './auth.dto';
 
 // ─── OWASP A07: JWT httpOnly cookie config ───
@@ -90,6 +92,19 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
   ) {
     return this.authService.changePassword(req.user.id, dto);
+  }
+
+  // ─── Mot de passe oublié ───
+  @Post('forgot-password')
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   // ─── RGPD: Droit à l'effacement (Art. 17) ───

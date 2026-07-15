@@ -60,6 +60,14 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:contact@urbanflow.app}
+      # SMTP configuration for transactional emails (password reset, etc.)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      FRONTEND_URL: ${FRONTEND_URL:-https://urbanflow-mobility.fr}
       # GTFS désormais en PostgreSQL : Node ne conserve plus les ~6,8 M
       # stop_times en heap (consommation réelle ~100 Mo). L'ancienne limite
       # 3584 Mo (ère Maps en mémoire → OOM exit 137 sur la VM 3,826 Gio) est

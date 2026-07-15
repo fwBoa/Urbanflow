@@ -133,3 +133,39 @@ export async function changePassword(
 
   return data;
 }
+
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const res = await fetch(`${apiService.getBaseUrl()}/api/auth/forgot-password`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || 'Erreur lors de la demande');
+  }
+
+  return data;
+}
+
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+  confirmPassword: string,
+): Promise<{ message: string }> {
+  const res = await fetch(`${apiService.getBaseUrl()}/api/auth/reset-password`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, newPassword, confirmPassword }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || 'Erreur lors de la réinitialisation');
+  }
+
+  return data;
+}

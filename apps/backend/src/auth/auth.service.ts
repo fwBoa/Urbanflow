@@ -3,9 +3,11 @@ import {
   UnauthorizedException,
   ConflictException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { User } from './user.entity';
@@ -15,9 +17,14 @@ import {
   UpdateProfileDto,
   ConsentDto,
   ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
 } from './auth.dto';
 import { FavoritesService } from '../favorites/favorites.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
+import { PasswordResetToken } from './password-reset-token.entity';
+import crypto from 'node:crypto';
 
 export interface AuthResponse {
   access_token: string;
@@ -34,12 +41,18 @@ export interface AuthResponse {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(PasswordResetToken)
+    private readonly resetTokenRepo: Repository<PasswordResetToken>,
     private readonly jwtService: JwtService,
     private readonly favoritesService: FavoritesService,
     private readonly notificationsService: NotificationsService,
+    private readonly mailService: MailService,
+    private readonly config: ConfigService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
@@ -264,5 +277,107 @@ export class AuthService {
     user.notificationsEnabled = enabled;
     await this.userRepo.save(user);
     return { enabled };
+  }
+
+  // ─── Mot de passe oublié ───
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const user = await this.userRepo.findOne({ where: { email: dto.email } });
+
+    // Always return the same generic message to prevent user enumeration.
+    const genericMessage =
+      'Si un compte existe avec cette adresse, un email de réinitialisation a été envoyé.';
+
+    if (!user) {
+      return { message: genericMessage };
+    }
+
+    if (!this.mailService.isConfigured()) {
+      this.logger.warn('Password reset requested but mail service is not configured');
+      return { message: genericMessage };
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(rawToken, 12);
+
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const resetToken = this.resetTokenRepo.create({
+      userId: user.id,
+      tokenHash,
+      expiresAt,
+      usedAt: null,
+    });
+    await this.resetTokenRepo.save(resetToken);
+
+    const frontendUrl = this.config.get<string>(
+      'FRONTEND_URL',
+      'https://urbanflow-mobility.fr',
+    );
+    const resetUrl = `${frontendUrl}/reset-password?token=${rawToken}`;
+
+    await this.mailService.send({
+      to: user.email,
+      subject: 'Réinitialisation de votre mot de passe UrbanFlow',
+      text: `Bonjour,
+
+Vous avez demandé la réinitialisation de votre mot de passe. Cliquez sur le lien suivant (valable 1 heure) :
+
+${resetUrl}
+
+Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
+
+L'équipe UrbanFlow`,
+      html: `<p>Bonjour,</p>
+        <p>Vous avez demandé la réinitialisation de votre mot de passe. Cliquez sur le lien ci-dessous (valable 1 heure) :</p>
+        <p><a href="${resetUrl}">${resetUrl}</a></p>
+        <p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+        <p>L'équipe UrbanFlow</p>`,
+    });
+
+    return { message: genericMessage };
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new UnauthorizedException(
+        'Les nouveaux mots de passe ne correspondent pas',
+      );
+    }
+
+    const resetToken = await this.resetTokenRepo.findOne({
+      where: { usedAt: undefined },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!resetToken || resetToken.expiresAt < new Date()) {
+      throw new UnauthorizedException(
+        'Le lien de réinitialisation est invalide ou a expiré',
+      );
+    }
+
+    const isTokenValid = await bcrypt.compare(dto.token, resetToken.tokenHash);
+    if (!isTokenValid) {
+      throw new UnauthorizedException(
+        'Le lien de réinitialisation est invalide ou a expiré',
+      );
+    }
+
+    const user = await this.userRepo.findOne({
+      where: { id: resetToken.userId },
+      select: ['id', 'passwordHash'],
+    });
+    if (!user) {
+      throw new UnauthorizedException(
+        'Le lien de réinitialisation est invalide ou a expiré',
+      );
+    }
+
+    user.passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    user.updatedAt = new Date();
+    await this.userRepo.save(user);
+
+    resetToken.usedAt = new Date();
+    await this.resetTokenRepo.save(resetToken);
+
+    return { message: 'Mot de passe réinitialisé avec succès' };
   }
 }

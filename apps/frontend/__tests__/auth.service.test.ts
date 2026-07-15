@@ -1,4 +1,4 @@
-import { changePassword, login, logout } from "@/services/auth";
+import { changePassword, login, logout, forgotPassword, resetPassword } from "@/services/auth";
 
 jest.mock("@/services/api", () => ({
   apiService: {
@@ -101,6 +101,52 @@ describe("auth service", () => {
       await logout();
 
       expect(sessionStorage.getItem("urbanflow_authenticated")).toBeNull();
+    });
+  });
+
+  describe("forgotPassword", () => {
+    it("should send POST request with email", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          message: "Si un compte existe avec cette adresse, un email a été envoyé.",
+        }),
+      });
+
+      const result = await forgotPassword("test@example.com");
+
+      expect(global.fetch).toHaveBeenCalledWith("/api/auth/forgot-password", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "test@example.com" }),
+      });
+      expect(result.message).toContain("email");
+    });
+  });
+
+  describe("resetPassword", () => {
+    it("should send POST request with token and new password", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          message: "Mot de passe réinitialisé avec succès",
+        }),
+      });
+
+      const result = await resetPassword("token123", "new-password123", "new-password123");
+
+      expect(global.fetch).toHaveBeenCalledWith("/api/auth/reset-password", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: "token123",
+          newPassword: "new-password123",
+          confirmPassword: "new-password123",
+        }),
+      });
+      expect(result.message).toBe("Mot de passe réinitialisé avec succès");
     });
   });
 });

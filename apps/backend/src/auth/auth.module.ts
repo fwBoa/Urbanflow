@@ -7,13 +7,15 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { User } from './user.entity';
+import { PasswordResetToken } from './password-reset-token.entity';
 import { FavoritesModule } from '../favorites/favorites.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MailModule } from '../mail/mail.module';
 import { resolveJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, PasswordResetToken]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     // ─── OWASP: Require JWT_SECRET in production (see resolveJwtSecret) ───
     JwtModule.registerAsync({
@@ -26,6 +28,7 @@ import { resolveJwtSecret } from './jwt-secret';
     }),
     FavoritesModule,
     NotificationsModule,
+    MailModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

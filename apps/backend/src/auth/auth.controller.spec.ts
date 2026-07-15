@@ -10,6 +10,8 @@ import {
   UpdateProfileDto,
   ConsentDto,
   ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
 } from './auth.dto';
 
 describe('AuthController', () => {
@@ -34,6 +36,8 @@ describe('AuthController', () => {
     getConsent: jest.fn(),
     updateNotificationsPreference: jest.fn(),
     changePassword: jest.fn(),
+    forgotPassword: jest.fn(),
+    resetPassword: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -290,6 +294,44 @@ describe('AuthController', () => {
         changePasswordDto,
       );
       expect(result).toEqual({ message: 'Mot de passe mis à jour' });
+    });
+  });
+
+  describe('forgotPassword', () => {
+    const forgotPasswordDto: ForgotPasswordDto = {
+      email: 'test@example.com',
+    };
+
+    it('should request password reset', async () => {
+      mockAuthService.forgotPassword.mockResolvedValue({
+        message: 'Si un compte existe avec cette adresse, un email a été envoyé.',
+      });
+
+      const result = await controller.forgotPassword(forgotPasswordDto);
+
+      expect(authService.forgotPassword).toHaveBeenCalledWith(forgotPasswordDto);
+      expect(result.message).toContain('email');
+    });
+  });
+
+  describe('resetPassword', () => {
+    const resetPasswordDto: ResetPasswordDto = {
+      token: 'reset-token',
+      newPassword: 'new-password123',
+      confirmPassword: 'new-password123',
+    };
+
+    it('should reset password with token', async () => {
+      mockAuthService.resetPassword.mockResolvedValue({
+        message: 'Mot de passe réinitialisé avec succès',
+      });
+
+      const result = await controller.resetPassword(resetPasswordDto);
+
+      expect(authService.resetPassword).toHaveBeenCalledWith(resetPasswordDto);
+      expect(result).toEqual({
+        message: 'Mot de passe réinitialisé avec succès',
+      });
     });
   });
 

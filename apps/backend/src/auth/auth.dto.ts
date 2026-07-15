@@ -65,6 +65,23 @@ export class ChangePasswordDto {
   confirmPassword: string;
 }
 
+export class ForgotPasswordDto {
+  @IsEmail()
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  token: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
+
+  @IsString()
+  confirmPassword: string;
+}
+
 // ─── RGPD Consent DTO (§9.2 Dossier Technique) ───
 export class ConsentDto {
   @IsBoolean()
