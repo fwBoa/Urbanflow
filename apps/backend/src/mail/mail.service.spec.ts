@@ -10,7 +10,9 @@ describe('MailService', () => {
   let sendMailMock: jest.Mock;
 
   const createTransporterMock = () => {
-    sendMailMock = jest.fn().mockResolvedValue({ messageId: 'mock-message-id' });
+    sendMailMock = jest
+      .fn()
+      .mockResolvedValue({ messageId: 'mock-message-id' });
     return {
       sendMail: sendMailMock,
     } as unknown as nodemailer.Transporter;
@@ -21,7 +23,9 @@ describe('MailService', () => {
   });
 
   it('should be configured when SMTP_HOST, SMTP_USER and SMTP_PASS are present', async () => {
-    (nodemailer.createTransport as jest.Mock).mockReturnValue(createTransporterMock());
+    (nodemailer.createTransport as jest.Mock).mockReturnValue(
+      createTransporterMock(),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -66,7 +70,9 @@ describe('MailService', () => {
   });
 
   it('should send an email and return messageId', async () => {
-    (nodemailer.createTransport as jest.Mock).mockReturnValue(createTransporterMock());
+    (nodemailer.createTransport as jest.Mock).mockReturnValue(
+      createTransporterMock(),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

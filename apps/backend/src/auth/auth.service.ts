@@ -292,7 +292,9 @@ export class AuthService {
     }
 
     if (!this.mailService.isConfigured()) {
-      this.logger.warn('Password reset requested but mail service is not configured');
+      this.logger.warn(
+        'Password reset requested but mail service is not configured',
+      );
       return { message: genericMessage };
     }
 

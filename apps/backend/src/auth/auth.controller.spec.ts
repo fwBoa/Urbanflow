@@ -304,12 +304,15 @@ describe('AuthController', () => {
 
     it('should request password reset', async () => {
       mockAuthService.forgotPassword.mockResolvedValue({
-        message: 'Si un compte existe avec cette adresse, un email a été envoyé.',
+        message:
+          'Si un compte existe avec cette adresse, un email a été envoyé.',
       });
 
       const result = await controller.forgotPassword(forgotPasswordDto);
 
-      expect(authService.forgotPassword).toHaveBeenCalledWith(forgotPasswordDto);
+      expect(authService.forgotPassword).toHaveBeenCalledWith(
+        forgotPasswordDto,
+      );
       expect(result.message).toContain('email');
     });
   });

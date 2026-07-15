@@ -31,7 +31,6 @@ describe('AuthService', () => {
   let userRepo: Repository<User>;
   let resetTokenRepo: Repository<PasswordResetToken>;
   let mailService: MailService;
-  let configService: ConfigService;
 
   const mockUser: Partial<User> = {
     id: 'user-123',
@@ -118,7 +117,6 @@ describe('AuthService', () => {
       getRepositoryToken(PasswordResetToken),
     );
     mailService = module.get<MailService>(MailService);
-    configService = module.get<ConfigService>(ConfigService);
   });
 
   afterEach(() => {
@@ -530,9 +528,10 @@ describe('AuthService', () => {
         .mockResolvedValue(mockToken as PasswordResetToken);
       jest.spyOn(userRepo, 'findOne').mockResolvedValue(mockUser as User);
       jest.spyOn(userRepo, 'save').mockResolvedValue(mockUser as User);
-      jest
-        .spyOn(resetTokenRepo, 'save')
-        .mockResolvedValue({ ...mockToken, usedAt: new Date() } as PasswordResetToken);
+      jest.spyOn(resetTokenRepo, 'save').mockResolvedValue({
+        ...mockToken,
+        usedAt: new Date(),
+      } as PasswordResetToken);
 
       const result = await service.resetPassword({
         token: 'valid-token',
@@ -540,7 +539,10 @@ describe('AuthService', () => {
         confirmPassword: 'new-password123',
       });
 
-      expect(bcrypt.compare).toHaveBeenCalledWith('valid-token', 'hashed-token');
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        'valid-token',
+        'hashed-token',
+      );
       expect(userRepo.save).toHaveBeenCalled();
       expect(result.message).toBe('Mot de passe réinitialisé avec succès');
     });

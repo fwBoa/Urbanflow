@@ -20,7 +20,8 @@ export class MailService {
     const port = this.config.get<number>('SMTP_PORT') || 587;
     const user = this.config.get<string>('SMTP_USER');
     const pass = this.config.get<string>('SMTP_PASS');
-    const secure = this.config.get<string>('SMTP_SECURE') === 'true' || port === 465;
+    const secure =
+      this.config.get<string>('SMTP_SECURE') === 'true' || port === 465;
 
     if (!host || !user || !pass) {
       this.logger.warn(
@@ -61,7 +62,9 @@ export class MailService {
       html: options.html,
     };
 
-    const info = await this.transporter.sendMail(mailOptions);
+    const info = (await this.transporter.sendMail(mailOptions)) as {
+      messageId?: string;
+    };
     this.logger.log(`Email sent to ${options.to}: ${info.messageId}`);
     return { messageId: info.messageId };
   }
