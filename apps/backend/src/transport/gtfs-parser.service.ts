@@ -283,7 +283,17 @@ export class GtfsParserService implements OnModuleInit {
           );
 
           if (response.data && response.data.byteLength > 1000000) {
-            fs.writeFileSync(zipPath, Buffer.from(response.data));
+            try {
+              fs.writeFileSync(zipPath, Buffer.from(response.data));
+            } catch (writeErr) {
+              const msg =
+                writeErr instanceof Error ? writeErr.message : String(writeErr);
+              this.logger.error(
+                `Failed to write GTFS ZIP to ${zipPath}: ${msg}. ` +
+                  'Ensure /app/data/gtfs is writable by the nodejs user (uid 1001).',
+              );
+              throw writeErr;
+            }
             const sizeMB = (response.data.byteLength / 1024 / 1024).toFixed(1);
             this.logger.log(
               `GTFS ZIP downloaded from ${source.name} (${sizeMB} MB)`,
