@@ -3,12 +3,11 @@
 import { useState, Suspense } from "react";
 import { Lock, ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import { resetPassword } from "@/services/auth";
 
 function ResetPasswordForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
 
@@ -35,8 +34,9 @@ function ResetPasswordForm() {
     setLoading(true);
     try {
       await resetPassword(token, newPassword, confirmPassword);
-      setMessage("Mot de passe réinitialisé avec succès. Redirection...");
-      setTimeout(() => router.push("/login"), 2000);
+      setMessage(
+        "Mot de passe mis à jour. Vous pouvez fermer cet onglet et retourner dans l'application UrbanFlow pour vous connecter.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de la réinitialisation");
     } finally {
@@ -50,6 +50,31 @@ function ResetPasswordForm() {
         <p className="text-sm text-[var(--color-favorite-red)]">
           Lien de réinitialisation invalide. Veuillez refaire une demande.
         </p>
+      </div>
+    );
+  }
+
+  if (message) {
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-col items-center text-center space-y-3">
+          <div className="w-12 h-12 rounded-full bg-[var(--color-eco-green)]/10 flex items-center justify-center">
+            <Lock size={24} className="text-[var(--color-eco-green)]" />
+          </div>
+          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+            Mot de passe mis à jour
+          </h2>
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Vous pouvez fermer cet onglet et retourner dans l&apos;application
+            UrbanFlow pour vous connecter.
+          </p>
+        </div>
+        <Link
+          href="/login"
+          className="block w-full text-center py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-dark)] transition-colors"
+        >
+          Retour à la connexion
+        </Link>
       </div>
     );
   }
@@ -96,11 +121,6 @@ function ResetPasswordForm() {
         />
       </div>
 
-      {message && (
-        <p className="text-sm text-[var(--color-eco-green)] bg-[var(--color-eco-green)]/10 rounded-lg p-3">
-          {message}
-        </p>
-      )}
       {error && (
         <p className="text-sm text-[var(--color-favorite-red)] bg-[var(--color-favorite-red)]/10 rounded-lg p-3">
           {error}
