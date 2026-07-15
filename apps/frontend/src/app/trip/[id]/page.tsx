@@ -8,9 +8,12 @@ import ModeIcon from "@/components/ModeIcon";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
+import type { MapPolyline } from "@/components/MapComponent";
+import { journeyToSegments } from "@/components/journey-helpers";
 import ModeBadge from "@/components/ModeBadge";
 import TurnByTurnBanner from "@/components/TurnByTurnBanner";
 import { useNavigation } from "@/hooks/useNavigation";
+import { useDeviceHeading } from "@/hooks/useDeviceHeading";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { MAP_MODE_COLORS } from "@/constants/mode-colors";
 import { apiService } from "@/services/api";
@@ -301,9 +304,10 @@ export default function TripDetailPage() {
     [alerts],
   );
 
-  // ─── Trip polyline from Navitia segment geometry ──────────────────────
-  // On préfère les geojson embarqués dans chaque segment (fournis par Navitia)
-  // à la polyligne OSRM globale, qui emprunte trop souvent des voies véhiculées.
+  // ─── Polyline aplatie pour le moteur de navigation ─────────────────────
+  // Utilisée par useNavigation pour calculer la progression, le hors-trajet
+  // et le bearing vers le prochain manœuvre. Reste une simple concaténation
+  // des géométries disponibles.
   const tripPolyline = useMemo(() => {
     if (!trip || segments.length === 0) return [];
 
@@ -331,11 +335,13 @@ export default function TripDetailPage() {
     return points;
   }, [trip, segments, originPos, destPos]);
 
-  // ─── Shapes (trajectoires réelles) ────────────────────────────────
-  //  1. Privilégie la géométrie Navitia embarquée dans `seg.geojson` ([lon, lat]).
-  //  2. Repli : lazy-load /shape/:id pour les segments GTFS sans geojson.
+  // ─── Polylines stylisées par segment pour l'affichage carte ──────────
+  //  - Transit : trait plein, couleur de la ligne (M1, RER A, bus…).
+  //  - Marche / correspondances : trait gris pointillé.
+  //  - GTFS : lazy-load /shape/:id quand Navitia ne fournit pas de geojson.
   const [shapePolylines, setShapePolylines] = useState<Array<{ points: [number, number][]; color: string }>>([]);
 
+  // Lazy-load des shapes GTFS (uniquement pour les segments transit sans geojson).
   useEffect(() => {
     if (!trip) return;
     const transitSegments = segments.filter((s) => s.type === 'transit');
@@ -345,7 +351,6 @@ export default function TripDetailPage() {
     const loadShapes = async () => {
       const shapes: Array<{ points: [number, number][]; color: string }> = [];
       for (const seg of transitSegments) {
-        // (1) Géométrie Navitia déjà embarquée → conversion [lon, lat] → [lat, lon].
         if (seg.geojson && seg.geojson.length >= 2) {
           const points = seg.geojson
             .map((c) => [c[1], c[0]] as [number, number])
@@ -358,7 +363,6 @@ export default function TripDetailPage() {
           }
           continue;
         }
-        // (2) Repli GTFS : lazy-load /shape/:id.
         if (!seg.shapeId) continue;
         try {
           const data = await apiService.getShape(seg.shapeId, controller.signal);
@@ -377,6 +381,59 @@ export default function TripDetailPage() {
     loadShapes();
     return () => controller.abort();
   }, [trip, segments]);
+
+  // Construction des polylines affichées : geojson > shape GTFS > ligne droite.
+  const mapPolylines = useMemo<MapPolyline[]>(() => {
+    const origin = originPos ?? { lat: 48.8566, lon: 2.3522 };
+    const dest = destPos ?? { lat: 48.8566, lon: 2.3522 };
+    const straightSegments = journeyToSegments(
+      { segments },
+      origin.lat,
+      origin.lon,
+      dest.lat,
+      dest.lon,
+    );
+
+    const polylines: MapPolyline[] = [];
+    let transitIdx = 0;
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const mode = (seg.mode || seg.type || "marche").toLowerCase();
+      const isWalking = seg.type === "walking" || mode === "marche";
+      const color = seg.lineColor || MAP_MODE_COLORS[mode] || "var(--color-primary)";
+      const dashArray = isWalking ? "6, 8" : undefined;
+      const weight = seg.type === "transit" ? 5 : 4;
+
+      let points: [number, number][] = [];
+
+      if (seg.geojson && seg.geojson.length >= 2) {
+        points = seg.geojson
+          .map((c) => [c[1], c[0]] as [number, number])
+          .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+      } else if (seg.type === "transit") {
+        const shape = shapePolylines[transitIdx];
+        if (shape?.points.length >= 2) {
+          points = shape.points;
+        }
+        transitIdx++;
+      }
+
+      // Repli ligne droite (connectique corrigée via journeyToSegments).
+      if (points.length < 2) {
+        const straight = straightSegments[i];
+        if (straight?.points.length >= 2) {
+          points = straight.points;
+        }
+      }
+
+      if (points.length >= 2) {
+        polylines.push({ points, color, weight, dashArray, opacity: 0.9 });
+      }
+    }
+
+    return polylines;
+  }, [segments, shapePolylines, originPos, destPos]);
 
   // ─── Navigation GPS hook ─────────────────────────────────────────────
   const {
@@ -406,6 +463,15 @@ export default function TripDetailPage() {
     destPos,
     voiceEnabled,
   );
+
+  const { requestPermission: requestDeviceHeading } = useDeviceHeading();
+
+  const startNavigationWithPermissions = useCallback(() => {
+    // iOS 13+ exige une permission explicite pour l'orientation de l'appareil.
+    // On la demande au clic sur "Démarrer la navigation".
+    void requestDeviceHeading();
+    startNavigation();
+  }, [requestDeviceHeading, startNavigation]);
 
   // Affiche l'écran de succès automatiquement à l'arrivée (une seule fois par trajet).
   const autoSuccessShownRef = useRef(false);
@@ -545,12 +611,15 @@ export default function TripDetailPage() {
   }, [isNavigating, offRoute, userPosition, reroute]);
 
   // ─── Cap de la carte (leaflet-rotate) + zoom segment actif ───────────
+  // Pendant la navigation, on oriente la carte selon le cap de l'appareil
+  // (GPS + boussole via DeviceOrientationEvent). Le cap doit être suivi même
+  // à l'arrêt pour que la carte pivote quand l'utilisateur tourne le téléphone.
   const mapBearing = useMemo(() => {
     if (!isNavigating) return 0;
-    if (heading != null && heading >= 0 && currentSpeed > 0.5) return heading; // sens de marche
+    if (heading != null && heading >= 0) return heading; // cap device (GPS ou boussole)
     if (nextBearing != null) return nextBearing; // repli : vers le prochain manœuvre
     return 0; // nord en haut
-  }, [isNavigating, heading, currentSpeed, nextBearing]);
+  }, [isNavigating, heading, nextBearing]);
 
   const activeFitBounds = useMemo<Array<[number, number]> | undefined>(() => {
     if (!isNavigating || !userPosition || !nextManeuverPoint) return undefined;
@@ -905,12 +974,11 @@ export default function TripDetailPage() {
           center={mapCenter}
           zoom={isNavigating ? 16 : 13}
           markers={mapMarkers}
-          polyline={tripPolyline.length > 0 ? tripPolyline : undefined}
-          shapePolylines={shapePolylines}
+          polylines={mapPolylines}
           userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined, heading } : undefined}
           onLocateUser={() => {}}
           isWatching={isNavigating}
-          onToggleWatch={isNavigating ? stopNavigation : startNavigation}
+          onToggleWatch={isNavigating ? stopNavigation : startNavigationWithPermissions}
           followUser={isNavigating}
           bearing={mapBearing}
           fitBounds={activeFitBounds}
@@ -924,7 +992,7 @@ export default function TripDetailPage() {
           <motion.button
             key="cta-start"
             type="button"
-            onClick={startNavigation}
+            onClick={startNavigationWithPermissions}
             initial={reducedMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reducedMotion ? undefined : { opacity: 0, y: -12 }}
@@ -1086,8 +1154,7 @@ export default function TripDetailPage() {
               center={mapCenter}
               zoom={16}
               markers={mapMarkers}
-              polyline={tripPolyline.length > 0 ? tripPolyline : undefined}
-              shapePolylines={shapePolylines}
+              polylines={mapPolylines}
               userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon, accuracy: accuracy ?? undefined, heading } : undefined}
               onLocateUser={() => {}}
               isWatching={isNavigating}

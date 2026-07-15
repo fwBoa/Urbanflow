@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 // leaflet-rotate : import à effet de bord qui patche L.Map (ajoute setBearing +
@@ -23,6 +23,15 @@ function fixLeafletIcons() {
   });
 }
 
+export interface MapPolyline {
+  points: Array<[number, number]>;
+  color?: string;
+  weight?: number;
+  opacity?: number;
+  /** Trait pointillé pour la marche / correspondances. Ex: "6, 8". */
+  dashArray?: string;
+}
+
 export interface MapProps {
   center?: [number, number];
   zoom?: number;
@@ -31,7 +40,10 @@ export interface MapProps {
     label?: string;
     color?: string;
   }>;
+  /** Polyline unique (rétrocompatibilité). Utilisez `polylines` pour le style par segment. */
   polyline?: Array<[number, number]>;
+  /** Polylines stylisées par segment : marche pointillé gris, transit couleur ligne… */
+  polylines?: MapPolyline[];
   className?: string;
   showVelib?: boolean;
   velibStations?: Array<{
@@ -46,7 +58,6 @@ export interface MapProps {
   isWatching?: boolean;
   onToggleWatch?: () => void;
   followUser?: boolean;
-  shapePolylines?: Array<{ points: [number, number][]; color: string; weight?: number }>;
   /** Callback appelé quand l'instance Leaflet est créée (pour JourneyLine externe) */
   onMapReady?: (map: L.Map) => void;
   /**
@@ -79,7 +90,7 @@ export default function MapComponent({
   isWatching = false,
   onToggleWatch,
   followUser = false,
-  shapePolylines = [],
+  polylines: polylinesProp,
   onMapReady,
   bearing,
   fitBounds,
@@ -214,44 +225,44 @@ export default function MapComponent({
     }
   }, [map, showVelib, velibStations]);
 
-  const polylineRef = useRef<L.Polyline | null>(null);
-  const shapePolylinesRef = useRef<L.Polyline[]>([]);
+  const polylinesRef = useRef<L.Polyline[]>([]);
 
-  // Polyline simple
-  useEffect(() => {
-    if (!map || polyline.length < 2) return;
-    if (polylineRef.current) {
-      map.removeLayer(polylineRef.current);
-      polylineRef.current = null;
+  // Liste de polylines à afficher : prop `polylines` prioritaire,
+  // sinon conversion rétrocompatible de la prop `polyline` unique.
+  const effectivePolylines = useMemo<MapPolyline[]>(() => {
+    if (polylinesProp) return polylinesProp;
+    if (polyline.length >= 2) {
+      return [
+        { points: polyline, color: "var(--color-primary)", weight: 4, opacity: 0.8 },
+      ];
     }
-    polylineRef.current = L.polyline(polyline, {
-      color: "var(--color-primary)",
-      weight: 4,
-      opacity: 0.8,
-    }).addTo(map);
-    // N'ajuste la vue sur toute la polyline que hors navigation — pendant la nav,
-    // c'est `fitBounds` (zoom segment actif) qui pilote, sinon les deux se battent.
-    if (!followUser) {
-      const bounds = L.latLngBounds(polyline);
-      map.fitBounds(bounds, { padding: [50, 50] });
-    }
-  }, [map, polyline, followUser]);
+    return [];
+  }, [polylinesProp, polyline]);
 
-  // Shape polylines
   useEffect(() => {
     if (!map) return;
-    shapePolylinesRef.current.forEach((p) => map.removeLayer(p));
-    shapePolylinesRef.current = [];
-    shapePolylines.forEach((sp) => {
+    polylinesRef.current.forEach((p) => map.removeLayer(p));
+    polylinesRef.current = [];
+
+    effectivePolylines.forEach((sp) => {
       if (sp.points.length < 2) return;
       const poly = L.polyline(sp.points, {
-        color: sp.color || "#E53935",
-        weight: sp.weight || 5,
-        opacity: 0.9,
+        color: sp.color || "var(--color-primary)",
+        weight: sp.weight ?? 4,
+        opacity: sp.opacity ?? 0.8,
+        dashArray: sp.dashArray,
       }).addTo(map);
-      shapePolylinesRef.current.push(poly);
+      polylinesRef.current.push(poly);
     });
-  }, [map, shapePolylines]);
+
+    // N'ajuste la vue sur l'ensemble des polylines que hors navigation — pendant
+    // la nav, c'est `fitBounds` (zoom segment actif) qui pilote.
+    if (!followUser && effectivePolylines.length > 0) {
+      const allPoints = effectivePolylines.flatMap((sp) => sp.points);
+      const bounds = L.latLngBounds(allPoints);
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }, [map, effectivePolylines, followUser]);
 
   // Map clicks
   useEffect(() => {

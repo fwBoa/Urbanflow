@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { hasGeolocConsent } from "@/components/ConsentBanner";
+import { useDeviceHeading } from "./useDeviceHeading";
 
 export interface GeolocationState {
   lat: number | null;
@@ -19,8 +20,12 @@ export interface GeolocationState {
  * Hook pour accéder à la géolocalisation du navigateur.
  * Supporte getCurrentPosition (ponctuel) et watchPosition (suivi continu).
  *
+ * Le heading exposé combine `position.coords.heading` (GPS) avec la boussole
+ * de l'appareil (DeviceOrientationEvent) comme fallback — ce qui est
+ * indispensable sur iOS/Safari où le GPS heading est souvent null.
+ *
  * Usage:
- *   const { lat, lon, loading, error, watching, locate, startWatch, stopWatch } = useGeolocation();
+ *   const { lat, lon, heading, loading, error, watching, locate, startWatch, stopWatch } = useGeolocation();
  */
 export function useGeolocation(): GeolocationState & {
   locate: () => void;
@@ -38,6 +43,8 @@ export function useGeolocation(): GeolocationState & {
     permission: "unknown",
     watching: false,
   });
+
+  const { heading: deviceHeading } = useDeviceHeading();
 
   const watchIdRef = useRef<number | null>(null);
 
@@ -179,5 +186,12 @@ export function useGeolocation(): GeolocationState & {
     };
   }, []);
 
-  return { ...state, locate, startWatch, stopWatch };
+  return {
+    ...state,
+    // Fallback sur la boussole de l'appareil quand le GPS ne fournit pas de heading.
+    heading: state.heading ?? deviceHeading,
+    locate,
+    startWatch,
+    stopWatch,
+  };
 }
