@@ -24,11 +24,17 @@ export class Favorite {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @Column()
-  from: string;
+  @Column({ type: 'enum', enum: ['journey', 'line'], default: 'journey' })
+  type: 'journey' | 'line';
 
-  @Column()
-  to: string;
+  @Column({ name: 'line_id', nullable: true })
+  lineId: string | null;
+
+  @Column({ nullable: true })
+  from: string | null;
+
+  @Column({ nullable: true })
+  to: string | null;
 
   @Column()
   mode: string;

@@ -14,6 +14,8 @@ describe('FavoritesService', () => {
   const mockFavorite: Favorite = {
     id: 'fav-1',
     userId: 'user-1',
+    type: 'journey',
+    lineId: null,
     from: 'A',
     to: 'B',
     mode: 'metro',

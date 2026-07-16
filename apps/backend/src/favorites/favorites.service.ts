@@ -24,21 +24,29 @@ export class FavoritesService {
   }
 
   async addFavorite(userId: string, dto: CreateFavoriteDto): Promise<Favorite> {
-    // Check for duplicate
-    const existing = await this.favRepo.findOne({
-      where: {
-        userId,
-        from: dto.from,
-        to: dto.to,
-        mode: dto.mode,
-      },
-    });
+    const type = dto.type || 'journey';
+
+    // Vérification des doublons selon le type de favori
+    const duplicateWhere: Record<string, unknown> = {
+      userId,
+      type,
+      mode: dto.mode,
+    };
+    if (type === 'journey') {
+      duplicateWhere.from = dto.from ?? null;
+      duplicateWhere.to = dto.to ?? null;
+    } else {
+      duplicateWhere.lineId = dto.lineId ?? null;
+    }
+    const existing = await this.favRepo.findOne({ where: duplicateWhere });
     if (existing) return existing;
 
     const favorite = this.favRepo.create({
       userId,
-      from: dto.from,
-      to: dto.to,
+      type,
+      lineId: type === 'line' ? (dto.lineId ?? null) : null,
+      from: type === 'journey' ? (dto.from ?? null) : null,
+      to: type === 'journey' ? (dto.to ?? null) : null,
       mode: dto.mode,
       modeColor: dto.modeColor,
       duration: dto.duration,
@@ -64,9 +72,22 @@ export class FavoritesService {
     from: string,
     to: string,
     mode: string,
+    type: 'journey' | 'line' = 'journey',
+    lineId?: string,
   ): Promise<boolean> {
+    const where: Record<string, unknown> = { userId, type, mode };
+    if (type === 'journey') {
+      where.from = from;
+      where.to = to;
+    } else if (lineId) {
+      where.lineId = lineId;
+    }
+    return !!(await this.favRepo.findOne({ where }));
+  }
+
+  async isFavoriteLine(userId: string, lineId: string): Promise<boolean> {
     return !!(await this.favRepo.findOne({
-      where: { userId, from, to, mode },
+      where: { userId, type: 'line', lineId },
     }));
   }
 

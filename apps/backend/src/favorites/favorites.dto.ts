@@ -1,11 +1,21 @@
 import { IsString, IsNumber, IsOptional, Min, Max } from 'class-validator';
 
 export class CreateFavoriteDto {
+  @IsOptional()
   @IsString()
-  from: string;
+  type?: 'journey' | 'line';
 
+  @IsOptional()
   @IsString()
-  to: string;
+  lineId?: string;
+
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @IsOptional()
+  @IsString()
+  to?: string;
 
   @IsString()
   mode: string;

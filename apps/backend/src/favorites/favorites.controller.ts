@@ -76,6 +76,12 @@ export class FavoritesController {
     return { isFavorite: isFav };
   }
 
+  @Get('lines')
+  async getFavoriteLines(@Request() req: { user: { id: string } }) {
+    const favorites = await this.favService.getFavorites(req.user.id);
+    return favorites.filter((f) => f.type === 'line');
+  }
+
   // ─── Stats ────────────────────────────────────────────────────
 
   @Get('stats')
