@@ -1,0 +1,20 @@
+{
+  "name": "urbanflow-notion-sync",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Synchronise la page Notion 'Suivi de Projet — Kaizen' depuis KAIZEN.md, PLAN.md et git log. Source de vérité : local.",
+  "main": "sync.mjs",
+  "bin": {
+    "notion-sync": "sync.mjs"
+  },
+  "scripts": {
+    "start": "node sync.mjs",
+    "dry-run": "node sync.mjs --dry-run",
+    "check-auth": "node sync.mjs --check-auth"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {}
+}

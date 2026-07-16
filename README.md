@@ -200,8 +200,36 @@ cd apps/backend && DATABASE_URL=postgresql://urbanflow:urbanflow_dev@localhost:5
 cd apps/frontend && npm test
 
 # Sauvegarder / restaurer la base PostgreSQL
-./scripts/backup-db.sh ./backups
-./scripts/restore-db.sh ./backups/urbanflow_YYYYMMDD_HHMMSS.sql.gz
+./scripts/backup-db.sh
+./scripts/restore-db.sh backups/urbanflow-YYYY-MM-DD.sql.gz
+
+# Audit de sécurité local (npm audit + Semgrep)
+./scripts/security-audit.sh
+```
+
+## Documentation & Notion
+
+La page Notion **« Suivi de Projet — Kaizen »** est synchronisée depuis ce repo (source de vérité : `KAIZEN.md` + `PLAN.md` + `git log`).
+
+```bash
+# Pré-requis une seule fois :
+mkdir -p ~/.config/notion
+echo 'ntn_...' > ~/.config/notion/token   # NE PAS COMMITER
+chmod 600 ~/.config/notion/token
+
+# Vérifier l'authentification
+node scripts/notion-sync/sync.mjs --check-auth
+
+# Dry-run : montre les changements sans rien écrire
+node scripts/notion-sync/sync.mjs --dry-run
+
+# Sync réelle vers la page Notion
+node scripts/notion-sync/sync.mjs
+```
+
+**Limitations de l'API Notion** : les cellules de tableau markdown ne sont pas éditables proprement. Le script crée des **bases de données** (Tâches, Phases, Backlog) au lieu de tableaux — éditables et filtrables nativement.
+
+**Idempotence** : rejouer le script ne crée pas de doublons (utilise le SHA commit comme clé unique côté Tâches).
 
 # Vérification avant mise en production
 voir [docs/prod-verification.md](docs/prod-verification.md)
