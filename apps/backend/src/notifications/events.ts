@@ -34,3 +34,33 @@ export class BroadcastNotificationEvent {
     public readonly lineId?: string,
   ) {}
 }
+
+/** Rappel avant départ d’un trajet favori. */
+export class DepartureReminderEvent {
+  constructor(
+    public readonly userId: string,
+    public readonly journeyId: string,
+    public readonly lineName: string,
+    public readonly from: string,
+    public readonly to: string,
+    public readonly departureTime: string,
+  ) {}
+}
+
+/** Retard ou perturbation sur un trajet favori du jour. */
+export class JourneyDisruptionEvent {
+  constructor(
+    public readonly userId: string,
+    public readonly journeyId: string,
+    public readonly lineName: string,
+    public readonly from: string,
+    public readonly to: string,
+    public readonly delayMinutes: number,
+    public readonly message: string,
+  ) {}
+}
+
+/** Récap hebdomadaire personnalisé. */
+export class WeeklyDigestEvent {
+  constructor(public readonly userId: string) {}
+}

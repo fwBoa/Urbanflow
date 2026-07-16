@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -26,6 +27,8 @@ import { MailModule } from './mail/mail.module';
     }),
     // ─── Event-driven notifications (Phase 4) ───
     EventEmitterModule.forRoot(),
+    // ─── Cron jobs pour notifications planifiées ───
+    ScheduleModule.forRoot(),
     // ─── OWASP: Rate limiting (§5.5 Dossier Technique) ───
     ThrottlerModule.forRoot([
       { ttl: 60000, limit: 100 }, // 100 requests per minute globally

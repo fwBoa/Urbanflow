@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan, In, Raw } from 'typeorm';
 import { User } from '../auth/user.entity';
@@ -10,6 +11,9 @@ import {
   AlertsUpdatedEvent,
   AlertInfo,
   BroadcastNotificationEvent,
+  DepartureReminderEvent,
+  JourneyDisruptionEvent,
+  WeeklyDigestEvent,
 } from './events';
 
 /**
@@ -40,6 +44,7 @@ export class NotificationsEventsListener {
     @InjectRepository(Favorite)
     private readonly favoriteRepo: Repository<Favorite>,
     private readonly pushService: PushService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   @OnEvent('alerts.updated', { async: true })
@@ -135,8 +140,43 @@ export class NotificationsEventsListener {
       ),
     );
 
+    // ─── Notifications par trajet favori perturbé ─────────────────────
+    const journeyFavorites = await this.favoriteRepo.find({
+      where: {
+        userId: In(notifiedUserIds),
+        type: 'journey',
+      },
+    });
+
+    const disruptionEmitted = new Set<string>();
+    for (const alert of alerts) {
+      for (const fav of journeyFavorites) {
+        if (
+          alert.affectedRoutes.some((route) =>
+            this.lineMatchesRoute(fav.mode, route),
+          )
+        ) {
+          const key = `${fav.userId}|${fav.id}|${alert.id}`;
+          if (disruptionEmitted.has(key)) continue;
+          disruptionEmitted.add(key);
+          this.eventEmitter.emit(
+            'journey.disruption',
+            new JourneyDisruptionEvent(
+              fav.userId,
+              fav.id,
+              fav.mode,
+              fav.from || 'Départ',
+              fav.to || 'Arrivée',
+              alert.severity === 'warning' ? 10 : alert.severity === 'severe' ? 20 : 0,
+              alert.descriptionText || alert.headerText,
+            ),
+          );
+        }
+      }
+    }
+
     this.logger.log(
-      `Created ${notifications.length} in-app alert notifications and pushed ${notifiedUserIds.length} users`,
+      `Created ${notifications.length} in-app alert notifications, pushed ${notifiedUserIds.length} users, ${disruptionEmitted.size} journey disruptions`,
     );
   }
 
@@ -184,6 +224,127 @@ export class NotificationsEventsListener {
     this.logger.log(
       `Broadcast "${title}" to ${users.length} user(s) with push`,
     );
+  }
+
+  @OnEvent('departure.reminder', { async: true })
+  async handleDepartureReminder({
+    userId,
+    journeyId,
+    lineName,
+    from,
+    to,
+    departureTime,
+  }: DepartureReminderEvent): Promise<void> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId, notificationsEnabled: true },
+      select: ['id'],
+    });
+    if (!user) return;
+
+    const title = `UrbanFlow — Départ dans 15 min`;
+    const body = `${lineName} : ${from} → ${to}`;
+    const actionUrl = `/trip/${journeyId}`;
+
+    await this.notifRepo.save(
+      this.notifRepo.create({
+        userId,
+        type: 'favorite_alert',
+        title,
+        message: body,
+        actionUrl,
+        isRead: false,
+      }),
+    );
+
+    await this.pushService.sendToUser(userId, {
+      title,
+      body,
+      actionUrl,
+    });
+
+    this.logger.log(`Departure reminder sent to user ${userId}`);
+  }
+
+  @OnEvent('journey.disruption', { async: true })
+  async handleJourneyDisruption({
+    userId,
+    journeyId,
+    lineName,
+    from,
+    to,
+    delayMinutes,
+    message,
+  }: JourneyDisruptionEvent): Promise<void> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId, notificationsEnabled: true },
+      select: ['id'],
+    });
+    if (!user) return;
+
+    const title = delayMinutes > 0
+      ? `UrbanFlow — Retard ${lineName}`
+      : `UrbanFlow — Perturbation ${lineName}`;
+    const body = delayMinutes > 0
+      ? `Retard de ${delayMinutes} min sur ${lineName} (${from} → ${to})`
+      : message;
+    const actionUrl = `/trip/${journeyId}`;
+
+    await this.notifRepo.save(
+      this.notifRepo.create({
+        userId,
+        type: 'delay',
+        title,
+        message: body,
+        actionUrl,
+        isRead: false,
+      }),
+    );
+
+    await this.pushService.sendToUser(userId, {
+      title,
+      body,
+      actionUrl,
+    });
+
+    this.logger.log(`Journey disruption sent to user ${userId}`);
+  }
+
+  @OnEvent('weekly.digest', { async: true })
+  async handleWeeklyDigest({ userId }: WeeklyDigestEvent): Promise<void> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId, notificationsEnabled: true },
+      select: ['id'],
+    });
+    if (!user) return;
+
+    const title = 'UrbanFlow — Votre récap de la semaine';
+    const body = 'Retrouvez vos trajets, vos économies CO₂ et les alertes de la semaine.';
+    const actionUrl = '/profile';
+
+    await this.notifRepo.save(
+      this.notifRepo.create({
+        userId,
+        type: 'info',
+        title,
+        message: body,
+        actionUrl,
+        isRead: false,
+      }),
+    );
+
+    await this.pushService.sendToUser(userId, {
+      title,
+      body,
+      actionUrl,
+    });
+
+    this.logger.log(`Weekly digest sent to user ${userId}`);
+  }
+
+  private lineMatchesRoute(lineName: string, route: string): boolean {
+    const a = lineName.toLowerCase().replace(/[-_]/g, ' ').trim();
+    const b = route.toLowerCase().replace(/[-_]/g, ' ').trim();
+    return a.includes(b) || b.includes(a);
   }
 
   private alertType(

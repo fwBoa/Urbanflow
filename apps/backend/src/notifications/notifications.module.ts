@@ -8,13 +8,19 @@ import { NotificationsService } from './notifications.service';
 import { PushService } from './push.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsEventsListener } from './notifications-events.listener';
+import { NotificationsSchedulerService } from './notifications-scheduler.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Notification, PushSubscription, User, Favorite]),
   ],
   controllers: [NotificationsController],
-  providers: [NotificationsService, PushService, NotificationsEventsListener],
+  providers: [
+    NotificationsService,
+    PushService,
+    NotificationsEventsListener,
+    NotificationsSchedulerService,
+  ],
   exports: [NotificationsService, PushService],
 })
 export class NotificationsModule {}
