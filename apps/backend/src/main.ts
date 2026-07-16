@@ -16,7 +16,7 @@ const LOG_LEVELS: Record<string, ('log' | 'debug' | 'warn' | 'error')[]> = {
 const nodeEnv = process.env.NODE_ENV ?? 'development';
 const loggerLevels = LOG_LEVELS[nodeEnv] ?? LOG_LEVELS.development;
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(AppModule, { logger: loggerLevels });
   const logger = new Logger('Bootstrap');
 
@@ -73,8 +73,12 @@ async function bootstrap() {
   await app.listen(port);
   logger.log(`🚀 UrbanFlow API running on http://0.0.0.0:${port} [${nodeEnv}]`);
 }
-void bootstrap().catch((error: unknown) => {
-  const err = error instanceof Error ? error : new Error(String(error));
-  console.error('Bootstrap failed:', err.message);
-  process.exit(1);
-});
+export function runBootstrap() {
+  return bootstrap().catch((error: unknown) => {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('Bootstrap failed:', err.message);
+    process.exit(1);
+  });
+}
+
+void runBootstrap();

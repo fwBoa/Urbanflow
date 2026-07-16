@@ -10,7 +10,7 @@ import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from '../auth/user.entity';
 
-async function seedAdmin() {
+export async function seedAdmin() {
   const dataSource = new DataSource({
     type: 'postgres',
     url:
@@ -66,7 +66,9 @@ async function seedAdmin() {
   }
 }
 
-void seedAdmin().catch((error: unknown) => {
-  console.error('Seed admin failed:', error);
-  process.exit(1);
-});
+if (require.main === module) {
+  void seedAdmin().catch((error: unknown) => {
+    console.error('Seed admin failed:', error);
+    process.exit(1);
+  });
+}
