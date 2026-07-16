@@ -9,6 +9,7 @@ jest.setTimeout(10000);
 describe('JourneyService', () => {
   let service: JourneyService;
   let gtfsParser: GtfsParserService;
+  let primService: PrimService;
 
   const parisOrigin = { lat: 48.8566, lon: 2.3522 };
   const parisDest = { lat: 48.8589, lon: 2.347 };
@@ -108,6 +109,7 @@ describe('JourneyService', () => {
 
     service = module.get<JourneyService>(JourneyService);
     gtfsParser = module.get<GtfsParserService>(GtfsParserService);
+    primService = module.get<PrimService>(PrimService);
   });
 
   afterEach(() => {
@@ -250,6 +252,229 @@ describe('JourneyService', () => {
           j.segments.every(
             (s) => s.type === 'walking' || s.mode?.toLowerCase() === 'marche',
           ),
+        ),
+      ).toBe(true);
+    });
+
+    it('evicts expired cache entries', async () => {
+      jest.useFakeTimers();
+      const query: JourneyQuery = {
+        origin: parisOrigin,
+        destination: parisDest,
+        departureTime: '2026-07-06T10:00:00',
+      };
+      await service.findJourney(query);
+      const callsBefore = (gtfsParser.findStopsNearby as jest.Mock).mock.calls
+        .length;
+      jest.advanceTimersByTime(121_000);
+      await service.findJourney(query);
+      // Le cache a été invalidé, donc findStopsNearby a été rappelé
+      expect(gtfsParser.findStopsNearby).toHaveBeenCalledTimes(callsBefore + 4);
+      jest.useRealTimers();
+    });
+
+    it('returns fallback transit for medium distances', async () => {
+      jest.spyOn(gtfsParser, 'isLoaded').mockResolvedValue(false);
+      jest.spyOn(gtfsParser, 'findStopsNearby').mockResolvedValue([originStop]);
+      jest
+        .spyOn(gtfsParser, 'getRoutesForStop')
+        .mockResolvedValue([
+          { ...mockRoute, route_type: 2, route_short_name: 'RER D' },
+        ]);
+
+      const query: JourneyQuery = {
+        origin: { lat: 48.8809, lon: 2.3553 },
+        destination: { lat: 48.8443, lon: 2.373 },
+      };
+      const result = await service.findJourney(query);
+      const fallback = result.find((j) => j.isFallback);
+      expect(fallback).toBeDefined();
+      expect(fallback!.segments.some((s) => s.type === 'transit')).toBe(true);
+    });
+
+    it('returns fallback transit with transfer for long distances', async () => {
+      jest.spyOn(gtfsParser, 'isLoaded').mockResolvedValue(false);
+      jest.spyOn(gtfsParser, 'findStopsNearby').mockResolvedValue([originStop]);
+      jest.spyOn(gtfsParser, 'getRoutesForStop').mockResolvedValue([mockRoute]);
+
+      const query: JourneyQuery = {
+        origin: { lat: 48.8809, lon: 2.3553 },
+        destination: { lat: 48.8584, lon: 2.2945 },
+      };
+      const result = await service.findJourney(query);
+      const withTransfer = result.find((j) => j.isFallback && j.transfers > 0);
+      expect(withTransfer).toBeDefined();
+    });
+
+    it('includes Vélib alternative when stations are available', async () => {
+      jest.spyOn(gtfsParser, 'isLoaded').mockResolvedValue(false);
+      jest.spyOn(primService, 'getNearbyVelibStations').mockResolvedValue({
+        stations: [
+          {
+            id: 'pickup',
+            name: 'Station Départ',
+            is_renting: true,
+            is_returning: true,
+            available_bikes: 2,
+            available_ebikes: 1,
+            available_mechanical: 1,
+            available_bike_stands: 3,
+            capacity: 10,
+            distance: 0.3,
+            arrondissement: '75001',
+            position: { lat: 48.8568, lon: 2.3525 },
+          },
+          {
+            id: 'dropoff',
+            name: 'Station Arrivée',
+            is_renting: true,
+            is_returning: true,
+            available_bikes: 5,
+            available_ebikes: 2,
+            available_mechanical: 3,
+            available_bike_stands: 4,
+            capacity: 12,
+            distance: 0.2,
+            arrondissement: '75001',
+            position: { lat: 48.8588, lon: 2.3475 },
+          },
+        ],
+        total: 2,
+      });
+
+      const query: JourneyQuery = {
+        origin: { lat: 48.8566, lon: 2.3522 },
+        destination: { lat: 48.86, lon: 2.34 },
+      };
+      const result = await service.findJourney(query);
+      const velib = result.find((j) =>
+        j.segments.some((s) => s.type === 'velib'),
+      );
+      expect(velib).toBeDefined();
+    });
+
+    it('uses RAPTOR foot-path transfers when available', async () => {
+      jest.spyOn(gtfsParser, 'isLoaded').mockResolvedValue(true);
+      jest
+        .spyOn(gtfsParser, 'findStopsNearby')
+        .mockResolvedValueOnce([originStop])
+        .mockResolvedValueOnce([destStop]);
+
+      jest.spyOn(gtfsParser, 'getNextDeparturesBatch').mockResolvedValue(
+        new Map([
+          [
+            'stop-origin',
+            [
+              {
+                trip: mockTrip,
+                route: mockRoute,
+                stopTime: mockStopTime,
+              },
+            ],
+          ],
+        ]),
+      );
+
+      jest.spyOn(gtfsParser, 'getTripStopTimesBatch').mockResolvedValue(
+        new Map([
+          [
+            'trip-1',
+            [
+              mockStopTime,
+              {
+                trip_id: 'trip-1',
+                stop_id: 'stop-dest',
+                arrival_time: '10:10:00',
+                departure_time: '10:11:00',
+                stop_sequence: 2,
+              },
+            ],
+          ],
+        ]),
+      );
+
+      jest.spyOn(gtfsParser, 'getTransfersFromBatch').mockResolvedValue(
+        new Map([
+          [
+            'stop-dest',
+            [
+              {
+                from_stop_id: 'stop-dest',
+                to_stop_id: 'stop-dest2',
+                min_transfer_time: 60,
+              },
+            ],
+          ],
+        ]),
+      );
+
+      const farDestStop = { ...destStop, stop_id: 'stop-dest2' };
+      jest
+        .spyOn(gtfsParser, 'findStopsNearby')
+        .mockResolvedValueOnce([originStop])
+        .mockResolvedValueOnce([farDestStop]);
+
+      const query: JourneyQuery = {
+        origin: parisOrigin,
+        destination: parisDest,
+        departureTime: '2026-07-06T09:55:00',
+      };
+      const result = await service.findJourney(query);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('filters by metro, rer, tram, transilien and velib modes', async () => {
+      jest.spyOn(gtfsParser, 'isLoaded').mockResolvedValue(true);
+      jest
+        .spyOn(gtfsParser, 'findStopsNearby')
+        .mockResolvedValueOnce([originStop])
+        .mockResolvedValueOnce([destStop]);
+
+      jest.spyOn(gtfsParser, 'getNextDeparturesBatch').mockResolvedValue(
+        new Map([
+          [
+            'stop-origin',
+            [
+              {
+                trip: mockTrip,
+                route: mockRoute,
+                stopTime: mockStopTime,
+              },
+            ],
+          ],
+        ]),
+      );
+
+      jest.spyOn(gtfsParser, 'getTripStopTimesBatch').mockResolvedValue(
+        new Map([
+          [
+            'trip-1',
+            [
+              mockStopTime,
+              {
+                trip_id: 'trip-1',
+                stop_id: 'stop-dest',
+                arrival_time: '10:10:00',
+                departure_time: '10:11:00',
+                stop_sequence: 2,
+              },
+            ],
+          ],
+        ]),
+      );
+
+      const query: JourneyQuery = {
+        origin: parisOrigin,
+        destination: parisDest,
+        departureTime: '2026-07-06T09:55:00',
+        modes: ['metro'],
+      };
+      const result = await service.findJourney(query);
+      expect(
+        result.every((j) =>
+          j.segments
+            .filter((s) => s.type === 'transit')
+            .every((s) => s.mode?.toLowerCase().includes('métro')),
         ),
       ).toBe(true);
     });

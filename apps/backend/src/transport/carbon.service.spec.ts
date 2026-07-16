@@ -166,4 +166,18 @@ describe('CarbonService', () => {
       expect(result.comparisonWithCar).toBeNull();
     });
   });
+
+  // ─── getAllFactors ───────────────────────────────────────────────
+
+  describe('getAllFactors', () => {
+    it('should return all emission factors with metadata', () => {
+      const factors = service.getAllFactors();
+      expect(factors.metro).toEqual({
+        factor: 3.8,
+        unit: 'gCO2/km/passager',
+        source: 'ADEME Base Carbone v2024',
+      });
+      expect(Object.keys(factors).length).toBeGreaterThan(5);
+    });
+  });
 });
