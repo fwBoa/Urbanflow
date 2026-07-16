@@ -52,10 +52,17 @@ export default function FavoritesPage() {
   };
 
   const handleReplay = (item: FavoriteJourney | HistoryJourney) => {
-    if ("origin" in item && item.origin && "destination" in item && item.destination) {
-      router.push(
-        `/search?originLat=${item.origin.lat}&originLon=${item.origin.lon}&destLat=${item.destination.lat}&destLon=${item.destination.lon}`
-      );
+    const hasOrigin = "origin" in item && item.origin;
+    const hasDest = "destination" in item && item.destination;
+    if (hasOrigin && hasDest) {
+      const id = typeof item.id === "string" ? item.id : "replay";
+      const query = new URLSearchParams({
+        originLat: String(item.origin!.lat),
+        originLon: String(item.origin!.lon),
+        destLat: String(item.destination!.lat),
+        destLon: String(item.destination!.lon),
+      });
+      router.push(`/trip/${id}?${query.toString()}`);
     } else {
       router.push("/search");
     }

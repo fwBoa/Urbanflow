@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, MapPin, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw, Loader2, Volume2, VolumeX, Trophy, PartyPopper } from "lucide-react";
+import { Clock, MapPin, ArrowRight, Leaf, Navigation2, Pause, Square, Play, AlertTriangle, CheckCircle2, Timer, CircleDot, RotateCcw, Loader2, Volume2, VolumeX, Trophy, PartyPopper, Heart } from "lucide-react";
 import ModeIcon from "@/components/ModeIcon";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
@@ -19,7 +19,7 @@ import { MAP_MODE_COLORS } from "@/constants/mode-colors";
 import { apiService } from "@/services/api";
 import type { JourneyResult } from "@/services/api";
 import { Immersion } from "@/services/immersion";
-import { addToHistory } from "@/services/favorites";
+import { addToHistory, addFavorite, removeFavorite, getFavorites } from "@/services/favorites";
 
 // ─── Facteur d'émission moyen voiture particulière en France (thermique) ───
 // Source : ADEME ~170 g CO₂/km (valeur conservative pour comparaison)
@@ -255,6 +255,34 @@ export default function TripDetailPage() {
   const historyMode = mainTransitSegment?.mode || segments[0]?.mode || "walking";
   const historyModeColor = mainTransitSegment?.lineColor || "#2E7D9B";
 
+  // ─── Favori : état ─────────────────────────────────────────────────
+  const [isFavoriteState, setIsFavoriteState] = useState<boolean>(false);
+  const [favoriteId, setFavoriteId] = useState<string | null>(null);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+
+  useEffect(() => {
+    if (!trip) return;
+    let cancelled = false;
+    getFavorites()
+      .then((favs) => {
+        if (cancelled) return;
+        const match = favs.find(
+          (f) =>
+            f.from === departure &&
+            f.to === arrival &&
+            f.mode === historyMode,
+        );
+        setIsFavoriteState(!!match);
+        setFavoriteId(match?.id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setIsFavoriteState(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [trip, departure, arrival, historyMode]);
+
   // ─── Coordinates from search page ────────────────────────────────────
   const originLat = searchParams.get("originLat");
   const originLon = searchParams.get("originLon");
@@ -270,6 +298,59 @@ export default function TripDetailPage() {
     () => (hasCoords ? { lat: parseFloat(destLat!), lon: parseFloat(destLon!) } : null),
     [destLat, destLon, hasCoords],
   );
+
+  // ─── Favori : toggle (déclaré après originPos/destPos) ───────────────
+  const toggleFavorite = useCallback(async () => {
+    if (!trip || favoriteLoading) return;
+    setFavoriteLoading(true);
+    try {
+      if (isFavoriteState && favoriteId) {
+        const updated = await removeFavorite(favoriteId);
+        setIsFavoriteState(false);
+        setFavoriteId(null);
+        const stillThere = updated.some(
+          (f) => f.from === departure && f.to === arrival && f.mode === historyMode,
+        );
+        if (stillThere) {
+          const match = updated.find(
+            (f) =>
+              f.from === departure && f.to === arrival && f.mode === historyMode,
+          );
+          setFavoriteId(match?.id ?? null);
+        }
+      } else {
+        const fav = await addFavorite({
+          from: departure,
+          to: arrival,
+          mode: historyMode,
+          modeColor: historyModeColor,
+          duration,
+          co2,
+          origin: originPos ?? undefined,
+          destination: destPos ?? undefined,
+        });
+        setIsFavoriteState(true);
+        setFavoriteId(fav.id);
+      }
+    } catch (err) {
+      console.error("Failed to toggle favorite:", err);
+    } finally {
+      setFavoriteLoading(false);
+    }
+  }, [
+    trip,
+    favoriteLoading,
+    isFavoriteState,
+    favoriteId,
+    departure,
+    arrival,
+    historyMode,
+    historyModeColor,
+    duration,
+    co2,
+    originPos,
+    destPos,
+  ]);
 
   // ─── Alertes temps réel sur ce trajet ────────────────────────────────
   const alerts = useMemo(() => trip?.alerts || [], [trip?.alerts]);
@@ -639,9 +720,25 @@ export default function TripDetailPage() {
       fullBleed={isNavigating}
       rightAction={
         !isNavigating ? (
-          <button className="text-white/80 hover:text-white transition-colors" aria-label="Partager">
-            <Navigation2 size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleFavorite}
+              disabled={favoriteLoading}
+              className={`transition-colors ${
+                isFavoriteState
+                  ? "text-[var(--color-favorite-red)]"
+                  : "text-white/80 hover:text-white"
+              } ${favoriteLoading ? "opacity-50" : ""}`}
+              aria-label={isFavoriteState ? "Retirer des favoris" : "Ajouter aux favoris"}
+              aria-pressed={isFavoriteState}
+            >
+              <Heart size={20} fill={isFavoriteState ? "currentColor" : "none"} />
+            </button>
+            <button className="text-white/80 hover:text-white transition-colors" aria-label="Partager">
+              <Navigation2 size={20} />
+            </button>
+          </div>
         ) : null
       }
     >
