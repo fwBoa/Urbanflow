@@ -517,32 +517,91 @@ export class TransportController {
 
   /**
    * Match realtime alerts against a journey's transit lines.
-   * Returns alerts whose affectedRoutes overlap with the journey's line names.
+   * Le matching se base sur le code de ligne exact et le mode de transport
+   * détecté dans le nom, afin d'éviter les faux positifs
+   * (ex. RER A vs Tram T3a, Métro 1 vs Bus 1).
    */
   private matchAlertsForJourney(
     journey: JourneyResult,
     alerts: RealtimeAlert[],
   ): RealtimeAlert[] {
-    const lineNames = journey.segments
-      .filter((s) => s.type === 'transit')
-      .map((s) => s.lineName)
-      .filter(Boolean) as string[];
-
-    if (lineNames.length === 0 || alerts.length === 0) return [];
-
-    const normalize = (s: string) =>
-      s.toUpperCase().replace(/\s+/g, ' ').trim().replace(/[-_]/g, ' ');
+    const transitSegments = journey.segments.filter(
+      (s) => s.type === 'transit',
+    );
+    if (transitSegments.length === 0 || alerts.length === 0) return [];
 
     return alerts.filter((alert) =>
-      alert.affectedRoutes.some((route) => {
-        const nr = normalize(route);
-        return lineNames.some((line) => {
-          const nl = normalize(line);
-          // bidirectional substring match
-          return nl.includes(nr) || nr.includes(nl);
-        });
-      }),
+      transitSegments.some((segment) =>
+        this.alertMatchesLine(
+          alert,
+          segment.lineName || segment.mode || '',
+          segment.mode,
+        ),
+      ),
     );
+  }
+
+  private normalizeLineName(s: string): string {
+    return s.toUpperCase().replace(/\s+/g, ' ').trim().replace(/[-_]/g, ' ');
+  }
+
+  private detectLineMode(name: string): string | undefined {
+    const n = this.normalizeLineName(name);
+    if (n.includes('METRO') || n.includes('MÉTRO')) return 'metro';
+    if (n.includes('RER')) return 'rer';
+    if (n.includes('TRAM')) return 'tram';
+    if (n.includes('BUS')) return 'bus';
+    if (n.includes('TRANSILIEN') || n.includes('TRAIN')) return 'transilien';
+    return undefined;
+  }
+
+  private extractLineCode(name: string): string {
+    const tokens = this.normalizeLineName(name).split(' ').filter(Boolean);
+    return tokens[tokens.length - 1] ?? '';
+  }
+
+  private alertMatchesLine(
+    alert: RealtimeAlert,
+    lineName: string,
+    lineMode?: string,
+  ): boolean {
+    if (!lineName) return false;
+
+    const normalizedLine = this.normalizeLineName(lineName);
+    const lineCode = this.extractLineCode(normalizedLine);
+    const lineModeHint = lineMode || this.detectLineMode(normalizedLine);
+
+    return alert.affectedRoutes.some((route) => {
+      const normalizedRoute = this.normalizeLineName(route);
+      if (!normalizedRoute) return false;
+
+      // Correspondance exacte sur le nom complet normalisé.
+      if (normalizedRoute === normalizedLine) return true;
+
+      const routeCode = this.extractLineCode(normalizedRoute);
+      const routeMode = this.detectLineMode(normalizedRoute);
+
+      // Correspondance par code de ligne exact.
+      if (lineCode && routeCode && lineCode === routeCode) {
+        // Si les deux côtés expriment un mode, ils doivent coïncider.
+        if (lineModeHint && routeMode) {
+          return lineModeHint === routeMode;
+        }
+        // Sans mode explicite, on exige un code d'au moins 2 caractères
+        // pour éviter les collisions sur des codes trop courts (ex. "A").
+        return lineCode.length >= 2;
+      }
+
+      // Fallback sous-chaîne : uniquement pour des termes d'au moins 3 caractères.
+      if (normalizedLine.length >= 3 && normalizedRoute.length >= 3) {
+        return (
+          normalizedLine.includes(normalizedRoute) ||
+          normalizedRoute.includes(normalizedLine)
+        );
+      }
+
+      return false;
+    });
   }
 
   @Get('route')

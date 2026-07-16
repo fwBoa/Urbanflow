@@ -5,7 +5,7 @@ import { PrimService } from './prim.service';
 import { GtfsParserService } from './gtfs-parser.service';
 import { JourneyService } from './journey.service';
 import { OsrmService } from './osrm.service';
-import { GtfsRtService } from './gtfs-rt.service';
+import { GtfsRtService, RealtimeAlert } from './gtfs-rt.service';
 import { NavitiaService } from './navitia.service';
 
 describe('TransportController', () => {
@@ -349,6 +349,96 @@ describe('TransportController', () => {
         '2.35',
       );
       expect(result).toHaveLength(1);
+    });
+  });
+
+  describe('alert matching', () => {
+    const journey = {
+      durationMinutes: 20,
+      transfers: 0,
+      distanceKm: 5,
+      co2Ggrams: 10,
+      departureTime: new Date().toISOString(),
+      arrivalTime: new Date().toISOString(),
+      segments: [{ type: 'transit' as const, mode: 'rer', lineName: 'RER A' }],
+    };
+
+    it('matches alert for the same line', () => {
+      const alerts: RealtimeAlert[] = [
+        {
+          id: 'a1',
+          headerText: 'Incident',
+          severity: 'warning',
+          affectedRoutes: ['RER A'],
+          activePeriod: [],
+        },
+      ];
+      const matched = (controller as any).matchAlertsForJourney(
+        journey,
+        alerts,
+      );
+      expect(matched).toHaveLength(1);
+    });
+
+    it('does not match RER A with Tram T3a (code collision)', () => {
+      const alerts: RealtimeAlert[] = [
+        {
+          id: 'a1',
+          headerText: 'Incident tram',
+          severity: 'warning',
+          affectedRoutes: ['Tram T3a'],
+          activePeriod: [],
+        },
+      ];
+      const matched = (controller as any).matchAlertsForJourney(
+        journey,
+        alerts,
+      );
+      expect(matched).toHaveLength(0);
+    });
+
+    it('does not match Métro 1 with Bus 1 (same code, different mode)', () => {
+      const metroJourney = {
+        ...journey,
+        segments: [
+          { type: 'transit' as const, mode: 'metro', lineName: 'Métro 1' },
+        ],
+      };
+      const alerts: RealtimeAlert[] = [
+        {
+          id: 'a1',
+          headerText: 'Incident bus',
+          severity: 'warning',
+          affectedRoutes: ['Bus 1'],
+          activePeriod: [],
+        },
+      ];
+      const matched = (controller as any).matchAlertsForJourney(
+        metroJourney,
+        alerts,
+      );
+      expect(matched).toHaveLength(0);
+    });
+
+    it('matches alert by exact code when mode is missing', () => {
+      const shortCodeJourney = {
+        ...journey,
+        segments: [{ type: 'transit' as const, mode: 'rer', lineName: 'B' }],
+      };
+      const alerts: RealtimeAlert[] = [
+        {
+          id: 'a1',
+          headerText: 'Incident',
+          severity: 'warning',
+          affectedRoutes: ['RER B'],
+          activePeriod: [],
+        },
+      ];
+      const matched = (controller as any).matchAlertsForJourney(
+        shortCodeJourney,
+        alerts,
+      );
+      expect(matched).toHaveLength(1);
     });
   });
 
