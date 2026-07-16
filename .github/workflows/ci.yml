@@ -18,10 +18,10 @@ jobs:
       run:
         working-directory: apps/backend
     steps:
-      # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      # actions/setup-node v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # actions/checkout v5.0.1 (node24 runtime)
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      # actions/setup-node v7.0.0 (node24 runtime)
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 20
           cache: npm
@@ -40,8 +40,8 @@ jobs:
 
       - name: Upload coverage
         if: always()
-        # actions/upload-artifact v4.6.2
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # actions/upload-artifact v6.0.0 (node24 runtime)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: backend-coverage
           path: apps/backend/coverage/
@@ -77,10 +77,10 @@ jobs:
       GTFS_STATIC_URL: https://example.com/gtfs-static.zip
       GTFS_RT_URL: https://example.com/gtfs-rt
     steps:
-      # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      # actions/setup-node v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # actions/checkout v5.0.1 (node24 runtime)
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      # actions/setup-node v7.0.0 (node24 runtime)
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 20
           cache: npm
@@ -102,10 +102,10 @@ jobs:
       # baked in (routed to the backend by nginx). Matches the Docker build.
       NEXT_PUBLIC_API_URL: ""
     steps:
-      # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      # actions/setup-node v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      # actions/checkout v5.0.1 (node24 runtime)
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      # actions/setup-node v7.0.0 (node24 runtime)
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 20
           cache: npm
@@ -124,8 +124,8 @@ jobs:
 
       - name: Upload coverage
         if: always()
-        # actions/upload-artifact v4.6.2
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # actions/upload-artifact v6.0.0 (node24 runtime)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: frontend-coverage
           path: apps/frontend/coverage/
