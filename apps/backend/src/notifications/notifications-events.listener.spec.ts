@@ -1,12 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Repository, In } from 'typeorm';
 import { NotificationsEventsListener } from './notifications-events.listener';
 import { PushService } from './push.service';
 import { Notification } from './notification.entity';
 import { User } from '../auth/user.entity';
 import { Favorite } from '../favorites/favorite.entity';
-import { AlertsUpdatedEvent, BroadcastNotificationEvent } from './events';
+import {
+  AlertsUpdatedEvent,
+  BroadcastNotificationEvent,
+  DepartureReminderEvent,
+  JourneyDisruptionEvent,
+  WeeklyDigestEvent,
+} from './events';
 
 describe('NotificationsEventsListener', () => {
   let listener: NotificationsEventsListener;
@@ -14,6 +21,7 @@ describe('NotificationsEventsListener', () => {
   let notifRepo: Repository<Notification>;
   let favoriteRepo: Repository<Favorite>;
   let pushService: PushService;
+  let eventEmitter: EventEmitter2;
 
   const users = [{ id: 'user-1' }, { id: 'user-2' }] as User[];
 
@@ -25,6 +33,10 @@ describe('NotificationsEventsListener', () => {
           provide: getRepositoryToken(User),
           useValue: {
             find: jest.fn().mockResolvedValue(users),
+            findOne: jest.fn().mockImplementation((options: any) => {
+              const id = options?.where?.id;
+              return Promise.resolve(users.find((u) => u.id === id) ?? null);
+            }),
           },
         },
         {
@@ -53,6 +65,12 @@ describe('NotificationsEventsListener', () => {
             sendToUser: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -67,6 +85,7 @@ describe('NotificationsEventsListener', () => {
       getRepositoryToken(Favorite),
     );
     pushService = module.get<PushService>(PushService);
+    eventEmitter = module.get<EventEmitter2>(EventEmitter2);
   });
 
   afterEach(() => {
@@ -79,10 +98,24 @@ describe('NotificationsEventsListener', () => {
 
   describe('handleAlertsUpdated', () => {
     it('creates in-app notifications and sends push for matching favorites', async () => {
-      (favoriteRepo.find as jest.Mock).mockResolvedValue([
-        { userId: 'user-1', mode: 'M1' },
-        { userId: 'user-2', mode: 'M1' },
-      ]);
+      (favoriteRepo.find as jest.Mock).mockImplementation((options: any) => {
+        if (options?.where?.type === 'journey') {
+          return Promise.resolve([
+            {
+              userId: 'user-1',
+              id: 'fav-1',
+              mode: 'M1',
+              type: 'journey',
+              from: 'A',
+              to: 'B',
+            },
+          ]);
+        }
+        return Promise.resolve([
+          { userId: 'user-1', mode: 'M1' },
+          { userId: 'user-2', mode: 'M1' },
+        ]);
+      });
 
       const event = new AlertsUpdatedEvent([
         {
@@ -111,6 +144,10 @@ describe('NotificationsEventsListener', () => {
           title: 'UrbanFlow — Alerte trafic',
           actionUrl: '/notifications',
         }),
+      );
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'journey.disruption',
+        expect.any(JourneyDisruptionEvent),
       );
     });
 
@@ -226,6 +263,148 @@ describe('NotificationsEventsListener', () => {
           actionUrl: '/notifications',
         }),
       );
+    });
+  });
+
+  describe('handleDepartureReminder', () => {
+    it('persists notification and pushes when user enabled', async () => {
+      const event = new DepartureReminderEvent(
+        'user-1',
+        'fav-1',
+        'M1',
+        'A',
+        'B',
+        new Date().toISOString(),
+      );
+
+      await listener.handleDepartureReminder(event);
+
+      expect(notifRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          type: 'favorite_alert',
+          actionUrl: '/trip/fav-1',
+        }),
+      );
+      expect(pushService.sendToUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ title: 'UrbanFlow — Départ dans 15 min' }),
+      );
+    });
+
+    it('does nothing when user has disabled notifications', async () => {
+      (userRepo.findOne as jest.Mock).mockResolvedValue(null);
+
+      const event = new DepartureReminderEvent(
+        'user-1',
+        'fav-1',
+        'M1',
+        'A',
+        'B',
+        new Date().toISOString(),
+      );
+
+      await listener.handleDepartureReminder(event);
+
+      expect(notifRepo.create).not.toHaveBeenCalled();
+      expect(pushService.sendToUser).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleJourneyDisruption', () => {
+    it('persists delay notification and pushes when delay > 0', async () => {
+      const event = new JourneyDisruptionEvent(
+        'user-1',
+        'fav-1',
+        'M1',
+        'A',
+        'B',
+        12,
+        'Panne signalée',
+      );
+
+      await listener.handleJourneyDisruption(event);
+
+      expect(notifRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          type: 'delay',
+          actionUrl: '/trip/fav-1',
+        }),
+      );
+      expect(pushService.sendToUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ body: expect.stringContaining('12 min') }),
+      );
+    });
+
+    it('uses message body when no delay', async () => {
+      const event = new JourneyDisruptionEvent(
+        'user-1',
+        'fav-1',
+        'M1',
+        'A',
+        'B',
+        0,
+        'Incident terminé',
+      );
+
+      await listener.handleJourneyDisruption(event);
+
+      expect(pushService.sendToUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ body: 'Incident terminé' }),
+      );
+    });
+
+    it('does nothing when user has disabled notifications', async () => {
+      (userRepo.findOne as jest.Mock).mockResolvedValue(null);
+
+      const event = new JourneyDisruptionEvent(
+        'user-1',
+        'fav-1',
+        'M1',
+        'A',
+        'B',
+        5,
+        'Panne',
+      );
+
+      await listener.handleJourneyDisruption(event);
+
+      expect(notifRepo.create).not.toHaveBeenCalled();
+      expect(pushService.sendToUser).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleWeeklyDigest', () => {
+    it('persists weekly digest and pushes to enabled user', async () => {
+      const event = new WeeklyDigestEvent('user-1');
+
+      await listener.handleWeeklyDigest(event);
+
+      expect(notifRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          type: 'info',
+          actionUrl: '/profile',
+        }),
+      );
+      expect(pushService.sendToUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ title: 'UrbanFlow — Votre récap de la semaine' }),
+      );
+    });
+
+    it('does nothing when user has disabled notifications', async () => {
+      (userRepo.findOne as jest.Mock).mockResolvedValue(null);
+
+      const event = new WeeklyDigestEvent('user-1');
+
+      await listener.handleWeeklyDigest(event);
+
+      expect(notifRepo.create).not.toHaveBeenCalled();
+      expect(pushService.sendToUser).not.toHaveBeenCalled();
     });
   });
 });
