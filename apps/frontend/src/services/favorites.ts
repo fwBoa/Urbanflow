@@ -4,6 +4,8 @@ import { apiService } from "./api";
 
 export interface FavoriteJourney {
   id: string;
+  type?: "journey" | "line";
+  lineId?: string;
   from: string;
   to: string;
   mode: string;
@@ -80,8 +82,10 @@ export async function getFavorites(): Promise<FavoriteJourney[]> {
       const data = await res.json();
       return data.map((f: Record<string, unknown>) => ({
         id: f.id as string,
-        from: f.from as string,
-        to: f.to as string,
+        type: (f.type as "journey" | "line" | undefined) || "journey",
+        lineId: (f.lineId as string | undefined) || undefined,
+        from: (f.from as string) || "",
+        to: (f.to as string) || "",
         mode: f.mode as string,
         modeColor: f.modeColor as string,
         duration: f.duration as string,
@@ -100,6 +104,8 @@ export async function getFavorites(): Promise<FavoriteJourney[]> {
 }
 
 export async function addFavorite(journey: {
+  type?: "journey" | "line";
+  lineId?: string;
   from: string;
   to: string;
   mode: string;
@@ -119,6 +125,8 @@ export async function addFavorite(journey: {
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        type: journey.type || "journey",
+        lineId: journey.lineId,
         from: journey.from,
         to: journey.to,
         mode: journey.mode,
@@ -171,6 +179,39 @@ export async function removeFavorite(id: string): Promise<FavoriteJourney[]> {
 export async function isFavorite(from: string, to: string, mode: string): Promise<boolean> {
   const favorites = await getFavorites();
   return favorites.some((f) => f.from === from && f.to === to && f.mode === mode);
+}
+
+export async function getFavoriteLines(): Promise<FavoriteJourney[]> {
+  if (!isLoggedIn()) return [];
+  const favorites = await getFavorites();
+  return favorites.filter((f) => f.type === "line");
+}
+
+export async function addFavoriteLine(line: {
+  lineId: string;
+  lineName: string;
+  mode: string;
+  modeColor: string;
+}): Promise<FavoriteJourney> {
+  return addFavorite({
+    type: "line",
+    lineId: line.lineId,
+    from: "",
+    to: "",
+    mode: line.lineName,
+    modeColor: line.modeColor,
+    duration: "0",
+    co2: 0,
+  });
+}
+
+export async function removeFavoriteLine(lineId: string): Promise<void> {
+  if (!isLoggedIn()) return;
+  const favorites = await getFavorites();
+  const fav = favorites.find((f) => f.type === "line" && f.lineId === lineId);
+  if (fav) {
+    await removeFavorite(fav.id);
+  }
 }
 
 // ─── History ──────────────────────────────────────────────────────

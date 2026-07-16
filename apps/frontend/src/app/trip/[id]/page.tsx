@@ -19,7 +19,14 @@ import { MAP_MODE_COLORS } from "@/constants/mode-colors";
 import { apiService } from "@/services/api";
 import type { JourneyResult } from "@/services/api";
 import { Immersion } from "@/services/immersion";
-import { addToHistory, addFavorite, removeFavorite, getFavorites } from "@/services/favorites";
+import {
+  addToHistory,
+  addFavorite,
+  removeFavorite,
+  getFavorites,
+  type FavoriteJourney,
+} from "@/services/favorites";
+import { alertMatchesLine, filterAlertsForJourney } from "@/lib/alerts";
 
 // ─── Facteur d'émission moyen voiture particulière en France (thermique) ───
 // Source : ADEME ~170 g CO₂/km (valeur conservative pour comparaison)
@@ -37,6 +44,46 @@ function haversinePage(lat1: number, lon1: number, lat2: number, lon2: number): 
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function samePlace(
+  a?: { lat: number; lon: number },
+  b?: { lat: number; lon: number } | null,
+): boolean {
+  if (!a || !b) return false;
+  return Math.abs(a.lat - b.lat) < 0.001 && Math.abs(a.lon - b.lon) < 0.001;
+}
+
+function normalizePlaceName(s: string): string {
+  return s.toLowerCase().replace(/[^\w]/g, "").trim();
+}
+
+function favoriteMatchesTrip(
+  fav: FavoriteJourney,
+  departure: string,
+  arrival: string,
+  mode: string,
+  origin?: { lat: number; lon: number } | null,
+  destination?: { lat: number; lon: number } | null,
+): boolean {
+  if (fav.type === "line") return false;
+  if (fav.mode !== mode) return false;
+
+  // Correspondance robuste par coordonnées d'origine/destination.
+  if (samePlace(fav.origin, origin) && samePlace(fav.destination, destination)) {
+    return true;
+  }
+
+  // Fallback par nom (matching partiel tolérant).
+  const dNorm = normalizePlaceName(departure);
+  const aNorm = normalizePlaceName(arrival);
+  const fdNorm = normalizePlaceName(fav.from);
+  const faNorm = normalizePlaceName(fav.to);
+  const fromMatch =
+    fdNorm === dNorm || fdNorm.includes(dNorm) || dNorm.includes(fdNorm);
+  const toMatch =
+    faNorm === aNorm || faNorm.includes(aNorm) || aNorm.includes(faNorm);
+  return fromMatch && toMatch;
 }
 
 function CO2Comparison({ co2, distanceKm }: { co2: number; distanceKm?: number }) {
@@ -255,34 +302,6 @@ export default function TripDetailPage() {
   const historyMode = mainTransitSegment?.mode || segments[0]?.mode || "walking";
   const historyModeColor = mainTransitSegment?.lineColor || "#2E7D9B";
 
-  // ─── Favori : état ─────────────────────────────────────────────────
-  const [isFavoriteState, setIsFavoriteState] = useState<boolean>(false);
-  const [favoriteId, setFavoriteId] = useState<string | null>(null);
-  const [favoriteLoading, setFavoriteLoading] = useState(false);
-
-  useEffect(() => {
-    if (!trip) return;
-    let cancelled = false;
-    getFavorites()
-      .then((favs) => {
-        if (cancelled) return;
-        const match = favs.find(
-          (f) =>
-            f.from === departure &&
-            f.to === arrival &&
-            f.mode === historyMode,
-        );
-        setIsFavoriteState(!!match);
-        setFavoriteId(match?.id ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setIsFavoriteState(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [trip, departure, arrival, historyMode]);
-
   // ─── Coordinates from search page ────────────────────────────────────
   const originLat = searchParams.get("originLat");
   const originLon = searchParams.get("originLon");
@@ -299,6 +318,38 @@ export default function TripDetailPage() {
     [destLat, destLon, hasCoords],
   );
 
+  // ─── Favori : état ─────────────────────────────────────────────────
+  const [isFavoriteState, setIsFavoriteState] = useState<boolean>(false);
+  const [favoriteId, setFavoriteId] = useState<string | null>(null);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+
+  useEffect(() => {
+    if (!trip) return;
+    let cancelled = false;
+    getFavorites()
+      .then((favs) => {
+        if (cancelled) return;
+        const match = favs.find((f) =>
+          favoriteMatchesTrip(
+            f,
+            departure,
+            arrival,
+            historyMode,
+            originPos,
+            destPos,
+          ),
+        );
+        setIsFavoriteState(!!match);
+        setFavoriteId(match?.id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setIsFavoriteState(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [trip, departure, arrival, historyMode, originPos, destPos]);
+
   // ─── Favori : toggle (déclaré après originPos/destPos) ───────────────
   const toggleFavorite = useCallback(async () => {
     if (!trip || favoriteLoading) return;
@@ -308,13 +359,26 @@ export default function TripDetailPage() {
         const updated = await removeFavorite(favoriteId);
         setIsFavoriteState(false);
         setFavoriteId(null);
-        const stillThere = updated.some(
-          (f) => f.from === departure && f.to === arrival && f.mode === historyMode,
+        const stillThere = updated.some((f) =>
+          favoriteMatchesTrip(
+            f,
+            departure,
+            arrival,
+            historyMode,
+            originPos,
+            destPos,
+          ),
         );
         if (stillThere) {
-          const match = updated.find(
-            (f) =>
-              f.from === departure && f.to === arrival && f.mode === historyMode,
+          const match = updated.find((f) =>
+            favoriteMatchesTrip(
+              f,
+              departure,
+              arrival,
+              historyMode,
+              originPos,
+              destPos,
+            ),
           );
           setFavoriteId(match?.id ?? null);
         }
@@ -358,16 +422,10 @@ export default function TripDetailPage() {
   /** Alertes qui concernent explicitement une ligne empruntée par ce trajet. */
   const relevantAlerts = useMemo(() => {
     if (!trip) return [];
-    const transitLines = new Set(
-      segments
-        .filter((s) => s.type === "transit")
-        .map((s) => (s.lineName || s.mode || "").toLowerCase()),
-    );
-    return alerts.filter((alert) =>
-      alert.affectedRoutes.some((route) =>
-        transitLines.has(route.toLowerCase()),
-      ),
-    );
+    const transitLines = segments
+      .filter((s) => s.type === "transit")
+      .map((s) => s.lineName || s.mode || "");
+    return filterAlertsForJourney(alerts, transitLines);
   }, [trip, segments, alerts]);
 
   const hasRelevantAlerts = relevantAlerts.length > 0;
@@ -377,9 +435,8 @@ export default function TripDetailPage() {
   const getAlertsForSegment = useCallback(
     (segment: (typeof segments)[number]) => {
       if (segment.type !== "transit") return [];
-      const lineKey = (segment.lineName || segment.mode || "").toLowerCase();
       return alerts.filter((alert) =>
-        alert.affectedRoutes.some((route) => route.toLowerCase() === lineKey),
+        alertMatchesLine(alert, segment.lineName || segment.mode || ""),
       );
     },
     [alerts],
@@ -856,6 +913,8 @@ export default function TripDetailPage() {
           const lineColor = segment.lineColor;
           const segmentAlerts = getAlertsForSegment(segment);
           const segmentHasAlerts = segmentAlerts.length > 0;
+          const displayedAlerts = segmentAlerts.slice(0, 3);
+          const hiddenAlertCount = Math.max(0, segmentAlerts.length - 3);
           const segmentExpanded = expandedAlertSegments.has(i);
 
           return (
@@ -937,7 +996,10 @@ export default function TripDetailPage() {
                       }`}
                     >
                       <AlertTriangle size={10} />
-                      {segmentAlerts.length} alerte{segmentAlerts.length > 1 ? "s" : ""}
+                      {hiddenAlertCount > 0
+                        ? `${displayedAlerts.length}+`
+                        : `${segmentAlerts.length}`}{" "}
+                      alerte{segmentAlerts.length > 1 ? "s" : ""}
                     </span>
                   )}
                 </div>
@@ -1010,7 +1072,7 @@ export default function TripDetailPage() {
                       exit={reducedMotion ? undefined : { opacity: 0, height: 0 }}
                       className="mt-2 space-y-2 overflow-hidden"
                     >
-                      {segmentAlerts.map((alert, idx) => (
+                      {displayedAlerts.map((alert, idx) => (
                         <div
                           key={idx}
                           className={`rounded-lg border p-2.5 text-xs ${
@@ -1056,6 +1118,11 @@ export default function TripDetailPage() {
                           </div>
                         </div>
                       ))}
+                      {hiddenAlertCount > 0 && (
+                        <div className="text-[11px] text-[var(--color-text-tertiary)] text-center py-1">
+                          + {hiddenAlertCount} alerte{hiddenAlertCount > 1 ? "s" : ""} supplémentaire{hiddenAlertCount > 1 ? "s" : ""} — voir l’onglet Alertes
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>

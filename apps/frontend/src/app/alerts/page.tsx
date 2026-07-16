@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { AlertTriangle, AlertOctagon, Info, Loader2, CheckCircle2 } from "lucide-react";
+import { useState, useEffect, Suspense, useMemo } from "react";
+import { AlertTriangle, AlertOctagon, Info, Loader2, CheckCircle2, Search, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { apiService } from "@/services/api";
 import type { RealtimeAlert } from "@/services/api";
@@ -47,6 +47,7 @@ function AlertsPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "severe" | "warning" | "info">("all");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -66,9 +67,23 @@ function AlertsPageContent() {
     return () => controller.abort();
   }, []);
 
-  const filteredAlerts = alerts.filter((a) =>
-    filter === "all" ? true : a.severity === filter,
-  );
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredAlerts = useMemo(() => {
+    return alerts.filter((a) => {
+      const matchesSeverity = filter === "all" || a.severity === filter;
+      if (!matchesSeverity) return false;
+      if (!normalizedQuery) return true;
+      const haystack = [
+        a.headerText,
+        a.descriptionText,
+        a.affectedRoutes.join(" "),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [alerts, filter, normalizedQuery]);
 
   if (loading) {
     return (
@@ -105,6 +120,31 @@ function AlertsPageContent() {
 
   return (
     <div className="space-y-4">
+      {/* Recherche */}
+      <div className="relative">
+        <Search
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
+          aria-hidden="true"
+        />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher une ligne, un arrêt, une perturbation…"
+          className="w-full pl-9 pr-9 py-2 rounded-[var(--card-radius)] bg-[var(--color-surface)] border border-[var(--color-border)] text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+        />
+        {query && (
+          <button
+            onClick={() => setQuery("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
+            aria-label="Effacer la recherche"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
       {/* Filtres */}
       <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrer par sévérité">
         {[
@@ -131,6 +171,23 @@ function AlertsPageContent() {
         {filteredAlerts.length} perturbation{filteredAlerts.length > 1 ? "s" : ""} affichée
         {filteredAlerts.length > 1 ? "s" : ""}
       </p>
+
+      {filteredAlerts.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Aucune alerte ne correspond à votre recherche.
+          </p>
+          <button
+            onClick={() => {
+              setQuery("");
+              setFilter("all");
+            }}
+            className="mt-2 text-xs text-[var(--color-primary)] font-medium"
+          >
+            Réinitialiser les filtres
+          </button>
+        </div>
+      )}
 
       <AnimatePresence mode="popLayout">
         {filteredAlerts.map((alert) => {
