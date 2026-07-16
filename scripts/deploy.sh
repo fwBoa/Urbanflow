@@ -102,6 +102,18 @@ if ! docker compose ps --format json | grep -q '"Name":"urbanflow-web".*"State":
   exit 1
 fi
 
+# ─── Migrations TypeORM ─────────────────────────────────────────────────
+# Applique automatiquement les migrations livrées avec le code.
+# En cas d'échec, le déploiement s'arrête pour éviter un mismatch schema/code.
+echo "🗄️  Application des migrations TypeORM..."
+if ! docker compose exec -T backend npm run migration:run; then
+  echo "❌ Les migrations TypeORM ont échoué."
+  echo "   Logs backend :"
+  docker compose logs backend --tail=30
+  exit 1
+fi
+echo "✅ Migrations TypeORM appliquées."
+
 echo "✅ Déploiement $ENV terminé !"
 echo ""
 echo "Services :"
