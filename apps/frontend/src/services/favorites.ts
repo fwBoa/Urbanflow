@@ -24,6 +24,8 @@ export interface HistoryJourney {
   duration: string;
   co2: number;
   date: string;
+  origin?: { lat: number; lon: number };
+  destination?: { lat: number; lon: number };
 }
 
 export interface UserStats {
@@ -188,6 +190,8 @@ export async function getHistory(): Promise<HistoryJourney[]> {
         duration: h.duration as string,
         co2: Number(h.co2),
         date: h.tripDate as string,
+        origin: h.originLat != null ? { lat: Number(h.originLat), lon: Number(h.originLon) } : undefined,
+        destination: h.destLat != null ? { lat: Number(h.destLat), lon: Number(h.destLon) } : undefined,
       }));
     } catch (error) {
       console.error("Failed to fetch history from backend:", error);
@@ -205,6 +209,8 @@ export async function addToHistory(journey: {
   modeColor: string;
   duration: string;
   co2: number;
+  origin?: { lat: number; lon: number };
+  destination?: { lat: number; lon: number };
 }): Promise<HistoryJourney[]> {
   if (!isLoggedIn()) {
     // Anonymous users have NO history - silently ignore
@@ -215,7 +221,18 @@ export async function addToHistory(journey: {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(journey),
+      body: JSON.stringify({
+        from: journey.from,
+        to: journey.to,
+        mode: journey.mode,
+        modeColor: journey.modeColor,
+        duration: journey.duration,
+        co2: journey.co2,
+        originLat: journey.origin?.lat,
+        originLon: journey.origin?.lon,
+        destLat: journey.destination?.lat,
+        destLon: journey.destination?.lon,
+      }),
     });
     return getHistory();
   } catch (error) {

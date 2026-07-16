@@ -38,6 +38,10 @@ describe('FavoritesService', () => {
     duration: '15 min',
     co2: 12.34,
     tripDate: new Date(),
+    originLat: 48.85,
+    originLon: 2.35,
+    destLat: 48.86,
+    destLon: 2.36,
     user: undefined as any,
   };
 

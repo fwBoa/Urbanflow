@@ -1381,6 +1381,8 @@ export default function TripDetailPage() {
                     modeColor: historyModeColor,
                     duration,
                     co2,
+                    origin: originPos ?? undefined,
+                    destination: destPos ?? undefined,
                   }).catch(() => {
                     // Silencieux : l'historique n'est pas bloquant.
                   });

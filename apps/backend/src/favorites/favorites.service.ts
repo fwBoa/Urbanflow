@@ -98,6 +98,10 @@ export class FavoritesService {
       duration: dto.duration,
       co2: dto.co2,
       tripDate: new Date(),
+      originLat: dto.originLat ?? null,
+      originLon: dto.originLon ?? null,
+      destLat: dto.destLat ?? null,
+      destLon: dto.destLon ?? null,
     });
 
     const saved = await this.histRepo.save(entry);

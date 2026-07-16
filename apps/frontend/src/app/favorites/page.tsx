@@ -46,6 +46,34 @@ export default function FavoritesPage() {
     setFavorites(updated);
   };
 
+  const findFavoriteForHistoryItem = (item: HistoryJourney): FavoriteJourney | undefined =>
+    favorites.find(
+      (f) => f.from === item.from && f.to === item.to && f.mode === item.mode,
+    );
+
+  const isHistoryItemFavorite = (item: HistoryJourney): boolean =>
+    !!findFavoriteForHistoryItem(item);
+
+  const handleToggleFavoriteFromHistory = async (item: HistoryJourney) => {
+    const existing = findFavoriteForHistoryItem(item);
+    if (existing) {
+      const updated = await removeFavorite(existing.id);
+      setFavorites(updated);
+    } else {
+      const fav = await addFavorite({
+        from: item.from,
+        to: item.to,
+        mode: item.mode,
+        modeColor: item.modeColor,
+        duration: item.duration,
+        co2: item.co2,
+        origin: item.origin,
+        destination: item.destination,
+      });
+      setFavorites((prev) => [fav, ...prev]);
+    }
+  };
+
   const handleClearHistory = async () => {
     await clearHistory();
     setHistory([]);
@@ -219,22 +247,26 @@ export default function FavoritesPage() {
                   </p>
                 </div>
                 <button
-                  className="text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors p-1"
-                  aria-label="Ajouter aux favoris"
+                  className={`transition-colors p-1 ${
+                    isHistoryItemFavorite(item)
+                      ? "text-[var(--color-favorite-red)]"
+                      : "text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)]"
+                  }`}
+                  aria-label={
+                    isHistoryItemFavorite(item)
+                      ? "Retirer des favoris"
+                      : "Ajouter aux favoris"
+                  }
+                  aria-pressed={isHistoryItemFavorite(item)}
                   onClick={async (e) => {
                     e.stopPropagation();
-                    await addFavorite({
-                      from: item.from,
-                      to: item.to,
-                      mode: item.mode,
-                      modeColor: item.modeColor,
-                      duration: item.duration,
-                      co2: item.co2,
-                    });
-                    setFavorites(await getFavorites());
+                    await handleToggleFavoriteFromHistory(item);
                   }}
                 >
-                  <Heart size={18} />
+                  <Heart
+                    size={18}
+                    fill={isHistoryItemFavorite(item) ? "currentColor" : "none"}
+                  />
                 </button>
               </div>
             </div>
