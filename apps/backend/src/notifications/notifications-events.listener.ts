@@ -167,7 +167,11 @@ export class NotificationsEventsListener {
               fav.mode,
               fav.from || 'Départ',
               fav.to || 'Arrivée',
-              alert.severity === 'warning' ? 10 : alert.severity === 'severe' ? 20 : 0,
+              alert.severity === 'warning'
+                ? 10
+                : alert.severity === 'severe'
+                  ? 20
+                  : 0,
               alert.descriptionText || alert.headerText,
             ),
           );
@@ -233,7 +237,6 @@ export class NotificationsEventsListener {
     lineName,
     from,
     to,
-    departureTime,
   }: DepartureReminderEvent): Promise<void> {
     const user = await this.userRepo.findOne({
       where: { id: userId, notificationsEnabled: true },
@@ -281,12 +284,14 @@ export class NotificationsEventsListener {
     });
     if (!user) return;
 
-    const title = delayMinutes > 0
-      ? `UrbanFlow — Retard ${lineName}`
-      : `UrbanFlow — Perturbation ${lineName}`;
-    const body = delayMinutes > 0
-      ? `Retard de ${delayMinutes} min sur ${lineName} (${from} → ${to})`
-      : message;
+    const title =
+      delayMinutes > 0
+        ? `UrbanFlow — Retard ${lineName}`
+        : `UrbanFlow — Perturbation ${lineName}`;
+    const body =
+      delayMinutes > 0
+        ? `Retard de ${delayMinutes} min sur ${lineName} (${from} → ${to})`
+        : message;
     const actionUrl = `/trip/${journeyId}`;
 
     await this.notifRepo.save(
@@ -318,7 +323,8 @@ export class NotificationsEventsListener {
     if (!user) return;
 
     const title = 'UrbanFlow — Votre récap de la semaine';
-    const body = 'Retrouvez vos trajets, vos économies CO₂ et les alertes de la semaine.';
+    const body =
+      'Retrouvez vos trajets, vos économies CO₂ et les alertes de la semaine.';
     const actionUrl = '/profile';
 
     await this.notifRepo.save(

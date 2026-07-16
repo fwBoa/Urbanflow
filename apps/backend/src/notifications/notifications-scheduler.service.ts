@@ -1,14 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
+import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Favorite } from '../favorites/favorite.entity';
 import { User } from '../auth/user.entity';
-import {
-  DepartureReminderEvent,
-  WeeklyDigestEvent,
-} from './events';
+import { DepartureReminderEvent, WeeklyDigestEvent } from './events';
 
 /**
  * Cron jobs orchestrant les notifications planifiées.
@@ -49,9 +46,7 @@ export class NotificationsSchedulerService {
     for (const fav of favoriteJourneys) {
       // Proxy : on considère que le départ est 1h après la création du favori.
       // À remplacer par un vrai champ departureTime quand il sera disponible.
-      const proxyDeparture = new Date(
-        fav.createdAt.getTime() + 60 * 60 * 1000,
-      );
+      const proxyDeparture = new Date(fav.createdAt.getTime() + 60 * 60 * 1000);
       if (proxyDeparture < windowStart || proxyDeparture > windowEnd) continue;
 
       const dedupKey = `${fav.userId}|${fav.id}|${proxyDeparture.toISOString().slice(0, 16)}`;
@@ -87,10 +82,7 @@ export class NotificationsSchedulerService {
     });
 
     for (const user of users) {
-      this.eventEmitter.emit(
-        'weekly.digest',
-        new WeeklyDigestEvent(user.id),
-      );
+      this.eventEmitter.emit('weekly.digest', new WeeklyDigestEvent(user.id));
     }
 
     this.logger.log(`Scheduled ${users.length} weekly digests`);
