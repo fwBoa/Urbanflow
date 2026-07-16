@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Repository } from 'typeorm';
 import { FavoritesService } from './favorites.service';
 import { Favorite } from './favorite.entity';
@@ -8,6 +9,7 @@ import { CreateFavoriteDto, CreateHistoryDto } from './favorites.dto';
 
 describe('FavoritesService', () => {
   let service: FavoritesService;
+  let module: TestingModule;
   let favRepo: Repository<Favorite>;
   let histRepo: Repository<History>;
 
@@ -66,7 +68,7 @@ describe('FavoritesService', () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         FavoritesService,
         {
@@ -88,6 +90,12 @@ describe('FavoritesService', () => {
             create: jest.fn().mockReturnValue(mockHistory),
             save: jest.fn().mockResolvedValue(mockHistory),
             delete: jest.fn().mockResolvedValue({ affected: 1, raw: [] }),
+          },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
           },
         },
       ],
@@ -206,11 +214,35 @@ describe('FavoritesService', () => {
       });
       expect(histRepo.save).toHaveBeenCalledWith(mockHistory);
     });
+
+    it('emits history.updated event', async () => {
+      const eventEmitter = module.get(EventEmitter2);
+      jest
+        .spyOn(histRepo, 'delete')
+        .mockResolvedValue({ affected: 0, raw: [] });
+      jest.spyOn(histRepo, 'find').mockResolvedValue([mockHistory]);
+
+      await service.addToHistory('user-1', createHistoryDto);
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'history.updated',
+        expect.objectContaining({ userId: 'user-1' }),
+      );
+    });
   });
 
   describe('clearHistory', () => {
     it('deletes all history for a user', async () => {
       await service.clearHistory('user-1');
+      expect(histRepo.delete).toHaveBeenCalledWith({ userId: 'user-1' });
+    });
+
+    it('emits history.updated event before deleting', async () => {
+      const eventEmitter = module.get(EventEmitter2);
+      await service.clearHistory('user-1');
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'history.updated',
+        expect.objectContaining({ userId: 'user-1' }),
+      );
       expect(histRepo.delete).toHaveBeenCalledWith({ userId: 'user-1' });
     });
   });

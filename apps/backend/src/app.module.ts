@@ -18,6 +18,7 @@ import { PushSubscription } from './notifications/push-subscription.entity';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { MailModule } from './mail/mail.module';
+import { BadgesModule } from './badges/badges.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { MailModule } from './mail/mail.module';
     TransportModule,
     AdminModule,
     MailModule,
+    BadgesModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Favorite } from './favorite.entity';
 import { History } from './history.entity';
 import { CreateFavoriteDto, CreateHistoryDto } from './favorites.dto';
+import { HistoryUpdatedEvent } from '../notifications/events';
 
 @Injectable()
 export class FavoritesService {
@@ -12,6 +14,7 @@ export class FavoritesService {
     private readonly favRepo: Repository<Favorite>,
     @InjectRepository(History)
     private readonly histRepo: Repository<History>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ─── Favorites CRUD ────────────────────────────────────────────
@@ -127,6 +130,9 @@ export class FavoritesService {
 
     const saved = await this.histRepo.save(entry);
 
+    // Notify badge service that history has changed
+    this.eventEmitter.emit('history.updated', new HistoryUpdatedEvent(userId));
+
     // Keep only last 20 entries
     const all = await this.histRepo.find({
       where: { userId },
@@ -141,6 +147,9 @@ export class FavoritesService {
   }
 
   async clearHistory(userId: string): Promise<void> {
+    // Persist currently unlocked badges before clearing history so they survive.
+    this.eventEmitter.emit('history.updated', new HistoryUpdatedEvent(userId));
+
     await this.histRepo.delete({ userId });
   }
 

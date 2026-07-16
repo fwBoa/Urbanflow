@@ -64,3 +64,8 @@ export class JourneyDisruptionEvent {
 export class WeeklyDigestEvent {
   constructor(public readonly userId: string) {}
 }
+
+/** Émis lorsque l'historique d'un utilisateur est modifié (ajout ou vidage). */
+export class HistoryUpdatedEvent {
+  constructor(public readonly userId: string) {}
+}

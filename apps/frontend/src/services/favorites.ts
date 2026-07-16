@@ -77,7 +77,9 @@ const API = () => apiService.getBaseUrl();
 export async function getFavorites(): Promise<FavoriteJourney[]> {
   if (isLoggedIn()) {
     try {
-      const res = await fetch(`${API()}/api/favorites`, { credentials: "include" });
+      const res = await fetch(`${API()}/api/favorites`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       return data.map((f: Record<string, unknown>) => ({
@@ -90,8 +92,14 @@ export async function getFavorites(): Promise<FavoriteJourney[]> {
         modeColor: f.modeColor as string,
         duration: f.duration as string,
         co2: Number(f.co2),
-        origin: f.originLat != null ? { lat: Number(f.originLat), lon: Number(f.originLon) } : undefined,
-        destination: f.destLat != null ? { lat: Number(f.destLat), lon: Number(f.destLon) } : undefined,
+        origin:
+          f.originLat != null
+            ? { lat: Number(f.originLat), lon: Number(f.originLon) }
+            : undefined,
+        destination:
+          f.destLat != null
+            ? { lat: Number(f.destLat), lon: Number(f.destLon) }
+            : undefined,
         createdAt: f.createdAt as string,
       }));
     } catch (error) {
@@ -149,8 +157,14 @@ export async function addFavorite(journey: {
       modeColor: f.modeColor,
       duration: f.duration,
       co2: Number(f.co2),
-      origin: f.originLat != null ? { lat: Number(f.originLat), lon: Number(f.originLon) } : undefined,
-      destination: f.destLat != null ? { lat: Number(f.destLat), lon: Number(f.destLon) } : undefined,
+      origin:
+        f.originLat != null
+          ? { lat: Number(f.originLat), lon: Number(f.originLon) }
+          : undefined,
+      destination:
+        f.destLat != null
+          ? { lat: Number(f.destLat), lon: Number(f.destLon) }
+          : undefined,
       createdAt: f.createdAt,
     };
   } catch (error) {
@@ -176,9 +190,15 @@ export async function removeFavorite(id: string): Promise<FavoriteJourney[]> {
   }
 }
 
-export async function isFavorite(from: string, to: string, mode: string): Promise<boolean> {
+export async function isFavorite(
+  from: string,
+  to: string,
+  mode: string,
+): Promise<boolean> {
   const favorites = await getFavorites();
-  return favorites.some((f) => f.from === from && f.to === to && f.mode === mode);
+  return favorites.some(
+    (f) => f.from === from && f.to === to && f.mode === mode,
+  );
 }
 
 export async function getFavoriteLines(): Promise<FavoriteJourney[]> {
@@ -219,7 +239,9 @@ export async function removeFavoriteLine(lineId: string): Promise<void> {
 export async function getHistory(): Promise<HistoryJourney[]> {
   if (isLoggedIn()) {
     try {
-      const res = await fetch(`${API()}/api/favorites/history`, { credentials: "include" });
+      const res = await fetch(`${API()}/api/favorites/history`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       return data.map((h: Record<string, unknown>) => ({
@@ -231,8 +253,14 @@ export async function getHistory(): Promise<HistoryJourney[]> {
         duration: h.duration as string,
         co2: Number(h.co2),
         date: h.tripDate as string,
-        origin: h.originLat != null ? { lat: Number(h.originLat), lon: Number(h.originLon) } : undefined,
-        destination: h.destLat != null ? { lat: Number(h.destLat), lon: Number(h.destLon) } : undefined,
+        origin:
+          h.originLat != null
+            ? { lat: Number(h.originLat), lon: Number(h.originLon) }
+            : undefined,
+        destination:
+          h.destLat != null
+            ? { lat: Number(h.destLat), lon: Number(h.destLon) }
+            : undefined,
       }));
     } catch (error) {
       console.error("Failed to fetch history from backend:", error);
@@ -302,7 +330,9 @@ export async function clearHistory(): Promise<void> {
 export async function getStats(): Promise<UserStats> {
   if (isLoggedIn()) {
     try {
-      const res = await fetch(`${API()}/api/favorites/stats`, { credentials: "include" });
+      const res = await fetch(`${API()}/api/favorites/stats`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     } catch (error) {
@@ -325,19 +355,36 @@ export async function incrementTrips(
 
 export function getPreferences(): UserPreferences {
   if (typeof window === "undefined") {
-    return { defaultMode: "fast", notifications: true, accessibility: false, darkMode: false };
+    return {
+      defaultMode: "fast",
+      notifications: true,
+      accessibility: false,
+      darkMode: false,
+    };
   }
   try {
     const data = localStorage.getItem(PREFS_KEY);
     return data
       ? JSON.parse(data)
-      : { defaultMode: "fast", notifications: true, accessibility: false, darkMode: false };
+      : {
+          defaultMode: "fast",
+          notifications: true,
+          accessibility: false,
+          darkMode: false,
+        };
   } catch {
-    return { defaultMode: "fast", notifications: true, accessibility: false, darkMode: false };
+    return {
+      defaultMode: "fast",
+      notifications: true,
+      accessibility: false,
+      darkMode: false,
+    };
   }
 }
 
-export function savePreferences(prefs: Partial<UserPreferences>): UserPreferences {
+export function savePreferences(
+  prefs: Partial<UserPreferences>,
+): UserPreferences {
   const current = getPreferences();
   const updated = { ...current, ...prefs };
   localStorage.setItem(PREFS_KEY, JSON.stringify(updated));
@@ -352,53 +399,60 @@ export function savePreferences(prefs: Partial<UserPreferences>): UserPreference
 // ─── Badges ──────────────────────────────────────────────────────────
 
 export async function getBadges(): Promise<Badge[]> {
-  const stats = await getStats();
-  const favorites = await getFavorites();
-
-  return [
-    {
-      key: "first_trip",
-      label: "Premier trajet",
-      emoji: "🎉",
-      description: "Effectuez votre premier trajet",
-      unlocked: stats.totalTrips >= 1,
-    },
-    {
-      key: "eco_warrior",
-      label: "Éco-guerrier",
-      emoji: "🌿",
-      description: "Économisez plus de 500g de CO₂",
-      unlocked: stats.co2Saved >= 500,
-    },
-    {
-      key: "explorer",
-      label: "Explorateur",
-      emoji: "🗺️",
-      description: "Effectuez 10 trajets",
-      unlocked: stats.totalTrips >= 10,
-    },
-    {
-      key: "regular",
-      label: "Régulier",
-      emoji: "🚇",
-      description: "Effectuez 25 trajets",
-      unlocked: stats.totalTrips >= 25,
-    },
-    {
-      key: "velib_fan",
-      label: "Vélib' fan",
-      emoji: "🚲",
-      description: "Ajoutez 3 favoris",
-      unlocked: favorites.length >= 3,
-    },
-    {
-      key: "carbon_neutral",
-      label: "Carbone neutre",
-      emoji: "🌍",
-      description: "Économisez plus de 5kg de CO₂",
-      unlocked: stats.co2Saved >= 5000,
-    },
-  ];
+  if (!isLoggedIn()) {
+    return [
+      {
+        key: "first_trip",
+        label: "Premier trajet",
+        emoji: "🎉",
+        description: "Effectuez votre premier trajet",
+        unlocked: false,
+      },
+      {
+        key: "eco_warrior",
+        label: "Éco-guerrier",
+        emoji: "🌿",
+        description: "Économisez plus de 500g de CO₂",
+        unlocked: false,
+      },
+      {
+        key: "explorer",
+        label: "Explorateur",
+        emoji: "🗺️",
+        description: "Effectuez 10 trajets",
+        unlocked: false,
+      },
+      {
+        key: "regular",
+        label: "Régulier",
+        emoji: "🚇",
+        description: "Effectuez 25 trajets",
+        unlocked: false,
+      },
+      {
+        key: "velib_fan",
+        label: "Vélib' fan",
+        emoji: "🚲",
+        description: "Ajoutez 3 favoris",
+        unlocked: false,
+      },
+      {
+        key: "carbon_neutral",
+        label: "Carbone neutre",
+        emoji: "🌍",
+        description: "Économisez plus de 5kg de CO₂",
+        unlocked: false,
+      },
+    ];
+  }
+  try {
+    const res = await fetch(`${API()}/api/badges`, { credentials: "include" });
+    if (!res.ok) throw new Error("Failed");
+    return (await res.json()) as Badge[];
+  } catch (error) {
+    console.error("Failed to fetch badges from backend:", error);
+    return [];
+  }
 }
 
 // Anonymous users have zero data persistence - no local helpers needed
