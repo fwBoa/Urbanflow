@@ -392,7 +392,9 @@ describe('NotificationsEventsListener', () => {
       );
       expect(pushService.sendToUser).toHaveBeenCalledWith(
         'user-1',
-        expect.objectContaining({ title: 'UrbanFlow — Votre récap de la semaine' }),
+        expect.objectContaining({
+          title: 'UrbanFlow — Votre récap de la semaine',
+        }),
       );
     });
 

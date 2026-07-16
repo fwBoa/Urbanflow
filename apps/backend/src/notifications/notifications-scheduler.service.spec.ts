@@ -41,7 +41,9 @@ describe('NotificationsSchedulerService', () => {
     service = module.get<NotificationsSchedulerService>(
       NotificationsSchedulerService,
     );
-    favoriteRepo = module.get<Repository<Favorite>>(getRepositoryToken(Favorite));
+    favoriteRepo = module.get<Repository<Favorite>>(
+      getRepositoryToken(Favorite),
+    );
     userRepo = module.get<Repository<User>>(getRepositoryToken(User));
     eventEmitter = module.get<EventEmitter2>(EventEmitter2);
   });
