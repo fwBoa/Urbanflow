@@ -27,13 +27,13 @@ export class Favorite {
   @Column({ type: 'enum', enum: ['journey', 'line'], default: 'journey' })
   type: 'journey' | 'line';
 
-  @Column({ name: 'line_id', nullable: true })
+  @Column({ name: 'line_id', type: 'varchar', nullable: true })
   lineId: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   from: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   to: string | null;
 
   @Column()
