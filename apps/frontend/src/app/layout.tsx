@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Inter } from "next/font/google";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
+import SplashScreen from "@/components/SplashScreen";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import ConsentBanner from "@/components/ConsentBanner";
@@ -23,6 +24,7 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "default",
     title: "UrbanFlow",
+    startupImage: "/assets/urbanflow/brand/urbanflow-pictogramme.png",
   },
   openGraph: {
     title: "UrbanFlow Mobility",
@@ -32,8 +34,13 @@ export const metadata: Metadata = {
     locale: "fr_FR",
   },
   icons: {
-    icon: "/icons/icon-192.png",
-    apple: "/icons/icon-192.png",
+    icon: [
+      { url: "/assets/urbanflow/app-icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/assets/urbanflow/app-icons/favicon-64.png", sizes: "64x64", type: "image/png" },
+      { url: "/assets/urbanflow/app-icons/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/assets/urbanflow/app-icons/apple-touch-icon.png",
+    shortcut: "/assets/urbanflow/app-icons/favicon-32.png",
   },
 };
 
@@ -80,6 +87,7 @@ export default function RootLayout({
         </Script>
         <AuthProvider>
           <ThemeProvider>
+            <SplashScreen />
             {children}
             <ConsentBanner />
           </ThemeProvider>

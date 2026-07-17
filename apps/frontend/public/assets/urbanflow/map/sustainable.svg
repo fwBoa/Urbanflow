@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="48" viewBox="0 0 40 48" role="img" aria-label="Mobilité durable">
+  <path d="M20 2C10.1 2 2 10.1 2 20c0 12.3 18 26 18 26s18-13.7 18-26C38 10.1 29.9 2 20 2Z" fill="#5E8C2A" stroke="#FFFFFF" stroke-width="2"/>
+  <path d="M27 12c-9 0-14 4-14 10 0 4 5 7 9 4 4-3 5-8 5-14Z" fill="#FFFFFF"/><path d="M13 27c2-6 6-9 11-12" stroke="#5E8C2A" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

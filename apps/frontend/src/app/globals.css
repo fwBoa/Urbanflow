@@ -1,26 +1,28 @@
 @import "tailwindcss";
+@import "../styles/urbanflow-tokens.css";
 
 @variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* ─── Urban Flow Mobility — Design Tokens ─── */
-  --color-primary: #2E7D9B;
-  --color-primary-light: #4A9DB8;
-  --color-primary-dark: #1A5A73;
+  /* ─── Urban Flow Mobility — Design Tokens ───
+     Mappage des tokens officiels du pack d’assets. */
+  --color-primary: var(--uf-blue, #2E7D9B);
+  --color-primary-light: var(--uf-blue-light, #4A9DB8);
+  --color-primary-dark: var(--uf-blue-deep, #1A5A73);
   /* WCAG 1.4.3: Darkened for AA contrast on white */
-  --color-eco-green: #5E8C2A;
-  --color-mobility-orange: #D4551F;
+  --color-eco-green: var(--uf-green, #5E8C2A);
+  --color-mobility-orange: var(--uf-orange, #D4551F);
   --color-favorite-red: #E53935;
 
-  --color-text-primary: #1A1A2E;
+  --color-text-primary: var(--uf-navy, #1A1A2E);
   --color-text-secondary: #4A4A5A;
   /* WCAG 1.4.3: Darkened from #8A8A9A (3.4:1) to #6B6B7B (5.1:1) */
   --color-text-tertiary: #6B6B7B;
 
-  --color-background: #FFFFFF;
-  --color-surface: #F5F7FA;
-  --color-border: #E2E8F0;
-  --color-border-focus: #2E7D9B;
+  --color-background: var(--uf-white, #FFFFFF);
+  --color-surface: var(--uf-surface, #F5F7FA);
+  --color-border: var(--uf-border, #E2E8F0);
+  --color-border-focus: var(--uf-blue, #2E7D9B);
   --color-map-area: #D4E6F1;
 
   /* ─── Transport mode colors ─── */
@@ -112,9 +114,9 @@ html {
 
 /* ─── Dark mode ─── */
 .dark {
-  --color-primary: #4A9DB8;
+  --color-primary: var(--uf-blue-light, #4A9DB8);
   --color-primary-light: #6BB5CC;
-  --color-primary-dark: #2E7D9B;
+  --color-primary-dark: var(--uf-blue, #2E7D9B);
   /* WCAG 1.4.3: Darkened for AA contrast on dark bg */
   --color-eco-green: #7CB342;
   --color-mobility-orange: #FF8A50;
@@ -125,12 +127,45 @@ html {
   /* WCAG 1.4.3: Lightened from #6A6A7A (3.2:1) to #8A8A9A (5.5:1 on dark bg) */
   --color-text-tertiary: #8A8A9A;
 
-  --color-background: #121220;
+  --color-background: var(--uf-navy-dark, #121220);
   --color-surface: #1E1E30;
   /* WCAG 1.4.11: Darkened from #2E2E44 (1.5:1) to #3E3E5A (3.1:1) */
   --color-border: #3E3E5A;
-  --color-border-focus: #4A9DB8;
+  --color-border-focus: var(--uf-blue-light, #4A9DB8);
   --color-map-area: #1A2A3A;
+}
+
+/* ─── Splash screen animations ─── */
+@keyframes splash-logo {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(12px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes splash-progress {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+.animate-splash-logo {
+  animation: splash-logo 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-splash-progress {
+  animation: splash-progress 2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* ─── PWA standalone mode adjustments ─── */

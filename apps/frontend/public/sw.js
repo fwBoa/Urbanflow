@@ -1,4 +1,4 @@
-const CACHE_NAME = "urbanflow-v4";
+const CACHE_NAME = "urbanflow-v5";
 const STATIC_ASSETS = [
   "/",
   "/search",
@@ -6,8 +6,11 @@ const STATIC_ASSETS = [
   "/profile",
   "/offline",
   "/manifest.json",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
+  "/assets/urbanflow/app-icons/pwa-icon-192.png",
+  "/assets/urbanflow/app-icons/pwa-icon-512.png",
+  "/assets/urbanflow/app-icons/pwa-icon-maskable-512.png",
+  "/assets/urbanflow/brand/urbanflow-pictogramme.svg",
+  "/assets/urbanflow/brand/urbanflow-pictogramme.png",
 ];
 
 // Mode dev : on désactive tout cache pour ne pas casser le HMR/Turbopack de Next.js.

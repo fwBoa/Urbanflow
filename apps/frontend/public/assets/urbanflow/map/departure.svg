@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="48" viewBox="0 0 40 48" role="img" aria-label="Point de départ">
+  <path d="M20 2C10.1 2 2 10.1 2 20c0 12.3 18 26 18 26s18-13.7 18-26C38 10.1 29.9 2 20 2Z" fill="#1A5A73" stroke="#FFFFFF" stroke-width="2"/>
+  <circle cx="20" cy="20" r="6" fill="#FFFFFF"/>
+</svg>
