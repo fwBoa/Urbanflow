@@ -173,27 +173,24 @@ export default function MapComponent({
     routeMarkersRef.current.forEach((m) => map.removeLayer(m));
     routeMarkersRef.current = [];
 
-    markers.forEach((m) => {
-      const markerColor = m.color || "var(--color-primary)";
-      if (m.color || m.label) {
-        const icon = L.divIcon({
-          className: "custom-marker",
-          html: `<div style="
-            width: 32px; height: 32px; border-radius: 50%;
-            background: ${markerColor}; border: 3px solid white;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-            display: flex; align-items: center; justify-content: center;
-            overflow: hidden;
-          "><img src="/assets/urbanflow/map/station.svg" width="20" height="20" alt="" style="filter: brightness(0) invert(1);" /></div>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
-        });
-        const marker = L.marker(m.position, { icon }).addTo(map).bindPopup(m.label || "");
-        routeMarkersRef.current.push(marker);
-      } else {
-        const marker = L.marker(m.position).addTo(map);
-        routeMarkersRef.current.push(marker);
-      }
+    markers.forEach((m, index) => {
+      const isFirst = index === 0;
+      const isLast = index === markers.length - 1 && markers.length > 1;
+      const iconUrl = isFirst
+        ? "/assets/urbanflow/map/departure.svg"
+        : isLast
+          ? "/assets/urbanflow/map/destination.svg"
+          : "/assets/urbanflow/map/station.svg";
+
+      const icon = L.icon({
+        className: "custom-marker",
+        iconUrl,
+        iconSize: [32, 40],
+        iconAnchor: [16, 40],
+        popupAnchor: [0, -36],
+      });
+      const marker = L.marker(m.position, { icon }).addTo(map).bindPopup(m.label || "");
+      routeMarkersRef.current.push(marker);
     });
   }, [map, markers]);
 
@@ -205,17 +202,12 @@ export default function MapComponent({
 
     if (showVelib && velibStations.length > 0) {
       velibStations.forEach((station) => {
-        const icon = L.divIcon({
+        const icon = L.icon({
           className: "velib-marker",
-          html: `<div style="
-            width: 28px; height: 28px; border-radius: 50%;
-            background: var(--color-primary); border: 2px solid white;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-            display: flex; align-items: center; justify-content: center;
-            overflow: hidden;
-          "><img src="/assets/urbanflow/map/sustainable.svg" width="18" height="18" alt="" /></div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+          iconUrl: "/assets/urbanflow/map/sustainable.svg",
+          iconSize: [28, 34],
+          iconAnchor: [14, 34],
+          popupAnchor: [0, -30],
         });
         const marker = L.marker([station.position.lat, station.position.lon], { icon })
           .addTo(map)
@@ -290,9 +282,9 @@ export default function MapComponent({
     if (userMarkerRef.current) map.removeLayer(userMarkerRef.current);
     if (accuracyCircleRef.current) map.removeLayer(accuracyCircleRef.current);
 
-    const icon = L.divIcon({
+    const icon = L.icon({
       className: "user-position-marker",
-      html: `<img src="/assets/urbanflow/map/user-location.svg" width="24" height="24" alt="" style="filter: drop-shadow(0 0 4px rgba(46,125,155,0.5));" />`,
+      iconUrl: "/assets/urbanflow/map/user-location.svg",
       iconSize: [24, 24],
       iconAnchor: [12, 12],
     });
