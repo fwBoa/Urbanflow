@@ -1,7 +1,8 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 
 interface HeaderProps {
   title: string;
@@ -11,6 +12,7 @@ interface HeaderProps {
 
 export default function Header({ title, showBack = false, rightAction }: HeaderProps) {
   const router = useRouter();
+  const isHomeBrand = title === "UrbanFlow";
 
   return (
     <header
@@ -25,12 +27,35 @@ export default function Header({ title, showBack = false, rightAction }: HeaderP
             className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-[var(--color-surface)] text-[var(--color-text-primary)] transition-colors"
             aria-label="Retour"
           >
-            <ArrowLeft size={20} />
+            <UrbanFlowIcon type="action" name="arrow-left" size={20} />
           </button>
         )}
       </div>
 
-      <h1 className="col-start-2 text-base font-semibold text-center truncate px-4 text-[var(--color-text-primary)]">{title}</h1>
+      <div className="col-start-2 flex items-center justify-center px-4">
+        {isHomeBrand ? (
+          <>
+            <Image
+              src="/assets/urbanflow/brand/urbanflow-logo-clair.svg"
+              alt="UrbanFlow"
+              width={130}
+              height={28}
+              priority
+              className="h-7 w-auto dark:hidden"
+            />
+            <Image
+              src="/assets/urbanflow/brand/urbanflow-logo-sur-fond-sombre.svg"
+              alt="UrbanFlow"
+              width={130}
+              height={28}
+              priority
+              className="hidden h-7 w-auto dark:block"
+            />
+          </>
+        ) : (
+          <h1 className="text-base font-semibold text-center truncate text-[var(--color-text-primary)]">{title}</h1>
+        )}
+      </div>
 
       <div className="justify-self-end">
         {rightAction}

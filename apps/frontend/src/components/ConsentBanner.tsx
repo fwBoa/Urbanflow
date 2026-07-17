@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Shield, MapPin, Cookie, BarChart3 } from "lucide-react";
+import { Shield, Cookie, BarChart3 } from "lucide-react";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 
 const CONSENT_KEY = "urbanflow_consent";
 const CONSENT_VERSION = "1.0";
@@ -179,7 +180,7 @@ export default function ConsentBanner() {
               />
               <div>
                 <div className="flex items-center gap-1 text-sm font-medium">
-                  <MapPin size={14} /> Géolocalisation
+                  <UrbanFlowIcon type="action" name="locate" size={14} /> Géolocalisation
                 </div>
                 <p className="text-xs text-[var(--color-text-tertiary)]">
                   Position pour calcul d&apos;itinéraire. Non stockée en base.

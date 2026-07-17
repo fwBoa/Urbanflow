@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Zap, Leaf, MapPin, Loader2, Train, TrainFront, TramFront, Bus, Bike, Footprints, AlertTriangle, AlertOctagon } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import SearchAutocomplete from "@/components/SearchAutocomplete";
 import FilterChip from "@/components/FilterChip";
 import TripCard from "@/components/TripCard";
@@ -19,8 +20,8 @@ import { addToHistory } from "@/services/favorites";
 import type { SuggestionItem } from "@/components/SearchAutocomplete";
 
 const filters = [
-  { key: "fast", label: "Rapide", icon: <Zap size={14} /> },
-  { key: "eco", label: "Éco", icon: <Leaf size={14} /> },
+  { key: "fast", label: "Rapide", icon: <UrbanFlowIcon type="status" name="realtime" size={14} /> },
+  { key: "eco", label: "Éco", icon: <UrbanFlowIcon type="status" name="leaf" size={14} /> },
 ];
 
 const DEFAULT_MAP_CENTER: [number, number] = [48.8566, 2.3522];
@@ -60,12 +61,12 @@ function SearchPageContent() {
   const [selectedModes, setSelectedModes] = useState<string[]>([]);
 
   const transportModes = [
-    { key: "metro", label: "Métro", icon: <TrainFront size={14} /> },
-    { key: "rer", label: "RER", icon: <Train size={14} /> },
-    { key: "bus", label: "Bus", icon: <Bus size={14} /> },
-    { key: "tram", label: "Tram", icon: <TramFront size={14} /> },
-    { key: "velib", label: "Vélib'", icon: <Bike size={14} /> },
-    { key: "marche", label: "Marche", icon: <Footprints size={14} /> },
+    { key: "metro", label: "Métro", icon: <UrbanFlowIcon type="transport" name="train" size={14} /> },
+    { key: "rer", label: "RER", icon: <UrbanFlowIcon type="transport" name="train" size={14} /> },
+    { key: "bus", label: "Bus", icon: <UrbanFlowIcon type="transport" name="bus" size={14} /> },
+    { key: "tram", label: "Tram", icon: <UrbanFlowIcon type="transport" name="train" size={14} /> },
+    { key: "velib", label: "Vélib'", icon: <UrbanFlowIcon type="transport" name="bike" size={14} /> },
+    { key: "marche", label: "Marche", icon: <UrbanFlowIcon type="transport" name="walk" size={14} /> },
   ];
 
   const toggleMode = (mode: string) => {
@@ -351,7 +352,7 @@ function SearchPageContent() {
       {modeParam && (
         <div className="flex items-center gap-2 mb-3">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
-            {isVelibMode ? <Bike size={12} /> : <Train size={12} />}
+            {isVelibMode ? <UrbanFlowIcon type="transport" name="bike" size={12} /> : <UrbanFlowIcon type="transport" name="train" size={12} />}
             Mode : {modeTitle}
           </span>
           <button
@@ -365,7 +366,7 @@ function SearchPageContent() {
       {/* Message d'erreur carte hors Paris */}
       {mapClickError && (
         <div className="mb-3 px-3 py-2 rounded-lg bg-[var(--color-mobility-orange)]/10 border border-[var(--color-mobility-orange)] text-xs text-[var(--color-mobility-orange)] flex items-center gap-2">
-          <AlertTriangle size={14} />
+          <UrbanFlowIcon type="status" name="alert" size={14} />
           {mapClickError}
         </div>
       )}
@@ -426,10 +427,7 @@ function SearchPageContent() {
               aria-label="Utiliser ma position"
               title="Utiliser ma position"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-              </svg>
+              <UrbanFlowIcon type="action" name="locate" size={18} className="text-[var(--color-primary)]" />
             </button>
           }
         />
@@ -437,7 +435,7 @@ function SearchPageContent() {
         {/* Message d'erreur si position hors zone */}
         {positionError && (
           <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
-            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            <UrbanFlowIcon type="status" name="alert" size={14} className="shrink-0 mt-0.5" />
             {positionError}
           </div>
         )}
@@ -536,7 +534,7 @@ function SearchPageContent() {
 
         {!journeysLoading && !journeysError && sortedJourneys.length === 0 && selectedOrigin && selectedDest && (
           <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--card-radius)] p-4 text-sm text-[var(--color-text-secondary)] text-center">
-            <MapPin size={20} className="mx-auto mb-2 text-[var(--color-text-tertiary)]" />
+            <UrbanFlowIcon type="action" name="locate" size={20} className="mx-auto mb-2 text-[var(--color-text-tertiary)]" />
             <p className="font-medium">Aucun itinéraire trouvé</p>
             <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
               Vérifiez que votre départ et votre arrivée sont à Paris ou en proche banlieue.
@@ -577,7 +575,7 @@ function SearchPageContent() {
         {/* ─── Empty state / Erreurs enrichies ────────────────────────── */}
         {selectedOrigin && selectedDest && journeysError && (
           <div className="bg-red-50 border border-red-200 rounded-[var(--card-radius)] p-4 flex items-start gap-3" role="alert">
-            <AlertOctagon size={20} className="text-red-500 shrink-0 mt-0.5" />
+            <UrbanFlowIcon type="status" name="alert" size={20} className="text-red-500 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-red-800">Impossible de calculer l&apos;itinéraire</p>
               <p className="text-xs text-red-700 mt-0.5">
@@ -595,7 +593,7 @@ function SearchPageContent() {
 
         {selectedOrigin && selectedDest && !journeysLoading && !journeysError && journeys.length === 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-[var(--card-radius)] p-4 flex items-start gap-3" role="alert">
-            <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
+            <UrbanFlowIcon type="status" name="alert" size={20} className="text-amber-500 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-amber-800">Aucun itinéraire trouvé</p>
               <p className="text-xs text-amber-700 mt-0.5">
@@ -608,7 +606,7 @@ function SearchPageContent() {
 
         {!journeysLoading && !journeysError && (!selectedOrigin || !selectedDest) && (
           <div className="text-center py-8 text-[var(--color-text-tertiary)]">
-            <MapPin size={32} className="mx-auto mb-2 opacity-50" />
+            <UrbanFlowIcon type="action" name="locate" size={32} className="mx-auto mb-2 opacity-50" />
             <p className="text-sm">Sélectionnez un départ et une destination</p>
           </div>
         )}

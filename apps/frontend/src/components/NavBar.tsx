@@ -2,20 +2,71 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Home,
-  Search,
-  Heart,
-  Bell,
-  User,
-} from "lucide-react";
+import { Bell } from "lucide-react";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 
-const navItems = [
-  { href: "/", label: "Accueil", icon: Home },
-  { href: "/search", label: "Recherche", icon: Search },
-  { href: "/favorites", label: "Favoris", icon: Heart },
-  { href: "/alerts", label: "Alertes", icon: Bell },
-  { href: "/profile", label: "Profil", icon: User },
+interface NavItem {
+  href: string;
+  label: string;
+  renderIcon: (isActive: boolean) => React.ReactNode;
+}
+
+const navItems: NavItem[] = [
+  {
+    href: "/",
+    label: "Accueil",
+    renderIcon: (isActive) => (
+      <UrbanFlowIcon
+        type="navigation"
+        name="home"
+        size={20}
+        className={isActive ? "stroke-[2.5]" : "stroke-[1.5]"}
+      />
+    ),
+  },
+  {
+    href: "/search",
+    label: "Recherche",
+    renderIcon: (isActive) => (
+      <UrbanFlowIcon
+        type="navigation"
+        name="search"
+        size={20}
+        className={isActive ? "stroke-[2.5]" : "stroke-[1.5]"}
+      />
+    ),
+  },
+  {
+    href: "/favorites",
+    label: "Favoris",
+    renderIcon: (isActive) => (
+      <UrbanFlowIcon
+        type="navigation"
+        name="favorites"
+        size={20}
+        className={isActive ? "stroke-[2.5]" : "stroke-[1.5]"}
+      />
+    ),
+  },
+  {
+    href: "/alerts",
+    label: "Alertes",
+    renderIcon: (isActive) => (
+      <Bell size={20} strokeWidth={isActive ? 2.5 : 1.5} />
+    ),
+  },
+  {
+    href: "/profile",
+    label: "Profil",
+    renderIcon: (isActive) => (
+      <UrbanFlowIcon
+        type="navigation"
+        name="profile"
+        size={20}
+        className={isActive ? "stroke-[2.5]" : "stroke-[1.5]"}
+      />
+    ),
+  },
 ];
 
 export default function NavBar() {
@@ -27,7 +78,7 @@ export default function NavBar() {
       role="navigation"
       aria-label="Navigation principale"
     >
-      {navItems.map(({ href, label, icon: Icon }) => {
+      {navItems.map(({ href, label, renderIcon }) => {
         const isActive =
           href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
@@ -44,7 +95,7 @@ export default function NavBar() {
             {isActive && (
               <span className="absolute inset-0 bg-[var(--color-primary)]/10 dark:bg-[var(--color-primary)]/20 rounded-xl -z-10" />
             )}
-            <Icon size={20} strokeWidth={isActive ? 2.5 : 1.5} />
+            {renderIcon(isActive)}
             <span className="text-[10px] font-medium leading-none mt-0.5">{label}</span>
           </Link>
         );

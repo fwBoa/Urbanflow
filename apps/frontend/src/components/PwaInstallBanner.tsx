@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useSyncExternalStore } from "react";
-import { Download, X, Share2 } from "lucide-react";
+import { Download, Share2 } from "lucide-react";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 
 // L'événement `beforeinstallprompt` n'est pas typé dans les lib DOM standards.
 // On déclare le sous-ensemble utilisé (prompt() + userChoice) pour éviter `any`.
@@ -102,7 +103,7 @@ export default function PwaInstallBanner() {
           className="p-1.5 hover:bg-white/20 rounded-full transition-colors"
           aria-label="Fermer"
         >
-          <X size={16} />
+          <UrbanFlowIcon type="action" name="close" size={16} />
         </button>
       </div>
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { Lock, ArrowLeft, Loader2 } from "lucide-react";
+import { Lock, Loader2 } from "lucide-react";
 import Link from "next/link";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import { useSearchParams } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import { resetPassword } from "@/services/auth";
@@ -153,7 +154,7 @@ export default function ResetPasswordPage() {
           href="/login"
           className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)] mb-6"
         >
-          <ArrowLeft size={16} />
+          <UrbanFlowIcon type="action" name="arrow-left" size={16} />
           Retour à la connexion
         </Link>
 

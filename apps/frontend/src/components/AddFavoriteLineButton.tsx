@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Star } from "lucide-react";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -118,11 +118,12 @@ export default function AddFavoriteLineButton({
         ${loading ? "opacity-50 cursor-not-allowed" : ""}
       `}
     >
-      <Star
+      <UrbanFlowIcon
+        type="action"
+        name="bookmark"
         size={iconSize}
-        aria-hidden="true"
-        fill={isFavorite ? "currentColor" : "none"}
-        strokeWidth={isFavorite ? 2 : 1.5}
+        ariaHidden={true}
+        className={isFavorite ? "fill-current stroke-current" : "fill-none stroke-current"}
       />
       <span className="sr-only">{label}</span>
     </button>

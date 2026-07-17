@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Heart, Clock } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import CO2Badge from "@/components/CO2Badge";
 import {
   getFavorites,
@@ -123,7 +123,7 @@ export default function FavoritesPage() {
               : "text-[var(--color-text-tertiary)]"
           }`}
         >
-          <Heart size={14} className="inline mr-1" />
+          <UrbanFlowIcon type="navigation" name="favorites" size={14} className="inline mr-1" />
           Favoris
           {favorites.length > 0 && (
             <span className="ml-1 text-[11px] bg-[var(--color-primary)] text-white px-1.5 rounded-full">
@@ -139,7 +139,7 @@ export default function FavoritesPage() {
               : "text-[var(--color-text-tertiary)]"
           }`}
         >
-          <Clock size={14} className="inline mr-1" />
+          <UrbanFlowIcon type="status" name="clock" size={14} className="inline mr-1" />
           Historique
           {history.length > 0 && (
             <span className="ml-1 text-[11px] bg-[var(--color-text-tertiary)] text-white px-1.5 rounded-full">
@@ -186,7 +186,7 @@ export default function FavoritesPage() {
                         handleRemoveFavorite(line.id);
                       }}
                     >
-                      <Heart size={14} fill="currentColor" />
+                      <UrbanFlowIcon type="navigation" name="favorites" size={14} className="fill-current" />
                     </button>
                   </div>
                 ))}
@@ -197,7 +197,7 @@ export default function FavoritesPage() {
           {/* Trajets favoris */}
           {favoriteJourneys.length === 0 && favoriteLines.length === 0 ? (
             <div className="text-center py-12">
-              <Heart size={40} className="mx-auto mb-3 text-[var(--color-border)]" />
+              <UrbanFlowIcon type="navigation" name="favorites" size={40} className="mx-auto mb-3 text-[var(--color-border)]" />
               <p className="text-sm text-[var(--color-text-tertiary)] mb-1">
                 Aucun favori enregistré
               </p>
@@ -241,7 +241,7 @@ export default function FavoritesPage() {
                       {fav.from} → {fav.to}
                     </p>
                     <p className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1 mt-0.5">
-                      <Clock size={11} />
+                      <UrbanFlowIcon type="status" name="clock" size={11} />
                       {fav.duration}
                     </p>
                   </div>
@@ -253,7 +253,7 @@ export default function FavoritesPage() {
                       handleRemoveFavorite(fav.id);
                     }}
                   >
-                    <Heart size={20} fill="currentColor" />
+                    <UrbanFlowIcon type="navigation" name="favorites" size={20} className="fill-current" />
                   </button>
                 </div>
               </div>
@@ -291,7 +291,7 @@ export default function FavoritesPage() {
                     {item.from} → {item.to}
                   </p>
                   <p className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1 mt-0.5">
-                    <Clock size={11} />
+                    <UrbanFlowIcon type="status" name="clock" size={11} />
                     {item.duration} · {formatDate(item.date)}
                   </p>
                 </div>
@@ -312,9 +312,11 @@ export default function FavoritesPage() {
                     await handleToggleFavoriteFromHistory(item);
                   }}
                 >
-                  <Heart
+                  <UrbanFlowIcon
+                    type="navigation"
+                    name="favorites"
                     size={18}
-                    fill={isHistoryItemFavorite(item) ? "currentColor" : "none"}
+                    className={isHistoryItemFavorite(item) ? "fill-current" : "fill-none"}
                   />
                 </button>
               </div>

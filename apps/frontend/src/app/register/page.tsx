@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, User, ArrowRight, LogIn } from "lucide-react";
+import { Mail, Lock, User, LogIn } from "lucide-react";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 
 export default function RegisterPage() {
   const { register, error: authError } = useAuth();
@@ -148,7 +149,7 @@ export default function RegisterPage() {
             ) : (
               <>
                 Créer mon compte
-                <ArrowRight size={18} />
+                <UrbanFlowIcon type="action" name="arrow-right" size={18} />
               </>
             )}
           </button>

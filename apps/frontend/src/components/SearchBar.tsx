@@ -1,7 +1,8 @@
 "use client";
 
-import { Search, Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { forwardRef, useId } from "react";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 
 interface SearchBarProps {
   placeholder?: string;
@@ -59,10 +60,11 @@ const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(
         </label>
 
         {/* Icône de recherche */}
-        <Search
+        <UrbanFlowIcon
+          type="navigation"
+          name="search"
           size={18}
           className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] pointer-events-none"
-          aria-hidden="true"
         />
 
         <input
@@ -107,7 +109,7 @@ const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(
               className="flex items-center justify-center w-7 h-7 rounded-full text-[var(--color-text-tertiary)] hover:bg-[var(--color-border)] hover:text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-colors"
               aria-label="Effacer la recherche"
             >
-              <X size={16} aria-hidden="true" />
+              <UrbanFlowIcon type="action" name="close" size={16} />
             </button>
           )}
 

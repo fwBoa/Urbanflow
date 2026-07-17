@@ -1,6 +1,6 @@
 "use client";
 
-import { Bike, Locate } from "lucide-react";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 import type { NearbyVelibStation } from "@/hooks/useTransport";
 
 // ─── Vélib' Station Card ──────────────────────────────────────────────
@@ -41,7 +41,7 @@ export function NearbyVelibSection({ stations, loading, error, onRequestLocation
     return (
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-3">
-          <Bike size={18} className="text-[var(--color-eco-green)]" />
+          <UrbanFlowIcon type="transport" name="bike" size={18} className="text-[var(--color-eco-green)]" />
           <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
             Vélib&apos; proches
           </h2>
@@ -60,7 +60,7 @@ export function NearbyVelibSection({ stations, loading, error, onRequestLocation
     return (
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-3">
-          <Bike size={18} className="text-[var(--color-eco-green)]" />
+          <UrbanFlowIcon type="transport" name="bike" size={18} className="text-[var(--color-eco-green)]" />
           <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
             Vélib&apos; proches
           </h2>
@@ -71,7 +71,7 @@ export function NearbyVelibSection({ stations, loading, error, onRequestLocation
             onClick={onRequestLocation}
             className="px-4 py-2 rounded-[var(--chip-radius)] bg-[var(--color-eco-green)] text-white text-sm font-medium hover:bg-[#6DA33A] transition-colors"
           >
-            <Locate size={14} className="inline mr-1" />
+            <UrbanFlowIcon type="action" name="locate" size={14} className="inline mr-1" />
             Activer la localisation
           </button>
         </div>
@@ -83,7 +83,7 @@ export function NearbyVelibSection({ stations, loading, error, onRequestLocation
     return (
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-3">
-          <Bike size={18} className="text-[var(--color-eco-green)]" />
+          <UrbanFlowIcon type="transport" name="bike" size={18} className="text-[var(--color-eco-green)]" />
           <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
             Vélib&apos; proches
           </h2>
@@ -96,7 +96,7 @@ export function NearbyVelibSection({ stations, loading, error, onRequestLocation
             onClick={onRequestLocation}
             className="px-4 py-2 rounded-[var(--chip-radius)] bg-[var(--color-eco-green)] text-white text-sm font-medium hover:bg-[#6DA33A] transition-colors"
           >
-            <Locate size={14} className="inline mr-1" />
+            <UrbanFlowIcon type="action" name="locate" size={14} className="inline mr-1" />
             Localiser
           </button>
         </div>
@@ -107,7 +107,7 @@ export function NearbyVelibSection({ stations, loading, error, onRequestLocation
   return (
     <div className="mb-6">
       <div className="flex items-center gap-2 mb-3">
-        <Bike size={18} className="text-[var(--color-eco-green)]" />
+        <UrbanFlowIcon type="transport" name="bike" size={18} className="text-[var(--color-eco-green)]" />
         <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
           Vélib&apos; proches
         </h2>

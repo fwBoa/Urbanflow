@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, ArrowLeft, Loader2 } from "lucide-react";
+import { Mail, Loader2 } from "lucide-react";
 import Link from "next/link";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import AppShell from "@/components/AppShell";
 import { forgotPassword } from "@/services/auth";
 
@@ -36,7 +37,7 @@ export default function ForgotPasswordPage() {
           href="/login"
           className="inline-flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)] mb-6"
         >
-          <ArrowLeft size={16} />
+          <UrbanFlowIcon type="action" name="arrow-left" size={16} />
           Retour à la connexion
         </Link>
 

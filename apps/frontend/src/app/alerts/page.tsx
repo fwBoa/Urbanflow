@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, Suspense, useMemo } from "react";
-import { AlertTriangle, AlertOctagon, Info, Loader2, CheckCircle2, Search, X, Heart } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import { apiService } from "@/services/api";
 import type { RealtimeAlert } from "@/services/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -22,7 +23,7 @@ function alertMatchesAnyFavorite(
 const severityConfig = {
   severe: {
     label: "Critique",
-    icon: AlertOctagon,
+    icon: { type: "status" as const, name: "alert" },
     bg: "bg-red-50 dark:bg-red-900/20",
     border: "border-red-200 dark:border-red-800/50",
     text: "text-red-800 dark:text-red-200",
@@ -30,7 +31,7 @@ const severityConfig = {
   },
   warning: {
     label: "Important",
-    icon: AlertTriangle,
+    icon: { type: "status" as const, name: "alert" },
     bg: "bg-amber-50 dark:bg-amber-900/20",
     border: "border-amber-200 dark:border-amber-800/50",
     text: "text-amber-800 dark:text-amber-200",
@@ -38,7 +39,7 @@ const severityConfig = {
   },
   info: {
     label: "Information",
-    icon: Info,
+    icon: { type: "status" as const, name: "info" },
     bg: "bg-blue-50 dark:bg-blue-900/20",
     border: "border-blue-200 dark:border-blue-800/50",
     text: "text-blue-800 dark:text-blue-200",
@@ -46,7 +47,7 @@ const severityConfig = {
   },
   unknown: {
     label: "Information",
-    icon: Info,
+    icon: { type: "status" as const, name: "info" },
     bg: "bg-slate-50 dark:bg-slate-800/50",
     border: "border-slate-200 dark:border-slate-700",
     text: "text-slate-800 dark:text-slate-200",
@@ -140,7 +141,7 @@ function AlertsPageContent() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-[var(--color-text-secondary)] text-center">
         <div className="w-16 h-16 rounded-full bg-[var(--color-eco-green)]/10 flex items-center justify-center mb-4">
-          <CheckCircle2 className="text-[var(--color-eco-green)]" size={32} />
+          <UrbanFlowIcon type="status" name="check" className="text-[var(--color-eco-green)]" size={32} />
         </div>
         <p className="text-base font-semibold text-[var(--color-text-primary)]">
           Aucune perturbation signalée
@@ -156,10 +157,11 @@ function AlertsPageContent() {
     <div className="space-y-4">
       {/* Recherche */}
       <div className="relative">
-        <Search
+        <UrbanFlowIcon
+          type="navigation"
+          name="search"
           size={16}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
-          aria-hidden="true"
         />
         <input
           type="search"
@@ -174,7 +176,7 @@ function AlertsPageContent() {
             className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
             aria-label="Effacer la recherche"
           >
-            <X size={14} />
+            <UrbanFlowIcon type="action" name="close" size={14} />
           </button>
         )}
       </div>
@@ -209,7 +211,12 @@ function AlertsPageContent() {
               : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border)]"
           }`}
         >
-          <Heart size={12} fill={myLinesOnly ? "currentColor" : "none"} />
+          <UrbanFlowIcon
+            type="navigation"
+            name="favorites"
+            size={12}
+            className={myLinesOnly ? "fill-current" : "fill-none"}
+          />
           Mes lignes
         </button>
       </div>
@@ -242,7 +249,6 @@ function AlertsPageContent() {
       <AnimatePresence mode="popLayout">
         {filteredAlerts.map((alert) => {
           const config = severityConfig[alert.severity] || severityConfig.unknown;
-          const Icon = config.icon;
           return (
             <motion.div
               key={alert.id}
@@ -254,7 +260,7 @@ function AlertsPageContent() {
             >
               <div className="flex items-start gap-3">
                 <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${config.badge}`}>
-                  <Icon size={18} />
+                  <UrbanFlowIcon type={config.icon.type} name={config.icon.name} size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">

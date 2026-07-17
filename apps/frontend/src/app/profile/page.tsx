@@ -3,28 +3,20 @@
 import { useState, useEffect } from "react";
 import {
   Bell,
-  Leaf,
   Accessibility,
   Moon,
   Sun,
-  Trash2,
-  Zap,
-  Pencil,
-  Check,
   Award,
   LogOut,
   LogIn,
   Download,
   Shield,
   FileText,
-  AlertTriangle,
-  X,
   Sparkles,
-  TrainFront,
-  ChevronRight,
   Lock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import AppShell from "@/components/AppShell";
 import Switch from "@/components/Switch";
 import {
@@ -56,8 +48,8 @@ const MODE_BACKEND_TO_UI: Record<string, "fast" | "eco"> = {
 };
 
 const modeOptions = [
-  { key: "fast" as const, label: "Rapide", icon: <Zap size={14} /> },
-  { key: "eco" as const, label: "Éco", icon: <Leaf size={14} /> },
+  { key: "fast" as const, label: "Rapide", icon: <UrbanFlowIcon type="status" name="realtime" size={14} /> },
+  { key: "eco" as const, label: "Éco", icon: <UrbanFlowIcon type="status" name="leaf" size={14} /> },
 ];
 
 const avatarOptions = ["🚇", "🚲", "🚊", "🚈", "🚍", "🚶", "🌍", "⚡"];
@@ -285,7 +277,7 @@ export default function ProfilePage() {
               className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] p-1"
               aria-label="Fermer"
             >
-              <X size={16} />
+              <UrbanFlowIcon type="action" name="close" size={16} />
             </button>
           </div>
         </div>
@@ -303,7 +295,7 @@ export default function ProfilePage() {
                 className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-background border-2 border-[var(--color-primary)] flex items-center justify-center shadow-md hover:scale-110 transition-transform"
                 aria-label="Changer l'avatar"
               >
-                <Pencil size={12} className="text-[var(--color-primary)]" />
+                <UrbanFlowIcon type="action" name="edit" size={12} className="text-[var(--color-primary)]" />
               </button>
               {/* Avatar picker */}
               {showAvatarPicker && (
@@ -345,7 +337,7 @@ export default function ProfilePage() {
                     onKeyDown={(e) => e.key === "Enter" && handleSaveName()}
                   />
                   <button onClick={handleSaveName} className="text-[var(--color-eco-green)]">
-                    <Check size={18} />
+                    <UrbanFlowIcon type="status" name="check" size={18} />
                   </button>
                 </>
               ) : (
@@ -354,7 +346,7 @@ export default function ProfilePage() {
                   className="text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)]"
                   aria-label="Modifier le nom"
                 >
-                  <Pencil size={14} />
+                  <UrbanFlowIcon type="action" name="edit" size={14} />
                 </button>
               )}
             </>
@@ -381,7 +373,7 @@ export default function ProfilePage() {
             </span>
           )}
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--color-eco-green)]/10 text-[var(--color-eco-green)]">
-            <Leaf size={12} className="mr-1" />
+            <UrbanFlowIcon type="status" name="leaf" size={12} className="mr-1" />
             Éco-mobiliste
           </span>
           {unlockedCount > 0 && (
@@ -429,7 +421,7 @@ export default function ProfilePage() {
       {co2EquivalentKm > 0 && (
         <div className="bg-[var(--color-eco-green)]/10 rounded-[var(--card-radius)] p-3 mb-4 border border-[var(--color-eco-green)]/20">
           <div className="flex items-center gap-2">
-            <Leaf size={16} className="text-[var(--color-eco-green)]" />
+            <UrbanFlowIcon type="status" name="leaf" size={16} className="text-[var(--color-eco-green)]" />
             <p className="text-sm text-[var(--color-eco-green)]">
               <span className="font-semibold">{co2EquivalentKm} km</span> en voiture évités 🚗→🚇
             </p>
@@ -561,12 +553,12 @@ export default function ProfilePage() {
           onClick={() => router.push("/lines")}
           className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--color-border)]/30 transition-colors border-t border-[var(--color-border)]"
         >
-          <TrainFront size={18} className="text-[var(--color-text-tertiary)]" />
+          <UrbanFlowIcon type="transport" name="train" size={18} className="text-[var(--color-text-tertiary)]" />
           <div className="flex-1">
             <p className="text-sm text-[var(--color-text-primary)]">Lignes en temps réel</p>
             <p className="text-xs text-[var(--color-text-tertiary)]">État du trafic sur le réseau</p>
           </div>
-          <ChevronRight size={16} className="text-[var(--color-text-tertiary)]" />
+          <UrbanFlowIcon type="action" name="chevron-right" size={16} className="text-[var(--color-text-tertiary)]" />
         </button>
       </div>
 
@@ -595,7 +587,9 @@ export default function ProfilePage() {
                     Modifier votre mot de passe
                   </p>
                 </div>
-                <ChevronRight
+                <UrbanFlowIcon
+                  type="action"
+                  name="chevron-right"
                   size={16}
                   className={`text-[var(--color-text-tertiary)] transition-transform ${
                     showPasswordForm ? "rotate-90" : ""
@@ -695,7 +689,7 @@ export default function ProfilePage() {
           }}
           className="w-full flex items-center justify-center gap-2 py-3 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors"
         >
-          <Trash2 size={14} />
+          <UrbanFlowIcon type="action" name="trash" size={14} />
           Effacer l&apos;historique
         </button>
 
@@ -752,7 +746,7 @@ export default function ProfilePage() {
                 }}
                 className="w-full flex items-center justify-center gap-2 py-2.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors rounded-[var(--card-radius)] border border-red-200"
               >
-                <AlertTriangle size={14} />
+                <UrbanFlowIcon type="status" name="alert" size={14} />
                 Supprimer mon compte
               </button>
             </>

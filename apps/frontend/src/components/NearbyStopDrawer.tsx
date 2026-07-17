@@ -2,8 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, MapPin, Loader2, AlertTriangle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import ModeBadge from "./ModeBadge";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 
 interface Departure {
   tripId: string;
@@ -112,7 +113,7 @@ export default function NearbyStopDrawer({
                   className="shrink-0 w-9 h-9 rounded-full bg-[var(--color-surface)] flex items-center justify-center hover:bg-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] transition-colors"
                   aria-label="Fermer les prochains départs"
                 >
-                  <X size={18} aria-hidden="true" />
+                  <UrbanFlowIcon type="action" name="close" size={18} />
                 </button>
               </div>
 
@@ -122,7 +123,7 @@ export default function NearbyStopDrawer({
                 onClick={() => onUseAsOrigin(stop)}
                 className="w-full mb-4 h-11 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary-dark)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 transition-colors flex items-center justify-center gap-2"
               >
-                <MapPin size={16} aria-hidden="true" />
+                <UrbanFlowIcon type="action" name="locate" size={16} />
                 Définir comme départ
               </button>
 
@@ -137,10 +138,11 @@ export default function NearbyStopDrawer({
 
                 {!loading && departures.length === 0 && (
                   <div className="text-center py-6 px-4 rounded-[var(--card-radius)] bg-[var(--color-surface)] border border-[var(--color-border)]">
-                    <AlertTriangle
+                    <UrbanFlowIcon
+                      type="status"
+                      name="alert"
                       size={24}
                       className="mx-auto mb-2 text-[var(--color-text-tertiary)]"
-                      aria-hidden="true"
                     />
                     <p className="text-sm font-medium text-[var(--color-text-primary)]">
                       Aucun départ prévu prochainement

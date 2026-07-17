@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, ArrowRight, UserPlus } from "lucide-react";
+import { Mail, Lock, UserPlus } from "lucide-react";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 
 export default function LoginPage() {
   const { login, error: authError } = useAuth();
@@ -99,7 +100,7 @@ export default function LoginPage() {
             ) : (
               <>
                 Se connecter
-                <ArrowRight size={18} />
+                <UrbanFlowIcon type="action" name="arrow-right" size={18} />
               </>
             )}
           </button>

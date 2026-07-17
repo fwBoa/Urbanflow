@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Bike, Clock, ChevronRight } from "lucide-react";
 import NotificationBell from "@/components/NotificationBell";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import NavBar from "@/components/NavBar";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
@@ -76,7 +76,7 @@ export default function HomePage() {
       {/* ─── Header ─── */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-[var(--color-border)]/60 text-[var(--color-text-primary)] px-4 h-[60px] flex items-center justify-between safe-area-top transition-colors duration-300">
         <div className="flex items-center gap-2">
-          <MapPin size={22} className="text-[var(--color-primary)]" />
+          <UrbanFlowIcon type="action" name="locate" size={22} className="text-[var(--color-primary)]" />
           <h1 className="text-base font-semibold">UrbanFlow</h1>
         </div>
         <NotificationBell />
@@ -90,14 +90,14 @@ export default function HomePage() {
             onClick={() => router.push("/search")}
             className="flex-1 h-[44px] rounded-[var(--chip-radius)] bg-[var(--color-primary)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[var(--color-primary-dark)] transition-colors"
           >
-            <MapPin size={16} />
+            <UrbanFlowIcon type="action" name="locate" size={16} />
             Itinéraire
           </button>
           <button
             onClick={() => router.push("/search?mode=velib")}
             className="flex-1 h-[44px] rounded-[var(--chip-radius)] bg-[var(--color-eco-green)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#6DA33A] transition-colors"
           >
-            <Bike size={16} />
+            <UrbanFlowIcon type="transport" name="bike" size={16} />
             Vélib&apos; proches
           </button>
         </div>
@@ -157,7 +157,7 @@ export default function HomePage() {
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[11px] text-[var(--color-text-tertiary)] flex items-center gap-1">
-                      <Clock size={11} />
+                      <UrbanFlowIcon type="status" name="clock" size={11} />
                       {trip.duration}
                     </span>
                     {trip.modeColor && (
@@ -171,7 +171,7 @@ export default function HomePage() {
                     <CO2Badge grams={trip.co2} />
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-[var(--color-text-tertiary)] shrink-0" />
+                <UrbanFlowIcon type="action" name="chevron-right" size={16} className="text-[var(--color-text-tertiary)] shrink-0" />
               </button>
             ))
           )}

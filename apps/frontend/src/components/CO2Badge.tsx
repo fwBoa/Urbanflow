@@ -1,6 +1,6 @@
 "use client";
 
-import { Leaf } from "lucide-react";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 
 interface CO2BadgeProps {
   grams: number;
@@ -25,7 +25,7 @@ export default function CO2Badge({ grams, label, size = "sm" }: CO2BadgeProps) {
       }`}
       aria-label={`Empreinte carbone: ${displayValue} CO2`}
     >
-      <Leaf size={size === "sm" ? 12 : 14} />
+      <UrbanFlowIcon type="status" name="leaf" size={size === "sm" ? 12 : 14} />
       {displayValue} CO₂{label && <span className="font-normal">· {label}</span>}
     </span>
   );

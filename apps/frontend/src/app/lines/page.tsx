@@ -1,20 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  CheckCircle,
-  AlertCircle,
-  Heart,
-  HeartOff,
-  MapPin,
-  Clock,
-  ChevronRight,
-  Bus,
-  Train,
-  Navigation,
-} from "lucide-react";
 import { useRouter } from "next/navigation";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import { motion } from "framer-motion";
 import AppShell from "@/components/AppShell";
 import { useLinesByMode, useRealtimeAlerts } from "@/hooks/useTransport";
@@ -40,10 +28,10 @@ type View = "dashboard" | "explorer";
 function modeIcon(mode: string) {
   const m = mode.toLowerCase();
   if (m.includes("rer") || m.includes("transilien") || m.includes("train"))
-    return <Train size={14} />;
-  if (m.includes("bus")) return <Bus size={14} />;
-  if (m.includes("metro") || m.includes("métro")) return <Navigation size={14} />;
-  return <MapPin size={14} />;
+    return <UrbanFlowIcon type="transport" name="train" size={14} />;
+  if (m.includes("bus")) return <UrbanFlowIcon type="transport" name="bus" size={14} />;
+  if (m.includes("metro") || m.includes("métro")) return <UrbanFlowIcon type="transport" name="train" size={14} />;
+  return <UrbanFlowIcon type="action" name="locate" size={14} />;
 }
 
 function lineModeLabel(mode: string) {
@@ -128,7 +116,7 @@ function FavoriteLineCard({
           aria-label={`Retirer ${lineName} des favoris`}
           className="shrink-0 p-1.5 rounded-full text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors"
         >
-          <HeartOff size={16} />
+          <UrbanFlowIcon type="navigation" name="favorites" size={16} className="fill-current" />
         </button>
       </div>
 
@@ -136,20 +124,20 @@ function FavoriteLineCard({
         {networkLine ? (
           networkLine.status === "active" ? (
             <span className="inline-flex items-center gap-1 text-[var(--color-eco-green)]">
-              <CheckCircle size={12} /> Trafic normal
+              <UrbanFlowIcon type="status" name="check" size={12} /> Trafic normal
             </span>
           ) : networkLine.status === "prochainement active" ? (
             <span className="inline-flex items-center gap-1 text-[var(--color-mobility-orange)]">
-              <Clock size={12} /> Prochainement active
+              <UrbanFlowIcon type="status" name="clock" size={12} /> Prochainement active
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-[var(--color-text-tertiary)]">
-              <AlertCircle size={12} /> {networkLine.status}
+              <UrbanFlowIcon type="status" name="info" size={12} /> {networkLine.status}
             </span>
           )
         ) : (
           <span className="inline-flex items-center gap-1 text-[var(--color-text-tertiary)]">
-            <AlertCircle size={12} /> Hors réseau monitoré
+            <UrbanFlowIcon type="status" name="info" size={12} /> Hors réseau monitoré
           </span>
         )}
       </div>
@@ -165,7 +153,7 @@ function FavoriteLineCard({
           }`}
         >
           <div className="flex items-start gap-1.5">
-            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            <UrbanFlowIcon type="status" name="alert" size={14} className="shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-medium">
                 {lineAlerts.length} perturbation{lineAlerts.length > 1 ? "s" : ""}
@@ -182,7 +170,7 @@ function FavoriteLineCard({
         </div>
       ) : (
         <div className="mt-3 text-xs text-[var(--color-text-tertiary)] inline-flex items-center gap-1">
-          <CheckCircle size={12} className="text-[var(--color-eco-green)]" />
+          <UrbanFlowIcon type="status" name="check" size={12} className="text-[var(--color-eco-green)]" />
           Aucune alerte sur cette ligne
         </div>
       )}
@@ -213,8 +201,8 @@ function LineBadge({
       >
         {line.shortName}
       </span>
-      {isActive && <CheckCircle size={12} className="text-[var(--color-eco-green)]" />}
-      {isUpcoming && <AlertCircle size={12} className="text-[var(--color-mobility-orange)]" />}
+      {isActive && <UrbanFlowIcon type="status" name="check" size={12} className="text-[var(--color-eco-green)]" />}
+      {isUpcoming && <UrbanFlowIcon type="status" name="info" size={12} className="text-[var(--color-mobility-orange)]" />}
       <button
         type="button"
         onClick={(e) => {
@@ -224,7 +212,9 @@ function LineBadge({
         aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
         className="ml-0.5 p-0.5 rounded-full transition-colors"
       >
-        <Heart
+        <UrbanFlowIcon
+          type="navigation"
+          name="favorites"
           size={12}
           className={
             isFavorite
@@ -377,7 +367,7 @@ export default function LinesPage() {
                 className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-primary)]"
               >
                 Explorer les lignes
-                <ChevronRight size={16} />
+                <UrbanFlowIcon type="action" name="chevron-right" size={16} />
               </button>
             )}
           </div>

@@ -4,27 +4,18 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Clock,
-  MapPin,
-  ArrowRight,
-  Leaf,
-  Navigation2,
   Pause,
   Square,
   Play,
-  AlertTriangle,
-  CheckCircle2,
-  Timer,
-  CircleDot,
   RotateCcw,
   Loader2,
   Volume2,
   VolumeX,
   Trophy,
   PartyPopper,
-  Heart,
 } from "lucide-react";
 import ModeIcon from "@/components/ModeIcon";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import AppShell from "@/components/AppShell";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
@@ -141,7 +132,7 @@ function CO2Comparison({
   return (
     <div className="bg-[var(--color-eco-green)]/10 rounded-[var(--card-radius)] p-3 mb-4 border border-[var(--color-eco-green)]/20">
       <div className="flex items-center gap-2">
-        <Leaf size={16} className="text-[var(--color-eco-green)] shrink-0" />
+        <UrbanFlowIcon type="status" name="leaf" size={16} className="text-[var(--color-eco-green)] shrink-0" />
         <p className="text-sm text-[var(--color-eco-green)]">
           <span className="font-semibold">{message}</span>
           {saved > 0 && distanceKm && (
@@ -940,16 +931,18 @@ export default function TripDetailPage() {
               }
               aria-pressed={isFavoriteState}
             >
-              <Heart
+              <UrbanFlowIcon
+                type="navigation"
+                name="favorites"
                 size={20}
-                fill={isFavoriteState ? "currentColor" : "none"}
+                className={isFavoriteState ? "fill-current" : "fill-none"}
               />
             </button>
             <button
               className="text-white/80 hover:text-white transition-colors"
               aria-label="Partager"
             >
-              <Navigation2 size={20} />
+              <UrbanFlowIcon type="action" name="locate" size={20} />
             </button>
           </div>
         ) : null
@@ -1013,7 +1006,7 @@ export default function TripDetailPage() {
             </div>
             <div className="flex items-center gap-4 text-sm text-white/70">
               <span className="flex items-center gap-1">
-                <Clock size={14} />
+                <UrbanFlowIcon type="status" name="clock" size={14} />
                 {duration}
               </span>
               <span>
@@ -1036,7 +1029,9 @@ export default function TripDetailPage() {
                 className="rounded-[var(--card-radius)] border border-amber-200 bg-amber-50 dark:bg-amber-900/20 p-3"
               >
                 <div className="flex items-start gap-2">
-                  <AlertTriangle
+                  <UrbanFlowIcon
+                    type="status"
+                    name="alert"
                     className="shrink-0 text-amber-600"
                     size={18}
                   />
@@ -1064,7 +1059,9 @@ export default function TripDetailPage() {
                 animate={reducedMotion ? false : { opacity: 1, y: 0 }}
                 className="rounded-[var(--card-radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 flex items-center gap-2"
               >
-                <CheckCircle2
+                <UrbanFlowIcon
+                  type="status"
+                  name="check"
                   className="shrink-0 text-[var(--color-eco-green)]"
                   size={18}
                 />
@@ -1131,7 +1128,7 @@ export default function TripDetailPage() {
                       }
                     >
                       {isDone ? (
-                        <CheckCircle2 size={18} />
+                        <UrbanFlowIcon type="status" name="check" size={18} />
                       ) : (
                         <ModeIcon mode={modeMeta.resolvedMode} size={18} />
                       )}
@@ -1183,7 +1180,7 @@ export default function TripDetailPage() {
                       </span>
                       {isActive && (
                         <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--color-primary)] text-white shrink-0">
-                          <CircleDot size={10} /> En cours
+                          <UrbanFlowIcon type="status" name="info" size={10} /> En cours
                         </span>
                       )}
                       {segmentHasAlerts && !isActive && (
@@ -1198,7 +1195,7 @@ export default function TripDetailPage() {
                                 : "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200"
                           }`}
                         >
-                          <AlertTriangle size={10} />
+                          <UrbanFlowIcon type="status" name="alert" size={10} />
                           {hiddenAlertCount > 0
                             ? `${displayedAlerts.length}+`
                             : `${segmentAlerts.length}`}{" "}
@@ -1210,26 +1207,26 @@ export default function TripDetailPage() {
                     {/* Ligne 2 : stats rapides (durée, arrêts, horaires) */}
                     <div className="flex items-center gap-3 mt-1.5 flex-wrap text-[11px] text-[var(--color-text-tertiary)]">
                       <span className="inline-flex items-center gap-1 font-medium text-[var(--color-text-secondary)]">
-                        <Clock size={11} />
+                        <UrbanFlowIcon type="status" name="clock" size={11} />
                         {segment.durationMinutes} min
                       </span>
                       {segment.type !== "walking" && segment.numStops && (
                         <span className="inline-flex items-center gap-1">
-                          <CircleDot size={11} />
+                          <UrbanFlowIcon type="status" name="info" size={11} />
                           {segment.numStops} arrêt
                           {segment.numStops > 1 ? "s" : ""}
                         </span>
                       )}
                       {segment.departureTime && segment.arrivalTime && (
                         <span className="inline-flex items-center gap-1 font-mono">
-                          <Timer size={11} />
+                          <UrbanFlowIcon type="status" name="clock" size={11} />
                           {segment.departureTime.slice(0, 5)} →{" "}
                           {segment.arrivalTime.slice(0, 5)}
                         </span>
                       )}
                       {segment.distanceKm && segment.distanceKm > 0 && (
                         <span className="inline-flex items-center gap-1">
-                          <ArrowRight size={11} />
+                          <UrbanFlowIcon type="action" name="arrow-right" size={11} />
                           {(segment.distanceKm * 1000).toFixed(0)}m
                         </span>
                       )}
@@ -1244,7 +1241,9 @@ export default function TripDetailPage() {
                         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                           {segment.direction && (
                             <div className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]">
-                              <Navigation2
+                              <UrbanFlowIcon
+                                type="action"
+                                name="locate"
                                 size={11}
                                 className="text-[var(--color-primary)] shrink-0"
                               />
@@ -1257,7 +1256,9 @@ export default function TripDetailPage() {
                           {segment.headsign &&
                             segment.headsign !== segment.direction && (
                               <div className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]">
-                                <MapPin
+                                <UrbanFlowIcon
+                                  type="action"
+                                  name="locate"
                                   size={11}
                                   className="text-[var(--color-mobility-orange)] shrink-0"
                                 />
@@ -1277,7 +1278,9 @@ export default function TripDetailPage() {
                           )}
                           {segment.waitTimeMinutes !== undefined && (
                             <div className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]">
-                              <Clock
+                              <UrbanFlowIcon
+                                type="status"
+                                name="clock"
                                 size={11}
                                 className="text-[var(--color-eco-green)] shrink-0"
                               />
@@ -1321,7 +1324,9 @@ export default function TripDetailPage() {
                               }`}
                             >
                               <div className="flex items-start gap-2">
-                                <AlertTriangle
+                                <UrbanFlowIcon
+                                  type="status"
+                                  name="alert"
                                   size={14}
                                   className={`shrink-0 mt-0.5 ${
                                     alert.severity === "severe"
@@ -1548,7 +1553,9 @@ export default function TripDetailPage() {
                 {/* Off-route warning */}
                 {offRoute && !arrived && (
                   <div className="bg-amber-50 border border-amber-200 rounded-[var(--card-radius)] p-3 flex items-center gap-2">
-                    <AlertTriangle
+                    <UrbanFlowIcon
+                      type="status"
+                      name="alert"
                       size={18}
                       className="text-amber-500 shrink-0"
                     />
@@ -1580,7 +1587,9 @@ export default function TripDetailPage() {
                 {/* Arrived notification */}
                 {arrived && (
                   <div className="bg-[var(--color-eco-green)]/10 border border-[var(--color-eco-green)]/30 rounded-[var(--card-radius)] p-3 flex items-center gap-2">
-                    <CheckCircle2
+                    <UrbanFlowIcon
+                      type="status"
+                      name="check"
                       size={18}
                       className="text-[var(--color-eco-green)] shrink-0"
                     />
@@ -1675,7 +1684,7 @@ export default function TripDetailPage() {
                     className="w-12 h-12 rounded-full bg-white text-[var(--color-primary)] hover:bg-white/90 flex items-center justify-center transition-colors"
                     aria-label="Terminer le trajet"
                   >
-                    <CheckCircle2 size={20} />
+                    <UrbanFlowIcon type="status" name="check" size={20} />
                   </button>
                 </div>
               </div>

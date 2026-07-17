@@ -1,7 +1,8 @@
 "use client";
 
-import { Clock, ArrowRight, AlertTriangle, Calendar } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { motion } from "framer-motion";
+import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 import CO2Badge from "./CO2Badge";
 import ModeBadge from "./ModeBadge";
 import AddFavoriteLineButton from "./AddFavoriteLineButton";
@@ -117,7 +118,7 @@ export default function TripCard({
                 className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                 title="Perturbation sur une ligne de ce trajet"
               >
-                <AlertTriangle size={10} aria-hidden="true" />
+                <UrbanFlowIcon type="status" name="alert" size={10} />
                 {alertCount > 1 ? `${alertCount}` : ""}
                 <span className="sr-only">Perturbation sur une ligne de ce trajet</span>
               </span>
@@ -131,7 +132,7 @@ export default function TripCard({
               className="text-[var(--color-text-tertiary)] shrink-0 inline-flex transition-transform duration-200 group-hover:translate-x-0.5"
               aria-hidden="true"
             >
-              <ArrowRight size={14} />
+              <UrbanFlowIcon type="action" name="arrow-right" size={14} />
             </span>
             <span className="truncate">{arrival}</span>
           </div>
@@ -148,7 +149,7 @@ export default function TripCard({
         {/* Colonne durée + CO₂ */}
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-1 text-base font-bold text-[var(--color-primary)]">
-            <Clock size={16} aria-hidden="true" />
+            <UrbanFlowIcon type="status" name="clock" size={16} />
             <span>{journey.durationMinutes} min</span>
           </div>
           <CO2Badge grams={journey.co2Ggrams} />

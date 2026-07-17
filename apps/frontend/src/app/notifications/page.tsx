@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, CheckCheck, Trash2 } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import {
   getNotifications,
   markAsRead,
@@ -146,7 +147,7 @@ export default function NotificationsPage() {
                       className="text-xs text-red-500 hover:underline"
                       aria-label={`Supprimer "${notif.title}"`}
                     >
-                      <Trash2 size={14} />
+                      <UrbanFlowIcon type="action" name="trash" size={14} />
                     </button>
                   </div>
                 </div>

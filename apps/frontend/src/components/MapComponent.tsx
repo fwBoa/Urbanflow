@@ -179,14 +179,14 @@ export default function MapComponent({
         const icon = L.divIcon({
           className: "custom-marker",
           html: `<div style="
-            width: 28px; height: 28px; border-radius: 50%;
+            width: 32px; height: 32px; border-radius: 50%;
             background: ${markerColor}; border: 3px solid white;
             box-shadow: 0 2px 6px rgba(0,0,0,0.3);
             display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 12px; font-weight: 600;
-          ">${m.label ? m.label.charAt(0) : ""}</div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+            overflow: hidden;
+          "><img src="/assets/urbanflow/map/station.svg" width="20" height="20" alt="" style="filter: brightness(0) invert(1);" /></div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
         });
         const marker = L.marker(m.position, { icon }).addTo(map).bindPopup(m.label || "");
         routeMarkersRef.current.push(marker);
@@ -208,14 +208,14 @@ export default function MapComponent({
         const icon = L.divIcon({
           className: "velib-marker",
           html: `<div style="
-            width: 22px; height: 22px; border-radius: 50%;
+            width: 28px; height: 28px; border-radius: 50%;
             background: var(--color-primary); border: 2px solid white;
             box-shadow: 0 1px 4px rgba(0,0,0,0.3);
             display: flex; align-items: center; justify-content: center;
-            color: white; font-size: 10px; font-weight: 700;
-          ">🚲</div>`,
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
+            overflow: hidden;
+          "><img src="/assets/urbanflow/map/sustainable.svg" width="18" height="18" alt="" /></div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
         });
         const marker = L.marker([station.position.lat, station.position.lon], { icon })
           .addTo(map)
@@ -292,13 +292,9 @@ export default function MapComponent({
 
     const icon = L.divIcon({
       className: "user-position-marker",
-      html: `<div style="
-        width: 16px; height: 16px; border-radius: 50%;
-        background: #2E7D9B; border: 3px solid white;
-        box-shadow: 0 0 0 4px rgba(46,125,155,0.3), 0 2px 6px rgba(0,0,0,0.3);
-      "></div>`,
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
+      html: `<img src="/assets/urbanflow/map/user-location.svg" width="24" height="24" alt="" style="filter: drop-shadow(0 0 4px rgba(46,125,155,0.5));" />`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
     });
 
     userMarkerRef.current = L.marker([userPosition.lat, userPosition.lon], {
