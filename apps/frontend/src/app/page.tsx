@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import NotificationBell from "@/components/NotificationBell";
 import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
+import Header from "@/components/Header";
 import NavBar from "@/components/NavBar";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
@@ -74,13 +75,7 @@ export default function HomePage() {
         Aller au contenu principal
       </a>
       {/* ─── Header ─── */}
-      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-[var(--color-border)]/60 text-[var(--color-text-primary)] px-4 h-[60px] flex items-center justify-between safe-area-top transition-colors duration-300">
-        <div className="flex items-center gap-2">
-          <UrbanFlowIcon type="action" name="locate" size={22} className="text-[var(--color-primary)]" />
-          <h1 className="text-base font-semibold">UrbanFlow</h1>
-        </div>
-        <NotificationBell />
-      </header>
+      <Header title="UrbanFlow" rightAction={<NotificationBell />} />
 
       {/* ─── Main Content ─── */}
       <main id="main-content" className="flex-1 px-4 py-4 pb-[96px] max-w-lg mx-auto w-full">
