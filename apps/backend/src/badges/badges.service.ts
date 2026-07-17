@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Repository } from 'typeorm';
@@ -125,8 +125,25 @@ export class BadgesService {
    * Retourne tous les badges avec leur état de déblocage.
    */
   async getBadges(userId: string): Promise<BadgeDto[]> {
-    const stats = await this.favoritesService.getStats(userId);
-    const unlockedKeys = await this.getUnlockedBadgeKeys(userId);
+    if (!userId) {
+      throw new BadRequestException("userId requis");
+    }
+    let stats: UserBadgeStats;
+    try {
+      stats = await this.favoritesService.getStats(userId);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[BadgesService] getStats failed for user", userId, err);
+      stats = { totalTrips: 0, co2Saved: 0, favoriteCount: 0 };
+    }
+
+    let unlockedKeys: string[] = [];
+    try {
+      unlockedKeys = await this.getUnlockedBadgeKeys(userId);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[BadgesService] getUnlockedBadgeKeys failed for user", userId, err);
+    }
     const unlockedSet = new Set(unlockedKeys);
 
     return BADGE_DEFINITIONS.map((def) => ({
