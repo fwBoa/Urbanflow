@@ -74,7 +74,9 @@ services:
       # donc abaissée à 1024 Mo : plafonnnement confortable, marge sous la VM.
       NODE_OPTIONS: --max-old-space-size=1024
     ports:
-      - '4000:4000'
+      # Bind to localhost only: the backend must not be reachable directly from
+      # the internet in production. Nginx reaches it via the Docker network.
+      - '127.0.0.1:4000:4000'
     volumes:
       - gtfs_data:/app/data/gtfs
     depends_on:
@@ -100,7 +102,8 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
       NODE_ENV: ${NODE_ENV:-development}
     ports:
-      - '3001:3001'
+      # Same as backend: only Nginx should talk to the frontend in production.
+      - '127.0.0.1:3001:3001'
     depends_on:
       - backend
 
