@@ -19,7 +19,7 @@ export class BadgeUnlock {
   @Column({ type: 'varchar', length: 255 })
   userId!: string;
 
-  @Column({ type: 'varchar', length: 64 })
+  @Column({ type: 'varchar', length: 64, name: 'badge_key' })
   badgeKey!: string;
 
   @Column({ type: 'jsonb', nullable: true })
