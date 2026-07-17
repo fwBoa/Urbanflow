@@ -40,6 +40,11 @@ jest.mock("@/components/TurnByTurnBanner", () => ({
   ),
 }));
 
+jest.mock("@/components/AddFavoriteLineButton", () => ({
+  __esModule: true,
+  default: () => <button type="button" data-testid="favorite-line-button">★</button>,
+}));
+
 jest.mock("@/hooks/useTransport", () => ({
   useRoute: () => ({ fetchRoute: jest.fn().mockResolvedValue([]) }),
 }));

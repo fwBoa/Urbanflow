@@ -31,6 +31,7 @@ import DynamicMap from "@/components/DynamicMap";
 import type { MapPolyline } from "@/components/MapComponent";
 import { journeyToSegments } from "@/components/journey-helpers";
 import ModeBadge from "@/components/ModeBadge";
+import AddFavoriteLineButton from "@/components/AddFavoriteLineButton";
 import TurnByTurnBanner from "@/components/TurnByTurnBanner";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useDeviceHeading } from "@/hooks/useDeviceHeading";
@@ -1149,13 +1150,22 @@ export default function TripDetailPage() {
                     {/* Ligne 1 : mode badge + trajet */}
                     <div className="flex items-center gap-2 flex-wrap">
                       {segment.type === "transit" && segment.lineName ? (
-                        <ModeBadge
-                          mode={segment.mode}
-                          type={segment.type}
-                          lineName={segment.lineName}
-                          lineColor={lineColor}
-                          size="md"
-                        />
+                        <span className="inline-flex items-center gap-1">
+                          <ModeBadge
+                            mode={segment.mode}
+                            type={segment.type}
+                            lineName={segment.lineName}
+                            lineColor={lineColor}
+                            size="md"
+                          />
+                          <AddFavoriteLineButton
+                            lineId={segment.lineId}
+                            lineName={segment.lineName}
+                            mode={segment.mode}
+                            lineColor={segment.lineColor}
+                            size="md"
+                          />
+                        </span>
                       ) : (
                         <ModeBadge
                           mode={segment.mode}

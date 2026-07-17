@@ -240,6 +240,39 @@ describe('NotificationsEventsListener', () => {
       expect(notifRepo.create).not.toHaveBeenCalled();
       expect(pushService.sendToUser).not.toHaveBeenCalled();
     });
+
+    it('matches line favorites by stable lineId', async () => {
+      (favoriteRepo.find as jest.Mock).mockImplementation((options: any) => {
+        if (options?.where?.type === 'journey') return Promise.resolve([]);
+        return Promise.resolve([
+          { userId: 'user-1', type: 'line', lineId: 'RERA' },
+        ]);
+      });
+
+      const event = new AlertsUpdatedEvent([
+        {
+          id: 'alert-rer',
+          headerText: 'Perturbation RER A',
+          severity: 'warning',
+          affectedRoutes: ['RER A'],
+          lineId: 'RERA',
+          activePeriod: [{ start: new Date().toISOString(), end: '' }],
+        },
+      ]);
+
+      await listener.handleAlertsUpdated(event);
+
+      expect(favoriteRepo.find).toHaveBeenCalled();
+      expect(userRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: In(['user-1']),
+            notificationsEnabled: true,
+          }),
+        }),
+      );
+      expect(notifRepo.create).toHaveBeenCalled();
+    });
   });
 
   describe('handleBroadcast', () => {

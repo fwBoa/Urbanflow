@@ -72,6 +72,8 @@ export interface JourneySegment {
   mode?: string;
   /** Ligne (ex: "M1", "RER A", "Bus 42") */
   lineName?: string;
+  /** Identifiant technique stable de la ligne (code opérateur) quand disponible. */
+  lineId?: string;
   lineColor?: string;
   /** Arrêt de départ */
   fromStop?: string;

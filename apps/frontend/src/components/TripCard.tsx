@@ -4,6 +4,7 @@ import { Clock, ArrowRight, AlertTriangle, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
 import CO2Badge from "./CO2Badge";
 import ModeBadge from "./ModeBadge";
+import AddFavoriteLineButton from "./AddFavoriteLineButton";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import type { JourneyResult, JourneySegment } from "@/services/api";
 
@@ -87,13 +88,23 @@ export default function TripCard({
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             {lines.length > 0 ? (
               lines.map((seg, idx) => (
-                <ModeBadge
-                  key={idx}
-                  mode={seg.mode}
-                  lineName={seg.lineName}
-                  lineColor={seg.lineColor}
-                  size="sm"
-                />
+                <span key={idx} className="inline-flex items-center gap-1">
+                  <ModeBadge
+                    mode={seg.mode}
+                    lineName={seg.lineName}
+                    lineColor={seg.lineColor}
+                    size="sm"
+                  />
+                  {seg.type === "transit" && (
+                    <AddFavoriteLineButton
+                      lineId={seg.lineId}
+                      lineName={seg.lineName}
+                      mode={seg.mode}
+                      lineColor={seg.lineColor}
+                      size="sm"
+                    />
+                  )}
+                </span>
               ))
             ) : (
               <ModeBadge mode="walking" size="sm" />

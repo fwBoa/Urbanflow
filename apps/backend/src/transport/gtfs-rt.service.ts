@@ -11,6 +11,8 @@ export interface RealtimeAlert {
   descriptionText?: string;
   severity: 'info' | 'warning' | 'severe' | 'unknown';
   affectedRoutes: string[];
+  /** Identifiant technique de la ligne affectée (ex. 'line:RAT:M1'), quand disponible. */
+  lineId?: string;
   activePeriod: { start: string; end: string }[];
   cause?: string;
   effect?: string;
@@ -151,6 +153,7 @@ export class GtfsRtService {
           d.messages?.map((m) => m.text).join(' — ') || undefined,
         severity: this.mapSeverity(d.severity?.name || d.status),
         affectedRoutes: this.extractAffectedRoutes(d),
+        lineId: d.lineIds?.[0] || d.routesAffected?.[0] || undefined,
         activePeriod: this.extractActivePeriod(d),
         cause: d.cause || undefined,
         effect: d.effect || undefined,
@@ -193,8 +196,6 @@ export class GtfsRtService {
         if (name) routes.push(name);
       }
     }
-    if (d.lineIds) routes.push(...d.lineIds);
-    if (d.routesAffected) routes.push(...d.routesAffected);
     return routes;
   }
 

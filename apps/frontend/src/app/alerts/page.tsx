@@ -1,11 +1,23 @@
 "use client";
 
 import { useState, useEffect, Suspense, useMemo } from "react";
-import { AlertTriangle, AlertOctagon, Info, Loader2, CheckCircle2, Search, X } from "lucide-react";
+import { AlertTriangle, AlertOctagon, Info, Loader2, CheckCircle2, Search, X, Heart } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { apiService } from "@/services/api";
 import type { RealtimeAlert } from "@/services/api";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
+import { getFavorites, type FavoriteJourney } from "@/services/favorites";
+import { alertMatchesLine } from "@/lib/alerts";
+
+function alertMatchesAnyFavorite(
+  alert: RealtimeAlert,
+  favoriteLines: { mode: string; lineId?: string }[],
+): boolean {
+  return favoriteLines.some((fav) =>
+    alertMatchesLine(alert, fav.mode, undefined, fav.lineId || undefined),
+  );
+}
 
 const severityConfig = {
   severe: {
@@ -43,11 +55,14 @@ const severityConfig = {
 };
 
 function AlertsPageContent() {
+  const { isAuthenticated } = useAuth();
   const [alerts, setAlerts] = useState<RealtimeAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "severe" | "warning" | "info">("all");
   const [query, setQuery] = useState("");
+  const [myLinesOnly, setMyLinesOnly] = useState(false);
+  const [favoriteLines, setFavoriteLines] = useState<FavoriteJourney[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,11 +82,30 @@ function AlertsPageContent() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    if (!isAuthenticated || !myLinesOnly) return;
+    let cancelled = false;
+    getFavorites()
+      .then((favs) => {
+        if (cancelled) return;
+        setFavoriteLines(favs.filter((f) => f.type === "line"));
+      })
+      .catch(() => {
+        if (cancelled) setFavoriteLines([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, myLinesOnly]);
+
   const normalizedQuery = query.trim().toLowerCase();
   const filteredAlerts = useMemo(() => {
     return alerts.filter((a) => {
       const matchesSeverity = filter === "all" || a.severity === filter;
       if (!matchesSeverity) return false;
+      if (myLinesOnly) {
+        if (!alertMatchesAnyFavorite(a, favoriteLines)) return false;
+      }
       if (!normalizedQuery) return true;
       const haystack = [
         a.headerText,
@@ -83,7 +117,7 @@ function AlertsPageContent() {
         .toLowerCase();
       return haystack.includes(normalizedQuery);
     });
-  }, [alerts, filter, normalizedQuery]);
+  }, [alerts, filter, myLinesOnly, favoriteLines, normalizedQuery]);
 
   if (loading) {
     return (
@@ -165,6 +199,19 @@ function AlertsPageContent() {
             {f.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setMyLinesOnly((v) => !v)}
+          aria-pressed={myLinesOnly}
+          className={`shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            myLinesOnly
+              ? "bg-[var(--color-favorite-red)] text-white"
+              : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border)]"
+          }`}
+        >
+          <Heart size={12} fill={myLinesOnly ? "currentColor" : "none"} />
+          Mes lignes
+        </button>
       </div>
 
       <p className="text-xs text-[var(--color-text-tertiary)]">
@@ -175,12 +222,15 @@ function AlertsPageContent() {
       {filteredAlerts.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <p className="text-sm text-[var(--color-text-secondary)]">
-            Aucune alerte ne correspond à votre recherche.
+            {myLinesOnly && favoriteLines.length === 0
+              ? "Vous n&apos;avez pas encore de lignes favorites."
+              : "Aucune alerte ne correspond à votre recherche."}
           </p>
           <button
             onClick={() => {
               setQuery("");
               setFilter("all");
+              setMyLinesOnly(false);
             }}
             className="mt-2 text-xs text-[var(--color-primary)] font-medium"
           >

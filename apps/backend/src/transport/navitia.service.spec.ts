@@ -219,6 +219,35 @@ describe('NavitiaService', () => {
       expect(result[0].headerText).toBe('Perturbation M1');
       expect(result[0].severity).toBe('warning');
       expect(result[0].affectedRoutes).toContain('M1');
+      expect(result[0].lineId).toBe('M1');
+    });
+
+    it('extracts lineId from impacted_objects pt_object.code', async () => {
+      jest.spyOn(httpService, 'get').mockReturnValue(
+        of({
+          data: {
+            disruptions: [
+              {
+                id: 'disruption-2',
+                severity: { name: 'warning' },
+                messages: [{ text: 'Perturbation RER A' }],
+                impacted_objects: [
+                  {
+                    pt_object: {
+                      name: 'RER A',
+                      code: 'RERA',
+                      line: { code: 'RERA' },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        } as any),
+      );
+
+      const result = await service.getAlerts();
+      expect(result[0].lineId).toBe('RERA');
     });
 
     it('returns empty array when disruptions call fails', async () => {

@@ -46,7 +46,9 @@ export function alertMatchesLine(
   alert: RealtimeAlert,
   lineName: string,
   lineMode?: string,
+  lineId?: string,
 ): boolean {
+  if (lineId && alert.lineId && lineId === alert.lineId) return true;
   if (!lineName) return false;
 
   const normalizedLine = normalizeLineName(lineName);

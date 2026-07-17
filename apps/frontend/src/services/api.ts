@@ -91,6 +91,8 @@ export interface RealtimeAlert {
   descriptionText?: string;
   severity: "info" | "warning" | "severe" | "unknown";
   affectedRoutes: string[];
+  /** Identifiant technique stable de la ligne impactée quand disponible. */
+  lineId?: string;
   activePeriod?: { start: string; end: string }[];
   cause?: string;
   effect?: string;
@@ -100,6 +102,8 @@ export interface JourneySegment {
   type: "walking" | "transit" | "velib";
   mode?: string;
   lineName?: string;
+  /** Identifiant technique stable de la ligne (code opérateur) quand disponible. */
+  lineId?: string;
   lineColor?: string;
   fromStop?: string;
   toStop?: string;

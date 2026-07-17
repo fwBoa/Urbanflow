@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan, In, Raw } from 'typeorm';
+import { Repository, MoreThan, In, Raw, type FindOptionsWhere } from 'typeorm';
 import { User } from '../auth/user.entity';
 import { Favorite } from '../favorites/favorite.entity';
 import { Notification } from './notification.entity';
@@ -51,26 +51,43 @@ export class NotificationsEventsListener {
   async handleAlertsUpdated({ alerts }: AlertsUpdatedEvent): Promise<void> {
     if (alerts.length === 0) return;
 
-    // Normalise les lignes affectées pour matcher les favoris (mode = nom de ligne).
-    const affectedRoutes = new Set<string>();
+    // Deux ensembles pour matcher les favoris ligne/trajet avec les alertes :
+    // - lineId : identifiant technique stable (code opérateur), stocké sur les
+    //   favoris de type 'line' — le matching est fiable.
+    // - routeNames : noms d'affichage extraits de l'alerte (fallback pour les
+    //   favoris trajet qui ne conservent pas de lineId).
+    const affectedLineIds = new Set<string>();
+    const affectedRouteNames = new Set<string>();
     for (const alert of alerts) {
+      if (alert.lineId) affectedLineIds.add(alert.lineId);
       for (const route of alert.affectedRoutes) {
-        affectedRoutes.add(route.toLowerCase());
+        affectedRouteNames.add(route.toLowerCase());
       }
     }
-    if (affectedRoutes.size === 0) {
+    if (affectedLineIds.size === 0 && affectedRouteNames.size === 0) {
       this.logger.debug(
         'Alerts have no affected routes, skipping targeted notifications',
       );
       return;
     }
 
-    const matchingFavorites = await this.favoriteRepo.find({
-      where: {
+    const lineIds = Array.from(affectedLineIds);
+    const routeNames = Array.from(affectedRouteNames);
+
+    const whereClauses: Array<FindOptionsWhere<Favorite>> = [];
+    if (lineIds.length > 0) {
+      whereClauses.push({ lineId: In(lineIds) });
+    }
+    if (routeNames.length > 0) {
+      whereClauses.push({
         mode: Raw((alias) => `LOWER(${alias}) IN (:...routes)`, {
-          routes: Array.from(affectedRoutes),
+          routes: routeNames,
         }),
-      },
+      });
+    }
+
+    const matchingFavorites = await this.favoriteRepo.find({
+      where: whereClauses,
       select: ['userId'],
     });
 
@@ -348,6 +365,7 @@ export class NotificationsEventsListener {
   }
 
   private lineMatchesRoute(lineName: string, route: string): boolean {
+    if (!lineName || !route) return false;
     const a = lineName.toLowerCase().replace(/[-_]/g, ' ').trim();
     const b = route.toLowerCase().replace(/[-_]/g, ' ').trim();
     return a.includes(b) || b.includes(a);

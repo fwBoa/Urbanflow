@@ -30,6 +30,7 @@ describe('GtfsRtService', () => {
         applicationPeriods: [
           { begin: '2026-07-06T08:00:00Z', end: '2026-07-06T09:00:00Z' },
         ],
+        lignes: [{ shortName: 'RERA', name: 'RER A' }],
         lineIds: ['RERA'],
       },
     ],
@@ -79,6 +80,7 @@ describe('GtfsRtService', () => {
       expect(result[0].severity).toBe('severe');
       expect(result[0].affectedRoutes).toContain('M1');
       expect(result[1].affectedRoutes).toContain('RERA');
+      expect(result[1].lineId).toBe('RERA');
     });
 
     it('returns cached alerts without calling API when TTL not expired', async () => {

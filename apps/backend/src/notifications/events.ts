@@ -12,6 +12,8 @@ export interface AlertInfo {
   descriptionText?: string;
   severity: 'info' | 'warning' | 'severe' | 'unknown';
   affectedRoutes: string[];
+  /** Identifiant technique de la ligne affectée, quand disponible. */
+  lineId?: string;
   activePeriod: { start: string; end: string }[];
 }
 

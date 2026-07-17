@@ -222,6 +222,7 @@ export class NavitiaService {
     if (section.type === 'public_transport') {
       const info = section.display_informations ?? {};
       const lineName = info.code || info.name || info.label || '';
+      const lineId = info.code || undefined;
       const lineColor = info.color ? `#${info.color}` : undefined;
       const mode = info.commercial_mode || info.physical_mode || 'Transport';
       const numStops = section.stop_date_times?.length ?? 0;
@@ -229,6 +230,7 @@ export class NavitiaService {
         type: 'transit',
         mode,
         lineName,
+        lineId,
         lineColor,
         fromStop: fromName,
         toStop: toName,
@@ -342,6 +344,7 @@ export class NavitiaService {
           undefined,
         severity: this.mapSeverity(d.severity?.name || d.status),
         affectedRoutes: this.extractAffectedRoutes(d),
+        lineId: this.extractLineId(d),
         activePeriod: this.extractActivePeriod(d),
         cause: d.cause || undefined,
         effect: d.effect || undefined,
@@ -384,6 +387,21 @@ export class NavitiaService {
       if (pt?.code) routes.push(pt.code);
     }
     return [...new Set(routes)];
+  }
+
+  /**
+   * Extrait un identifiant technique stable de la ligne impactée depuis
+   * `pt_object.code` (identifiant opérateur/maintenu par le transporteur).
+   * Cela permet de matcher une alerte avec les lignes favorites enregistrées
+   * sous `lineId`, indépendamment des libellés francisés susceptibles de changer.
+   */
+  private extractLineId(d: NavitiaDisruption): string | undefined {
+    for (const l of d.impacted_objects ?? []) {
+      const pt = l.pt_object;
+      const code = pt?.code ?? pt?.line?.code;
+      if (code) return code;
+    }
+    return undefined;
   }
 
   private extractActivePeriod(
@@ -577,5 +595,7 @@ interface NavitiaDisruption {
   severity?: { name?: string };
   messages?: Array<{ text: string }>;
   application_periods?: Array<{ begin?: string; end?: string; start?: string }>;
-  impacted_objects?: Array<{ pt_object?: { name?: string; code?: string } }>;
+  impacted_objects?: Array<{
+    pt_object?: { name?: string; code?: string; line?: { code?: string } };
+  }>;
 }
