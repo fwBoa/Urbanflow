@@ -69,3 +69,8 @@ export class WeeklyDigestEvent {
 export class HistoryUpdatedEvent {
   constructor(public readonly userId: string) {}
 }
+
+/** Émis quand un favori est ajouté ou supprimé. */
+export class FavoritesUpdatedEvent {
+  constructor(public readonly userId: string) {}
+}

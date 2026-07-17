@@ -120,4 +120,13 @@ describe('BadgesService', () => {
       expect(badgeRepo.save).toHaveBeenCalled();
     });
   });
+
+  describe('handleFavoritesUpdated', () => {
+    it('unlocks badges after favorites update', async () => {
+      const { FavoritesUpdatedEvent } = await import('../notifications/events');
+      await service.handleFavoritesUpdated(new FavoritesUpdatedEvent('user-1'));
+      expect(favoritesService.getStats).toHaveBeenCalledWith('user-1');
+      expect(badgeRepo.save).toHaveBeenCalled();
+    });
+  });
 });

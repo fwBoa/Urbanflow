@@ -5,7 +5,10 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Favorite } from './favorite.entity';
 import { History } from './history.entity';
 import { CreateFavoriteDto, CreateHistoryDto } from './favorites.dto';
-import { HistoryUpdatedEvent } from '../notifications/events';
+import {
+  HistoryUpdatedEvent,
+  FavoritesUpdatedEvent,
+} from '../notifications/events';
 
 @Injectable()
 export class FavoritesService {
@@ -60,7 +63,12 @@ export class FavoritesService {
       destLon: dto.destLon ?? null,
     });
 
-    return this.favRepo.save(favorite);
+    const saved = await this.favRepo.save(favorite);
+    this.eventEmitter.emit(
+      'favorites.updated',
+      new FavoritesUpdatedEvent(userId),
+    );
+    return saved;
   }
 
   async removeFavorite(userId: string, favoriteId: string): Promise<void> {
@@ -68,6 +76,10 @@ export class FavoritesService {
     if (result.affected === 0) {
       throw new NotFoundException('Favori non trouvé');
     }
+    this.eventEmitter.emit(
+      'favorites.updated',
+      new FavoritesUpdatedEvent(userId),
+    );
   }
 
   async isFavorite(

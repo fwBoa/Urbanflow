@@ -144,6 +144,16 @@ describe('FavoritesService', () => {
       expect(favRepo.create).not.toHaveBeenCalled();
       expect(favRepo.save).not.toHaveBeenCalled();
     });
+
+    it('emits favorites.updated event after creating', async () => {
+      const eventEmitter = module.get(EventEmitter2);
+      jest.spyOn(favRepo, 'findOne').mockResolvedValue(null);
+      await service.addFavorite('user-1', createFavoriteDto);
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'favorites.updated',
+        expect.objectContaining({ userId: 'user-1' }),
+      );
+    });
   });
 
   describe('removeFavorite', () => {
@@ -154,6 +164,16 @@ describe('FavoritesService', () => {
         id: 'fav-1',
         userId: 'user-1',
       });
+    });
+
+    it('emits favorites.updated event after deleting', async () => {
+      const eventEmitter = module.get(EventEmitter2);
+      jest.spyOn(favRepo, 'delete').mockResolvedValue({ affected: 1, raw: [] });
+      await service.removeFavorite('user-1', 'fav-1');
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'favorites.updated',
+        expect.objectContaining({ userId: 'user-1' }),
+      );
     });
 
     it('throws NotFoundException when no favorite deleted', async () => {

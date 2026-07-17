@@ -4,7 +4,10 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { Repository } from 'typeorm';
 import { BadgeUnlock } from './badge.entity';
 import { FavoritesService } from '../favorites/favorites.service';
-import { HistoryUpdatedEvent } from '../notifications/events';
+import {
+  HistoryUpdatedEvent,
+  FavoritesUpdatedEvent,
+} from '../notifications/events';
 
 export interface BadgeDefinition {
   key: string;
@@ -145,6 +148,16 @@ export class BadgesService {
 
   @OnEvent('history.updated')
   async handleHistoryUpdated(event: HistoryUpdatedEvent): Promise<void> {
+    const stats = await this.favoritesService.getStats(event.userId);
+    await this.unlockBadges(event.userId, {
+      totalTrips: stats.totalTrips,
+      co2Saved: stats.co2Saved,
+      favoriteCount: stats.favoriteCount,
+    });
+  }
+
+  @OnEvent('favorites.updated')
+  async handleFavoritesUpdated(event: FavoritesUpdatedEvent): Promise<void> {
     const stats = await this.favoritesService.getStats(event.userId);
     await this.unlockBadges(event.userId, {
       totalTrips: stats.totalTrips,
