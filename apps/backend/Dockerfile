@@ -30,8 +30,11 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 4000
+
+# nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
+# nosemgrep: dockerfile.security.missing-user.missing-user
 # L'entrypoint démarre brièvement en root pour chown le volume GTFS vers
 # l'utilisateur nodejs (uid 1001), puis délègue immédiatement l'exécution à
 # nodejs via su-exec. Le process final ne tourne donc jamais en root.
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"] # nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
-CMD ["node", "dist/main.js"] # nosemgrep: dockerfile.security.missing-user.missing-user
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["node", "dist/main.js"]
