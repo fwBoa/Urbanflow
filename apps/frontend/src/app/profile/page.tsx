@@ -69,6 +69,7 @@ export default function ProfilePage() {
   const [prefs, setPrefs] = useState<UserPreferences>(() => getPreferences());
   const [profile, setProfile] = useState<UserProfile>({ name: "Utilisateur", email: "", avatar: "🚇" });
   const [badges, setBadges] = useState<Badge[]>([]);
+  const [badgesError, setBadgesError] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
@@ -108,7 +109,14 @@ export default function ProfilePage() {
 
   useEffect(() => {
     async function loadData() {
-      const [s, b] = await Promise.all([getStats(), getBadges()]);
+      const [s, b] = await Promise.all([
+        getStats(),
+        getBadges().catch((err) => {
+          console.error(err);
+          setBadgesError("Impossible de charger les badges.");
+          return [] as Badge[];
+        }),
+      ]);
       setStats(s);
       setBadges(b);
       // Détecte les nouveaux badges débloqués depuis la dernière visite du profil.
@@ -435,6 +443,11 @@ export default function ProfilePage() {
           <Award size={16} />
           Badges
         </h3>
+        {badgesError && (
+          <div className="mb-3 rounded-[var(--card-radius)] bg-red-50 border border-red-200 p-2 text-xs text-red-800">
+            {badgesError}
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-2">
           {badges.map((badge) => (
             <div
@@ -671,8 +684,14 @@ export default function ProfilePage() {
             await clearHistory();
             const s = await getStats();
             setStats(s);
-            const b = await getBadges();
-            setBadges(b);
+            try {
+              const b = await getBadges();
+              setBadges(b);
+              setBadgesError(null);
+            } catch (err) {
+              console.error(err);
+              setBadgesError("Impossible de recharger les badges.");
+            }
           }}
           className="w-full flex items-center justify-center gap-2 py-3 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors"
         >

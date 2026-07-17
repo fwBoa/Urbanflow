@@ -23,6 +23,9 @@ export default function FavoritesPage() {
   const [favorites, setFavorites] = useState<FavoriteJourney[]>([]);
   const [history, setHistory] = useState<HistoryJourney[]>([]);
 
+  const favoriteLines = favorites.filter((f) => f.type === "line");
+  const favoriteJourneys = favorites.filter((f) => f.type !== "line");
+
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!isAuthenticated) {
@@ -153,25 +156,71 @@ export default function FavoritesPage() {
           <p className="text-sm text-[var(--color-text-tertiary)]">Redirection vers la connexion...</p>
         </div>
       ) : activeTab === "favorites" ? (
-        <div className="space-y-3">
-          {favorites.length === 0 ? (
+        <div className="space-y-4">
+          {/* Lignes suivies */}
+          {favoriteLines.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
+                Lignes suivies
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {favoriteLines.map((line) => (
+                  <div
+                    key={line.id}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
+                  >
+                    <span
+                      className="inline-flex items-center justify-center min-w-[28px] h-[22px] px-1 rounded text-[11px] font-bold text-white"
+                      style={{ backgroundColor: `#${line.modeColor}` }}
+                    >
+                      {line.mode}
+                    </span>
+                    <span className="text-xs text-[var(--color-text-secondary)]">
+                      {line.lineId}
+                    </span>
+                    <button
+                      className="text-[var(--color-favorite-red)] hover:scale-110 transition-transform p-0.5"
+                      aria-label="Retirer des favoris"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveFavorite(line.id);
+                      }}
+                    >
+                      <Heart size={14} fill="currentColor" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Trajets favoris */}
+          {favoriteJourneys.length === 0 && favoriteLines.length === 0 ? (
             <div className="text-center py-12">
               <Heart size={40} className="mx-auto mb-3 text-[var(--color-border)]" />
               <p className="text-sm text-[var(--color-text-tertiary)] mb-1">
                 Aucun favori enregistré
               </p>
               <p className="text-xs text-[var(--color-text-tertiary)]">
-                Recherchez un itinéraire et ajoutez-le en favori
+                Recherchez un itinéraire ou ajoutez une ligne en favori
               </p>
-              <button
-                onClick={() => router.push("/search")}
-                className="mt-4 px-4 py-2 bg-[var(--color-primary)] text-white rounded-[var(--cta-radius)] text-sm font-medium hover:bg-[var(--color-primary-dark)] transition-colors"
-              >
-                Rechercher un trajet
-              </button>
+              <div className="flex gap-2 justify-center mt-4">
+                <button
+                  onClick={() => router.push("/search")}
+                  className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-[var(--cta-radius)] text-sm font-medium hover:bg-[var(--color-primary-dark)] transition-colors"
+                >
+                  Rechercher un trajet
+                </button>
+                <button
+                  onClick={() => router.push("/lines")}
+                  className="px-4 py-2 bg-[var(--color-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border)] rounded-[var(--cta-radius)] text-sm font-medium hover:bg-[var(--color-border)] transition-colors"
+                >
+                  Voir les lignes
+                </button>
+              </div>
             </div>
           ) : (
-            favorites.map((fav) => (
+            favoriteJourneys.map((fav) => (
               <div
                 key={fav.id}
                 className="bg-surface rounded-[var(--card-radius)] p-4 border border-[var(--color-border)] hover:shadow-md transition-all cursor-pointer"

@@ -447,11 +447,11 @@ export async function getBadges(): Promise<Badge[]> {
   }
   try {
     const res = await fetch(`${API()}/api/badges`, { credentials: "include" });
-    if (!res.ok) throw new Error("Failed");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return (await res.json()) as Badge[];
   } catch (error) {
     console.error("Failed to fetch badges from backend:", error);
-    return [];
+    throw error;
   }
 }
 
