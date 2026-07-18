@@ -230,26 +230,34 @@ export class GtfsRtService {
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleCronRefresh() {
     this.logger.debug('Refreshing GTFS-RT alerts (cron)...');
-    const previousIds = new Set(this.alertsCache.map((a) => a.id));
     try {
       const alerts = await this.getAlerts();
-      if (this.isInitialRefresh) {
-        this.isInitialRefresh = false;
-        this.logger.debug('Skipping initial alerts.updated emission on boot');
-        return;
-      }
-      const newAlerts = alerts.filter((a) => !previousIds.has(a.id));
-      if (newAlerts.length > 0) {
-        this.eventEmitter.emit(
-          'alerts.updated',
-          new AlertsUpdatedEvent(newAlerts),
-        );
-        this.logger.log(
-          `Emitted alerts.updated with ${newAlerts.length} new alert(s)`,
-        );
-      }
+      this.emitNewAlerts(alerts);
     } catch {
       // getAlerts loggue déjà l'erreur ; on ne bloque pas le cron.
+    }
+  }
+
+  /**
+   * Émet `alerts.updated` pour les alertes nouvellement détectées par rapport au
+   * cache existant. Public pour pouvoir être appelé depuis Navitia (transport controller).
+   */
+  emitNewAlerts(alerts: RealtimeAlert[]): void {
+    const previousIds = new Set(this.alertsCache.map((a) => a.id));
+    if (this.isInitialRefresh) {
+      this.isInitialRefresh = false;
+      this.logger.debug('Skipping initial alerts.updated emission on boot');
+      return;
+    }
+    const newAlerts = alerts.filter((a) => !previousIds.has(a.id));
+    if (newAlerts.length > 0) {
+      this.eventEmitter.emit(
+        'alerts.updated',
+        new AlertsUpdatedEvent(newAlerts),
+      );
+      this.logger.log(
+        `Emitted alerts.updated with ${newAlerts.length} new alert(s)`,
+      );
     }
   }
 }

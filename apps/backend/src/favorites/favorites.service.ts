@@ -56,6 +56,7 @@ export class FavoritesService {
       mode: dto.mode,
       modeColor: dto.modeColor,
       duration: dto.duration,
+      departureTime: dto.departureTime ? new Date(dto.departureTime) : null,
       co2: dto.co2,
       originLat: dto.originLat ?? null,
       originLon: dto.originLon ?? null,

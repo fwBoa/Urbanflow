@@ -53,6 +53,7 @@ describe('TransportController', () => {
 
   const mockGtfsRtService = {
     getAlerts: jest.fn().mockResolvedValue([]),
+    emitNewAlerts: jest.fn(),
   };
 
   const mockNavitiaService = {

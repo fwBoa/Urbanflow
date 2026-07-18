@@ -165,7 +165,18 @@ export class JourneyService {
       timeStr,
       maxTransfers,
       (query.modes || []).join(','),
+      query.wheelchairAccessible ? '1' : '0',
     ].join('|');
+  }
+
+  private isStopWheelchairAccessible(stop: GtfsStop): boolean {
+    // GTFS: 1 = accessible, 2 = not accessible, 0/empty = unknown
+    // On exclut les arrêts explicitement marqués inaccessibles.
+    return stop.wheelchair_boarding !== 2;
+  }
+
+  private isTripWheelchairAccessible(trip: GtfsTrip): boolean {
+    return trip.wheelchair_accessible !== 2;
   }
 
   private getCached(key: string): JourneyResult[] | null {
@@ -244,7 +255,7 @@ export class JourneyService {
       await this.gtfsParser.getActiveServiceIds(departureTime);
 
     // 1. Find stops near origin and destination — en parallèle pour gagner ~30% sur I/O GTFS
-    const [originStops, destStops] = await Promise.all([
+    const [rawOriginStops, rawDestStops] = await Promise.all([
       this.gtfsParser.findStopsNearby(
         query.origin.lat,
         query.origin.lon,
@@ -258,6 +269,14 @@ export class JourneyService {
         30,
       ),
     ]);
+
+    // Filtre accessibilité PMR : exclure arrêts explicitement non accessibles
+    const originStops = query.wheelchairAccessible
+      ? rawOriginStops.filter((s) => this.isStopWheelchairAccessible(s))
+      : rawOriginStops;
+    const destStops = query.wheelchairAccessible
+      ? rawDestStops.filter((s) => this.isStopWheelchairAccessible(s))
+      : rawDestStops;
 
     const journeys: JourneyResult[] = [];
     const loaded = await this.gtfsParser.isLoaded();
@@ -398,6 +417,12 @@ export class JourneyService {
         const kept: typeof departures = [];
         for (const dep of departures) {
           if (seenRoutes.has(dep.route.route_id)) continue;
+          // Filtre PMR : exclure les courses explicitement non accessibles
+          if (
+            query.wheelchairAccessible &&
+            !this.isTripWheelchairAccessible(dep.trip)
+          )
+            continue;
           const originDeparture = this.timeToSeconds(
             dep.stopTime.departure_time,
           );

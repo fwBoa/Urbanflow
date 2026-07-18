@@ -324,6 +324,7 @@ class ApiService {
       departureTime?: string;
       modes?: string;
       maxTransfers?: number;
+      wheelchairAccessible?: boolean;
     },
     signal?: AbortSignal,
   ): Promise<JourneyResult[]> {
@@ -337,6 +338,8 @@ class ApiService {
     if (params.modes) query.set("modes", params.modes);
     if (params.maxTransfers !== undefined)
       query.set("maxTransfers", String(params.maxTransfers));
+    if (params.wheelchairAccessible)
+      query.set("wheelchair", "true");
 
     return this.fetch(`/api/transport/journey?${query.toString()}`, signal);
   }

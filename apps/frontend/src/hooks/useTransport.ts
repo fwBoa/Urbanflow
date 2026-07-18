@@ -436,6 +436,7 @@ export function useJourney(
   destination: { lat: number; lon: number } | null,
   departureTime?: string,
   modes?: string[],
+  wheelchairAccessible?: boolean,
 ) {
   const { data: journeys, loading, error } = useApiData<JourneyResult[]>(
     (signal) => {
@@ -449,13 +450,14 @@ export function useJourney(
             destLon: destination.lon,
             departureTime,
             modes: modes?.join(","),
+            wheelchairAccessible,
           },
           signal,
         )
         .then((d) => (Array.isArray(d) ? d : []));
     },
     [],
-    [origin, destination, departureTime, modes],
+    [origin, destination, departureTime, modes, wheelchairAccessible],
     false,
   );
 

@@ -45,6 +45,9 @@ export class Favorite {
   @Column({ type: 'varchar', length: 255 })
   duration: string;
 
+  @Column({ name: 'departure_time', type: 'timestamp', nullable: true })
+  departureTime: Date | null;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   co2: number;
 

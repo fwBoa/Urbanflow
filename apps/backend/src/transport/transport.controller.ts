@@ -11,6 +11,7 @@ import {
 import { PrimService } from './prim.service';
 import {
   GtfsParserService,
+  GtfsStop,
   routeTypeLabel,
   modeKey,
 } from './gtfs-parser.service';
@@ -392,7 +393,11 @@ export class TransportController {
   async getRealtimeAlerts() {
     try {
       const alerts = await this.navitiaService.getAlerts();
-      if (alerts.length > 0) return alerts;
+      if (alerts.length > 0) {
+        // Déclenche les notifications push pour les nouvelles alertes Navitia.
+        this.gtfsRtService.emitNewAlerts(alerts);
+        return alerts;
+      }
     } catch {
       // best-effort
     }
@@ -410,6 +415,7 @@ export class TransportController {
     @Query('departureTime') departureTime?: string,
     @Query('modes') modes?: string,
     @Query('maxTransfers') maxTransfers?: string,
+    @Query('wheelchair') wheelchair?: string,
   ) {
     if (!originLat || !originLon || !destLat || !destLon) {
       throw new HttpException(
@@ -430,6 +436,7 @@ export class TransportController {
       departureTime: departureTime || undefined,
       modes: modes ? (modes.split(',') as any[]) : undefined,
       maxTransfers: maxTransfers ? parseInt(maxTransfers, 10) : undefined,
+      wheelchairAccessible: wheelchair === 'true',
     };
 
     // ─── Garde périmètre : 10 km autour de Paris (scope produit) ───────
@@ -465,6 +472,7 @@ export class TransportController {
           query.departureTime,
           query.modes,
           query.maxTransfers,
+          query.wheelchairAccessible,
         );
         usedNavitia = journeys.length > 0;
       } catch (error) {
@@ -657,7 +665,7 @@ export class TransportController {
     const departureTime = query.departureTime || now.toISOString();
 
     // ─── Récupérer les VRAIS arrêts à proximité (jusqu'à 500m) ─────────
-    const [nearbyOriginStops, nearbyDestStops] = await Promise.all([
+    const [rawOriginStops, rawDestStops] = await Promise.all([
       this.gtfsParser.findStopsNearby(
         query.origin.lat,
         query.origin.lon,
@@ -672,8 +680,15 @@ export class TransportController {
       ),
     ]);
 
+    const nearbyOriginStops = query.wheelchairAccessible
+      ? rawOriginStops.filter((s) => s.wheelchair_boarding !== 2)
+      : rawOriginStops;
+    const nearbyDestStops = query.wheelchairAccessible
+      ? rawDestStops.filter((s) => s.wheelchair_boarding !== 2)
+      : rawDestStops;
+
     // Choisir les arrêts les plus pertinents (par type : métro/RER d'abord)
-    const pickBestStop = async (stops: typeof nearbyOriginStops) => {
+    const pickBestStop = async (stops: GtfsStop[]) => {
       if (stops.length === 0) return null;
       // Prioriser métro/RER/tram
       for (const s of stops) {

@@ -139,6 +139,7 @@ export class NavitiaService {
     departureTime?: string,
     modes?: TransportMode[],
     maxTransfers?: number,
+    wheelchairAccessible?: boolean,
   ): Promise<JourneyResult[]> {
     const params: Record<string, string | string[]> = {
       from: `${origin.lon};${origin.lat}`,
@@ -152,6 +153,9 @@ export class NavitiaService {
     }
     if (maxTransfers !== undefined) {
       params.max_transfers = String(maxTransfers);
+    }
+    if (wheelchairAccessible) {
+      params.wheelchair = 'true';
     }
     // Filtre modes : on interdit les physical_modes non sélectionnés.
     const forbidden = this.forbiddenUrisForModes(modes);

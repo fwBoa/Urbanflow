@@ -16,7 +16,8 @@ import { UI_MODE_COLORS } from "@/constants/mode-colors";
 import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute, useNearbyStops, useStopTimes } from "@/hooks/useTransport";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
-import { addToHistory } from "@/services/favorites";
+import { useAuth } from "@/contexts/AuthContext";
+import { addToHistory, getPreferences } from "@/services/favorites";
 import type { SuggestionItem } from "@/components/SearchAutocomplete";
 
 const filters = [
@@ -58,7 +59,11 @@ function SearchPageContent() {
   const [selectedDest, setSelectedDest] = useState<{ lat: number; lon: number } | null>(null);
 
   // ─── Mode de transport sélectionné ──────────────────────────────────
-  const [selectedModes, setSelectedModes] = useState<string[]>([]);
+  const initialModes = useMemo(() => {
+    if (modeParam === "velib" || modeParam === "velo") return ["velib"];
+    return [];
+  }, [modeParam]);
+  const [selectedModes, setSelectedModes] = useState<string[]>(initialModes);
 
   const transportModes = [
     { key: "metro", label: "Métro", icon: <UrbanFlowIcon type="transport" name="train" size={14} /> },
@@ -176,11 +181,15 @@ function SearchPageContent() {
   const { stops: destStops } = useStopSearch(destination);
   const { results: destAddresses } = useGeocode(destination);
 
+  const { user } = useAuth();
+  const wheelchairAccessible = user?.accessibilityNeeds ?? getPreferences().accessibility;
+
   const { journeys, loading: journeysLoading, error: journeysError } = useJourney(
     selectedOrigin,
     selectedDest,
     undefined,
     selectedModes.length > 0 ? selectedModes : undefined,
+    wheelchairAccessible,
   );
 
 
@@ -227,7 +236,11 @@ function SearchPageContent() {
   useEffect(() => {
     if (!selectedOrigin || !selectedDest) return;
     let cancelled = false;
-    fetchRoute(selectedOrigin.lat, selectedOrigin.lon, selectedDest.lat, selectedDest.lon, 'foot')
+    const profile =
+      selectedModes.includes("velib") || selectedModes.includes("velo")
+        ? "bike"
+        : "foot";
+    fetchRoute(selectedOrigin.lat, selectedOrigin.lon, selectedDest.lat, selectedDest.lon, profile)
       .then((coords) => {
         if (cancelled) return;
         if (coords.length > 0) {
@@ -240,7 +253,7 @@ function SearchPageContent() {
         }
       });
     return () => { cancelled = true; };
-  }, [selectedOrigin, selectedDest, fetchRoute]);
+  }, [selectedOrigin, selectedDest, selectedModes, fetchRoute]);
 
   const mapPolyline = routePolyline.length > 0 ? routePolyline : fallbackPolyline;
 

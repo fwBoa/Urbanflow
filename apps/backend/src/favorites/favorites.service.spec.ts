@@ -23,6 +23,7 @@ describe('FavoritesService', () => {
     mode: 'metro',
     modeColor: '#007852',
     duration: '15 min',
+    departureTime: null,
     co2: 12.34,
     originLat: 48.85,
     originLon: 2.35,

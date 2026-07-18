@@ -89,7 +89,7 @@ export default function HomePage() {
             Itinéraire
           </button>
           <button
-            onClick={() => router.push("/search?mode=velib")}
+            onClick={() => router.push("/velib")}
             className="flex-1 h-[44px] rounded-[var(--chip-radius)] bg-[var(--color-eco-green)] text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-[#6DA33A] transition-colors"
           >
             <UrbanFlowIcon type="transport" name="bike" size={16} />

@@ -26,6 +26,10 @@ export class CreateFavoriteDto {
   @IsString()
   duration: string;
 
+  @IsOptional()
+  @IsString()
+  departureTime?: string;
+
   @IsNumber()
   @Min(0)
   co2: number;
