@@ -64,4 +64,4 @@ Ports par défaut :
 
 ## 🤝 Contribuer
 
-Ce projet suit les [conventions de commit du skill UrbanFlow](.claude/skills/urbanflow/SKILL.md). Chaque message de commit doit être validé explicitement avant push.
+Ce projet suit les [conventions de commit du skill UrbanFlow](.claude/skills/urbanflow/SKILL.md).
