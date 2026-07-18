@@ -23,7 +23,7 @@ import { resolveJwtSecret } from './jwt-secret';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: resolveJwtSecret(config),
-        signOptions: { expiresIn: '2h' }, // Reduced from 24h for security
+        signOptions: { expiresIn: '7d' }, // Aligned with cookie maxAge
       }),
     }),
     FavoritesModule,

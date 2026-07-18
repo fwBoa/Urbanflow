@@ -30,7 +30,7 @@ const COOKIE_OPTIONS = {
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   path: '/',
-  maxAge: 2 * 60 * 60 * 1000, // 2h — matches JWT expiry
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days — matches JWT expiry
 };
 
 @Controller('auth')
