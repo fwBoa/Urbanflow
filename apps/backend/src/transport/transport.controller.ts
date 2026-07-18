@@ -393,7 +393,11 @@ export class TransportController {
   async getRealtimeAlerts() {
     try {
       const alerts = await this.navitiaService.getAlerts();
-      if (alerts.length > 0) return alerts;
+      if (alerts.length > 0) {
+        // Déclenche les notifications push pour les nouvelles alertes Navitia.
+        this.gtfsRtService.emitNewAlerts(alerts);
+        return alerts;
+      }
     } catch {
       // best-effort
     }

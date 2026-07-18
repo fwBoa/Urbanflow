@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull, Not } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Favorite } from '../favorites/favorite.entity';
 import { User } from '../auth/user.entity';
@@ -28,9 +28,8 @@ export class NotificationsSchedulerService {
 
   /**
    * Rappels de départ pour les trajets favoris.
-   * Le champ `duration` n’est pas une heure de départ, donc cette première
-   * implémentation utilise la date de création du favori comme proxy. Une
-   * évolution future stockera explicitement `departureTime` dans Favorite.
+   * Utilise le champ `departureTime` du favori quand il est renseigné ;
+   * sinon ignore le favori (on ne notifie pas sur une estimation).
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async sendDepartureReminders(): Promise<void> {
@@ -39,17 +38,16 @@ export class NotificationsSchedulerService {
     const windowEnd = new Date(now.getTime() + 20 * 60 * 1000);
 
     const favoriteJourneys = await this.favoriteRepo.find({
-      where: { type: 'journey' },
+      where: { type: 'journey', departureTime: Not(IsNull()) },
     });
 
     const emitted = new Set<string>();
     for (const fav of favoriteJourneys) {
-      // Proxy : on considère que le départ est 1h après la création du favori.
-      // À remplacer par un vrai champ departureTime quand il sera disponible.
-      const proxyDeparture = new Date(fav.createdAt.getTime() + 60 * 60 * 1000);
-      if (proxyDeparture < windowStart || proxyDeparture > windowEnd) continue;
+      const departure = fav.departureTime;
+      if (!departure) continue;
+      if (departure < windowStart || departure > windowEnd) continue;
 
-      const dedupKey = `${fav.userId}|${fav.id}|${proxyDeparture.toISOString().slice(0, 16)}`;
+      const dedupKey = `${fav.userId}|${fav.id}|${departure.toISOString().slice(0, 16)}`;
       if (emitted.has(dedupKey)) continue;
       emitted.add(dedupKey);
 
@@ -61,7 +59,7 @@ export class NotificationsSchedulerService {
           fav.mode,
           fav.from || 'Départ',
           fav.to || 'Arrivée',
-          proxyDeparture.toISOString(),
+          departure.toISOString(),
         ),
       );
     }

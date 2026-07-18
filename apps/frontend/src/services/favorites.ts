@@ -120,6 +120,7 @@ export async function addFavorite(journey: {
   modeColor: string;
   duration: string;
   co2: number;
+  departureTime?: string;
   origin?: { lat: number; lon: number };
   destination?: { lat: number; lon: number };
 }): Promise<FavoriteJourney> {
@@ -140,6 +141,7 @@ export async function addFavorite(journey: {
         mode: journey.mode,
         modeColor: journey.modeColor,
         duration: journey.duration,
+        departureTime: journey.departureTime,
         co2: journey.co2,
         originLat: journey.origin?.lat,
         originLon: journey.origin?.lon,

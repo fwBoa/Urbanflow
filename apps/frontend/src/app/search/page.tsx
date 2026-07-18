@@ -59,7 +59,11 @@ function SearchPageContent() {
   const [selectedDest, setSelectedDest] = useState<{ lat: number; lon: number } | null>(null);
 
   // ─── Mode de transport sélectionné ──────────────────────────────────
-  const [selectedModes, setSelectedModes] = useState<string[]>([]);
+  const initialModes = useMemo(() => {
+    if (modeParam === "velib" || modeParam === "velo") return ["velib"];
+    return [];
+  }, [modeParam]);
+  const [selectedModes, setSelectedModes] = useState<string[]>(initialModes);
 
   const transportModes = [
     { key: "metro", label: "Métro", icon: <UrbanFlowIcon type="transport" name="train" size={14} /> },
@@ -232,7 +236,11 @@ function SearchPageContent() {
   useEffect(() => {
     if (!selectedOrigin || !selectedDest) return;
     let cancelled = false;
-    fetchRoute(selectedOrigin.lat, selectedOrigin.lon, selectedDest.lat, selectedDest.lon, 'foot')
+    const profile =
+      selectedModes.includes("velib") || selectedModes.includes("velo")
+        ? "bike"
+        : "foot";
+    fetchRoute(selectedOrigin.lat, selectedOrigin.lon, selectedDest.lat, selectedDest.lon, profile)
       .then((coords) => {
         if (cancelled) return;
         if (coords.length > 0) {
@@ -245,7 +253,7 @@ function SearchPageContent() {
         }
       });
     return () => { cancelled = true; };
-  }, [selectedOrigin, selectedDest, fetchRoute]);
+  }, [selectedOrigin, selectedDest, selectedModes, fetchRoute]);
 
   const mapPolyline = routePolyline.length > 0 ? routePolyline : fallbackPolyline;
 

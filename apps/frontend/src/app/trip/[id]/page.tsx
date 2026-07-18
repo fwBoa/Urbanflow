@@ -26,6 +26,7 @@ import AddFavoriteLineButton from "@/components/AddFavoriteLineButton";
 import TurnByTurnBanner from "@/components/TurnByTurnBanner";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useDeviceHeading } from "@/hooks/useDeviceHeading";
+import { useGeolocation } from "@/hooks/useGeolocation";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { MAP_MODE_COLORS } from "@/constants/mode-colors";
 import { apiService } from "@/services/api";
@@ -75,6 +76,23 @@ function samePlace(
 
 function normalizePlaceName(s: string): string {
   return s.toLowerCase().replace(/[^\w]/g, "").trim();
+}
+
+function extractTripModes(segments: JourneyResult["segments"]): string {
+  const modes = new Set<string>();
+  for (const seg of segments) {
+    if (seg.type === "transit") {
+      const m = (seg.mode || "").toLowerCase();
+      if (m.includes("rer")) modes.add("rer");
+      else if (m.includes("metro") || m.includes("métro")) modes.add("metro");
+      else if (m.includes("transilien") || m.includes("train")) modes.add("transilien");
+      else if (m.includes("tram")) modes.add("tram");
+      else if (m.includes("bus")) modes.add("bus");
+    } else if (seg.type === "velib") {
+      modes.add("velib");
+    }
+  }
+  return modes.size > 0 ? [...modes].join(",") : DEFAULT_TRANSIT_MODES;
 }
 
 function favoriteMatchesTrip(
@@ -428,6 +446,9 @@ export default function TripDetailPage() {
     [destLat, destLon, hasCoords],
   );
 
+  // Modes utilisés dans le trajet initial, pour recalcul/reroute cohérent
+  const tripModes = useMemo(() => extractTripModes(segments), [segments]);
+
   // ─── Favori : état ─────────────────────────────────────────────────
   const [isFavoriteState, setIsFavoriteState] = useState<boolean>(false);
   const [favoriteId, setFavoriteId] = useState<string | null>(null);
@@ -499,6 +520,7 @@ export default function TripDetailPage() {
           mode: historyMode,
           modeColor: historyModeColor,
           duration,
+          departureTime: trip.departureTime,
           co2,
           origin: originPos ?? undefined,
           destination: destPos ?? undefined,
@@ -716,6 +738,7 @@ export default function TripDetailPage() {
   } = useNavigation(segments, tripPolyline, originPos, destPos, voiceEnabled);
 
   const { requestPermission: requestDeviceHeading } = useDeviceHeading();
+  const { locate: locateUser } = useGeolocation();
 
   const startNavigationWithPermissions = useCallback(() => {
     // iOS 13+ exige une permission explicite pour l'orientation de l'appareil.
@@ -818,7 +841,7 @@ export default function TripDetailPage() {
             originLon: fromPos.lon,
             destLat: destPos.lat,
             destLon: destPos.lon,
-            modes: DEFAULT_TRANSIT_MODES,
+            modes: tripModes,
           },
           controller.signal,
         );
@@ -863,7 +886,7 @@ export default function TripDetailPage() {
         if (!controller.signal.aborted) setIsRerouting(false);
       }
     },
-    [destPos, router],
+    [destPos, router, tripModes],
   );
 
   // ─── Déclenchement auto : hors-trajet persistant > 8 s (+ 30 m de déplacement) ──
@@ -939,10 +962,30 @@ export default function TripDetailPage() {
               />
             </button>
             <button
+              type="button"
+              onClick={async () => {
+                const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+                const shareData = {
+                  title: "Mon itinéraire UrbanFlow",
+                  text: `Trajet ${trip?.segments?.[0]?.fromStop || "départ"} → ${trip?.segments?.[trip.segments.length - 1]?.toStop || "arrivée"} — ${trip?.durationMinutes} min`,
+                  url: shareUrl,
+                };
+                try {
+                  if (navigator.share) {
+                    await navigator.share(shareData);
+                  } else if (navigator.clipboard) {
+                    await navigator.clipboard.writeText(shareUrl);
+                     
+                    alert("Lien copié dans le presse-papiers");
+                  }
+                } catch {
+                  // ignore
+                }
+              }}
               className="text-white/80 hover:text-white transition-colors"
               aria-label="Partager"
             >
-              <UrbanFlowIcon type="action" name="locate" size={20} />
+              <UrbanFlowIcon type="action" name="share" size={20} />
             </button>
           </div>
         ) : null
@@ -1400,7 +1443,7 @@ export default function TripDetailPage() {
                     }
                   : undefined
               }
-              onLocateUser={() => {}}
+              onLocateUser={locateUser}
               isWatching={isNavigating}
               onToggleWatch={
                 isNavigating ? stopNavigation : startNavigationWithPermissions
