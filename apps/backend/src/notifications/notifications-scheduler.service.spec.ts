@@ -58,8 +58,8 @@ describe('NotificationsSchedulerService', () => {
 
   describe('sendDepartureReminders', () => {
     it('emits a reminder for each journey favorite in the 10-20 min window', async () => {
-      // departure = createdAt + 1h, donc createdAt = now - 49 min donne un départ dans 11 min.
-      const createdAt = new Date(Date.now() - 49 * 60 * 1000);
+      // départ dans 11 min.
+      const departureTime = new Date(Date.now() + 11 * 60 * 1000);
       (favoriteRepo.find as jest.Mock).mockResolvedValue([
         {
           userId: 'user-1',
@@ -68,7 +68,7 @@ describe('NotificationsSchedulerService', () => {
           type: 'journey',
           from: 'A',
           to: 'B',
-          createdAt,
+          departureTime,
         },
         {
           userId: 'user-2',
@@ -77,7 +77,7 @@ describe('NotificationsSchedulerService', () => {
           type: 'journey',
           from: 'C',
           to: 'D',
-          createdAt,
+          departureTime,
         },
       ]);
 
@@ -91,7 +91,8 @@ describe('NotificationsSchedulerService', () => {
     });
 
     it('skips journey favorites outside the reminder window', async () => {
-      const createdAt = new Date(); // departure = +1h => way outside 10-20 min
+      // départ dans 1h => hors fenêtre 10-20 min
+      const departureTime = new Date(Date.now() + 60 * 60 * 1000);
       (favoriteRepo.find as jest.Mock).mockResolvedValue([
         {
           userId: 'user-1',
@@ -100,7 +101,7 @@ describe('NotificationsSchedulerService', () => {
           type: 'journey',
           from: 'A',
           to: 'B',
-          createdAt,
+          departureTime,
         },
       ]);
 
@@ -110,7 +111,7 @@ describe('NotificationsSchedulerService', () => {
     });
 
     it('does not duplicate reminders for the same favorite and minute', async () => {
-      const createdAt = new Date(Date.now() - 49 * 60 * 1000);
+      const departureTime = new Date(Date.now() + 11 * 60 * 1000);
       (favoriteRepo.find as jest.Mock).mockResolvedValue([
         {
           userId: 'user-1',
@@ -119,7 +120,7 @@ describe('NotificationsSchedulerService', () => {
           type: 'journey',
           from: 'A',
           to: 'B',
-          createdAt,
+          departureTime,
         },
         {
           userId: 'user-1',
@@ -128,7 +129,7 @@ describe('NotificationsSchedulerService', () => {
           type: 'journey',
           from: 'A',
           to: 'B',
-          createdAt,
+          departureTime,
         },
       ]);
 
