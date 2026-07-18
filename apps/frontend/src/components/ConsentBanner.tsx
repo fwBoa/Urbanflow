@@ -265,9 +265,6 @@ export default function ConsentBanner() {
 // ─── Sync consent to backend if logged in (cookie-based auth) ───
 async function syncConsentToBackend(consent: ConsentState) {
   try {
-    // Only sync if user is authenticated (session flag)
-    if (sessionStorage.getItem("urbanflow_authenticated") !== "true") return;
-
     await fetch("/api/auth/consent", {
       method: "POST",
       credentials: "include",

@@ -10,8 +10,10 @@ import {
   getNotificationStyle,
   type NotificationItem,
 } from '@/services/notifications';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function NotificationBell() {
+  const { isAuthenticated } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -19,11 +21,10 @@ export default function NotificationBell() {
 
   // Fetch notifications on mount and when panel opens
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (sessionStorage.getItem('urbanflow_authenticated') !== 'true') return;
+    if (!isAuthenticated) return;
 
     getUnreadCount().then(setUnreadCount);
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isOpen) {

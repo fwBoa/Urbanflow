@@ -23,29 +23,24 @@ function getHeaders(): HeadersInit {
   return headers;
 }
 
-function isLoggedIn(): boolean {
-  if (typeof window === 'undefined') return false;
-  return sessionStorage.getItem('urbanflow_authenticated') === 'true';
-}
-
 /** Get all notifications for current user */
 export async function getNotifications(): Promise<NotificationItem[]> {
-  if (!isLoggedIn()) return [];
   const res = await fetch(`${API_URL}/api/notifications`, {
     credentials: 'include',
     headers: getHeaders(),
   });
+  if (res.status === 401) return [];
   if (!res.ok) return [];
   return res.json();
 }
 
 /** Get unread notification count */
 export async function getUnreadCount(): Promise<number> {
-  if (!isLoggedIn()) return 0;
   const res = await fetch(`${API_URL}/api/notifications/unread-count`, {
     credentials: 'include',
     headers: getHeaders(),
   });
+  if (res.status === 401) return 0;
   if (!res.ok) return 0;
   const data = await res.json();
   return data.count ?? 0;
@@ -53,19 +48,18 @@ export async function getUnreadCount(): Promise<number> {
 
 /** Mark a notification as read */
 export async function markAsRead(id: string): Promise<NotificationItem | null> {
-  if (!isLoggedIn()) return null;
   const res = await fetch(`${API_URL}/api/notifications/${id}/read`, {
     method: 'PATCH',
     credentials: 'include',
     headers: getHeaders(),
   });
+  if (res.status === 401) return null;
   if (!res.ok) return null;
   return res.json();
 }
 
 /** Mark all notifications as read */
 export async function markAllAsRead(): Promise<void> {
-  if (!isLoggedIn()) return;
   await fetch(`${API_URL}/api/notifications/mark-all-read`, {
     method: 'POST',
     credentials: 'include',
@@ -75,12 +69,12 @@ export async function markAllAsRead(): Promise<void> {
 
 /** Delete a notification */
 export async function deleteNotification(id: string): Promise<boolean> {
-  if (!isLoggedIn()) return false;
   const res = await fetch(`${API_URL}/api/notifications/${id}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: getHeaders(),
   });
+  if (res.status === 401) return false;
   if (!res.ok) return false;
   const data = await res.json();
   return data.deleted ?? false;
@@ -88,7 +82,6 @@ export async function deleteNotification(id: string): Promise<boolean> {
 
 /** Delete all notifications (RGPD) */
 export async function deleteAllNotifications(): Promise<void> {
-  if (!isLoggedIn()) return;
   await fetch(`${API_URL}/api/notifications`, {
     method: 'DELETE',
     credentials: 'include',
