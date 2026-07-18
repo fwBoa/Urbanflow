@@ -185,8 +185,8 @@ describe('PushService', () => {
         JSON.stringify({
           title: 'T',
           body: 'B',
-          icon: '/icons/icon-192.png',
-          badge: '/icons/icon-192.png',
+          icon: '/assets/urbanflow/app-icons/pwa-icon-192.png',
+          badge: '/assets/urbanflow/app-icons/pwa-icon-maskable-512.png',
         }),
       );
     });

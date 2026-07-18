@@ -1,4 +1,4 @@
-const CACHE_NAME = "urbanflow-v5";
+const CACHE_NAME = "urbanflow-v6";
 const STATIC_ASSETS = [
   "/",
   "/search",
@@ -144,8 +144,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "UrbanFlow";
   const options = {
     body: payload.body || "",
-    icon: payload.icon || "/icons/icon-192.png",
-    badge: payload.badge || "/icons/icon-192.png",
+    icon: payload.icon || "/assets/urbanflow/app-icons/pwa-icon-192.png",
+    badge: payload.badge || "/assets/urbanflow/app-icons/pwa-icon-maskable-512.png",
     tag: payload.tag || "urbanflow-default",
     data: { actionUrl: payload.actionUrl || "/" },
     requireInteraction: false,
