@@ -62,6 +62,3 @@ Ports par défaut :
 | Backend | 4000 |
 | PostgreSQL | 5432 |
 
-## 🤝 Contribuer
-
-Ce projet suit les [conventions de commit du skill UrbanFlow](.claude/skills/urbanflow/SKILL.md).
