@@ -78,6 +78,60 @@ body {
   border-radius: 4px;
 }
 
+/* ─── Accessibility mode : reduced motion + high contrast ─── */
+[data-accessibility="true"] *,
+[data-accessibility="true"] *::before,
+[data-accessibility="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+[data-accessibility="true"]:focus-visible,
+[data-accessibility="true"] *:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+[data-accessibility="true"] {
+  --color-text-secondary: #3a3a4a;
+  --color-text-tertiary: #4a4a5a;
+  --color-border: #b8c4d4;
+}
+
+[data-accessibility="true"] .dark {
+  --color-text-secondary: #c8c8d8;
+  --color-text-tertiary: #a8a8b8;
+  --color-border: #5a6678;
+}
+
+[data-accessibility="true"] button,
+[data-accessibility="true"] a,
+[data-accessibility="true"] [role="button"] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+[data-accessibility="true"] button:has(svg:only-child),
+[data-accessibility="true"] a:has(svg:only-child) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-accessibility="true"] .opacity-50,
+[data-accessibility="true"] .opacity-60,
+[data-accessibility="true"] .opacity-70,
+[data-accessibility="true"] .group-hover\:opacity-100,
+[data-accessibility="true"] .hover\:opacity-100 {
+  opacity: 1 !important;
+}
+
+[data-accessibility="true"] a {
+  text-decoration: underline;
+}
+
 /* ─── Safe area insets (iPhone notch, bottom bar) ─── */
 .safe-area-top {
   padding-top: env(safe-area-inset-top, 0px);

@@ -116,7 +116,7 @@ function FavoriteLineCard({
           aria-label={`Retirer ${lineName} des favoris`}
           className="shrink-0 p-1.5 rounded-full text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors"
         >
-          <UrbanFlowIcon type="navigation" name="favorites" size={16} className="fill-current" />
+          <UrbanFlowIcon type="navigation" name="favorites-filled" size={16} className="text-[var(--color-favorite-red)]" />
         </button>
       </div>
 
@@ -181,19 +181,29 @@ function FavoriteLineCard({
 function LineBadge({
   line,
   isFavorite,
+  alerts,
   onToggle,
 }: {
   line: LineByMode;
   isFavorite: boolean;
+  alerts: import("@/services/api").RealtimeAlert[];
   onToggle: () => void;
 }) {
   const isActive = line.status === "active";
   const isUpcoming = line.status === "prochainement active";
+  const lineAlerts = useMemo(
+    () => alerts.filter((a) => alertMatchesLine(a, line.shortName, undefined, line.id)),
+    [alerts, line.shortName, line.id],
+  );
+  const hasAlerts = lineAlerts.length > 0;
+  const severe = lineAlerts.some((a) => a.severity === "severe");
+  const warning = lineAlerts.some((a) => a.severity === "warning");
+  const alertColor = severe ? "bg-red-500" : warning ? "bg-amber-500" : "bg-sky-500";
 
   return (
     <div
       className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] hover:shadow-sm transition-shadow"
-      title={`${line.shortName} — ${line.status}`}
+      title={`${line.shortName} — ${line.status}${hasAlerts ? ` — ${lineAlerts.length} perturbation(s)` : ""}`}
     >
       <span
         className="inline-flex items-center justify-center min-w-[28px] h-[22px] px-1 rounded text-[11px] font-bold text-white"
@@ -201,8 +211,13 @@ function LineBadge({
       >
         {line.shortName}
       </span>
-      {isActive && <UrbanFlowIcon type="status" name="check" size={12} className="text-[var(--color-eco-green)]" />}
-      {isUpcoming && <UrbanFlowIcon type="status" name="info" size={12} className="text-[var(--color-mobility-orange)]" />}
+      {hasAlerts ? (
+        <span className={`w-2 h-2 rounded-full ${alertColor}`} aria-hidden="true" />
+      ) : isActive ? (
+        <UrbanFlowIcon type="status" name="check" size={12} className="text-[var(--color-eco-green)]" />
+      ) : isUpcoming ? (
+        <UrbanFlowIcon type="status" name="info" size={12} className="text-[var(--color-mobility-orange)]" />
+      ) : null}
       <button
         type="button"
         onClick={(e) => {
@@ -214,11 +229,11 @@ function LineBadge({
       >
         <UrbanFlowIcon
           type="navigation"
-          name="favorites"
+          name={isFavorite ? "favorites-filled" : "favorites"}
           size={12}
           className={
             isFavorite
-              ? "fill-red-500 text-red-500"
+              ? "text-[var(--color-favorite-red)]"
               : "text-[var(--color-text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity"
           }
         />
@@ -303,7 +318,21 @@ export default function LinesPage() {
     }
   };
 
-  const lines = linesByMode[activeTab] || [];
+  const lines = useMemo(() => {
+    const all = linesByMode[activeTab] || [];
+    const severityRank = (line: LineByMode) => {
+      const lineAlerts = alerts.filter((a) => alertMatchesLine(a, line.shortName, undefined, line.id));
+      if (lineAlerts.some((a) => a.severity === "severe")) return 0;
+      if (lineAlerts.some((a) => a.severity === "warning")) return 1;
+      if (lineAlerts.length > 0) return 2;
+      return 3;
+    };
+    return [...all].sort((a, b) => {
+      const rankDiff = severityRank(a) - severityRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      return a.shortName.localeCompare(b.shortName, undefined, { numeric: true });
+    });
+  }, [linesByMode, activeTab, alerts]);
   const loading = linesLoading || alertsLoading || favoritesLoading;
 
   return (
@@ -426,6 +455,7 @@ export default function LinesPage() {
                   key={line.id}
                   line={line}
                   isFavorite={favLineIds.has(line.id)}
+                  alerts={alerts}
                   onToggle={() => handleToggleExplorer(line, activeTab)}
                 />
               ))}

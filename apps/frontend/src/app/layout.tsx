@@ -72,7 +72,7 @@ export default function RootLayout({
         <Script id="theme-init" strategy="beforeInteractive">
           {`(function() {
             try {
-              var prefs = JSON.parse(localStorage.getItem('urbanflow_preferences') || '{}');
+              var prefs = JSON.parse(localStorage.getItem('urbanflow_prefs') || '{}');
               var isDark = prefs.darkMode;
               if (isDark === undefined) {
                 isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -81,6 +81,12 @@ export default function RootLayout({
                 document.documentElement.classList.add('dark');
               } else {
                 document.documentElement.classList.remove('dark');
+              }
+              var a11y = prefs.accessibility;
+              if (a11y) {
+                document.documentElement.setAttribute('data-accessibility', 'true');
+              } else {
+                document.documentElement.removeAttribute('data-accessibility');
               }
             } catch (e) {}
           })();`}

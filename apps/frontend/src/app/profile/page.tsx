@@ -145,6 +145,19 @@ export default function ProfilePage() {
     loadData();
   }, [isAuthenticated, user]);
 
+  const applyAccessibility = (enabled: boolean) => {
+    if (enabled) {
+      document.documentElement.setAttribute("data-accessibility", "true");
+    } else {
+      document.documentElement.removeAttribute("data-accessibility");
+    }
+  };
+
+  // Apply/remove accessibility class whenever the preference changes
+  useEffect(() => {
+    applyAccessibility(prefs.accessibility);
+  }, [prefs.accessibility]);
+
   const handleToggle = (key: keyof UserPreferences) => {
     if (key === "darkMode") {
       toggleDarkMode();
@@ -155,10 +168,13 @@ export default function ProfilePage() {
     const updated = savePreferences({ [key]: !prefs[key] });
     setPrefs(updated);
     // Sync accessibility needs to backend when authenticated
-    if (key === "accessibility" && isAuthenticated) {
-      updateRemoteProfile({ accessibilityNeeds: !prefs.accessibility }).catch(() => {
-        /* non-critical */
-      });
+    if (key === "accessibility") {
+      applyAccessibility(!prefs.accessibility);
+      if (isAuthenticated) {
+        updateRemoteProfile({ accessibilityNeeds: !prefs.accessibility }).catch(() => {
+          /* non-critical */
+        });
+      }
     }
     // Sync notifications preference to backend when authenticated
     if (key === "notifications" && isAuthenticated) {

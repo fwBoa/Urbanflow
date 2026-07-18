@@ -16,7 +16,8 @@ import { UI_MODE_COLORS } from "@/constants/mode-colors";
 import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute, useNearbyStops, useStopTimes } from "@/hooks/useTransport";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
-import { addToHistory } from "@/services/favorites";
+import { useAuth } from "@/contexts/AuthContext";
+import { addToHistory, getPreferences } from "@/services/favorites";
 import type { SuggestionItem } from "@/components/SearchAutocomplete";
 
 const filters = [
@@ -176,11 +177,15 @@ function SearchPageContent() {
   const { stops: destStops } = useStopSearch(destination);
   const { results: destAddresses } = useGeocode(destination);
 
+  const { user } = useAuth();
+  const wheelchairAccessible = user?.accessibilityNeeds ?? getPreferences().accessibility;
+
   const { journeys, loading: journeysLoading, error: journeysError } = useJourney(
     selectedOrigin,
     selectedDest,
     undefined,
     selectedModes.length > 0 ? selectedModes : undefined,
+    wheelchairAccessible,
   );
 
 
