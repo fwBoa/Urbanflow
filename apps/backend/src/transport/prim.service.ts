@@ -41,6 +41,38 @@ interface ParisApiResponse {
   records?: ParisApiRecord[];
 }
 
+interface JcdecauxStation {
+  number?: number;
+  name?: string;
+  position?: { lat: number; lng: number };
+  status?: string;
+  totalStands?: {
+    availabilities?: {
+      bikes?: number;
+      electricalBikes?: number;
+      mechanicalBikes?: number;
+      stands?: number;
+    };
+    capacity?: number;
+  };
+  mainStands?: {
+    availabilities?: {
+      bikes?: number;
+      electricalBikes?: number;
+      mechanicalBikes?: number;
+      stands?: number;
+    };
+    capacity?: number;
+  };
+  contractName?: string;
+}
+
+interface JcdecauxApiResponse {
+  records?: Array<{ fields?: JcdecauxStation }>;
+  results?: JcdecauxStation[];
+  nhits?: number;
+}
+
 interface GeoProperties {
   id?: string;
   label?: string;
@@ -406,14 +438,91 @@ export class PrimService implements OnModuleInit {
       );
     }
 
-    // Trier par distance et limiter
-    const sorted = parisStations
+    // ─── Source 2 : API JCDecaux IDFM (stations petite couronne / IDF hors Paris) ───
+    let suburbStations: typeof parisStations = [];
+
+    try {
+      const jcdecauxData = await firstValueFrom(
+        this.httpService.get<unknown>(
+          `${this.dataApiUrl}/catalog/datasets/jcdecaux-bike-stations-data/records`,
+          {
+            params: {
+              limit: String(Math.min(limit, 50)),
+              where: `distance(position, geom'POINT(${lon} ${lat})', ${radiusMeters})`,
+            },
+          },
+        ),
+      );
+
+      const raw = jcdecauxData.data as JcdecauxApiResponse;
+      const records =
+        raw.results ??
+        (raw.records?.map((r) => r.fields) as JcdecauxStation[] | undefined) ??
+        [];
+
+      suburbStations = records
+        .filter((s) => {
+          if (!s.position || typeof s.position.lat !== 'number') return false;
+          return (
+            this.haversineDistance(lat, lon, s.position.lat, s.position.lng) <=
+            radiusMeters
+          );
+        })
+        .map((s) => {
+          const stationDistance = this.haversineDistance(
+            lat,
+            lon,
+            s.position!.lat,
+            s.position!.lng,
+          );
+          const avail = s.mainStands?.availabilities ??
+            s.totalStands?.availabilities ?? {
+              bikes: 0,
+              electricalBikes: 0,
+              mechanicalBikes: 0,
+              stands: 0,
+            };
+          return {
+            id: String(s.number ?? s.name ?? 'unknown'),
+            name: s.name ?? "Station Vélib'",
+            position: {
+              lat: s.position!.lat,
+              lon: s.position!.lng,
+            },
+            available_bikes: avail.bikes ?? 0,
+            available_ebikes: avail.electricalBikes ?? 0,
+            available_mechanical: avail.mechanicalBikes ?? 0,
+            available_bike_stands: avail.stands ?? 0,
+            capacity:
+              s.mainStands?.capacity ??
+              s.totalStands?.capacity ??
+              (avail.bikes ?? 0) + (avail.stands ?? 0),
+            is_renting: s.status === 'OPEN',
+            is_returning: s.status === 'OPEN',
+            distance: Math.round(stationDistance),
+            arrondissement: s.contractName ?? 'Île-de-France',
+          };
+        });
+    } catch (error) {
+      this.logger.warn(
+        `JCDecaux fallback API error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    // Fusionner les sources, dédupliquer par id, trier par distance
+    const seen = new Set<string>();
+    const merged = [...parisStations, ...suburbStations]
+      .filter((s) => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+      })
       .sort((a, b) => a.distance - b.distance)
       .slice(0, limit);
 
     return {
-      stations: sorted,
-      total: sorted.length,
+      stations: merged,
+      total: merged.length,
     };
   }
 

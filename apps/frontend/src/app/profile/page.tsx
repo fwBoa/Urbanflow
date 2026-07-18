@@ -385,13 +385,16 @@ export default function ProfilePage() {
             </span>
           ) : (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--color-text-tertiary)]/10 text-[var(--color-text-tertiary)]">
-              Navigation locale
+              <Shield size={12} className="mr-1" />
+              Non connecté
             </span>
           )}
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--color-eco-green)]/10 text-[var(--color-eco-green)]">
-            <UrbanFlowIcon type="status" name="leaf" size={12} className="mr-1" />
-            Éco-mobiliste
-          </span>
+          {isAuthenticated && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--color-eco-green)]/10 text-[var(--color-eco-green)]">
+              <UrbanFlowIcon type="status" name="leaf" size={12} className="mr-1" />
+              Éco-mobiliste
+            </span>
+          )}
           {unlockedCount > 0 && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--color-mobility-orange)]/10 text-[var(--color-mobility-orange)]">
               <Award size={12} className="mr-1" />

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Mail, Lock, UserPlus } from "lucide-react";
 import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 
@@ -32,16 +33,21 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-[var(--color-background)]">
       <div className="w-full max-w-sm">
-        {/* Logo */}
+        {/* Logo UrbanFlow */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-primary)] flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">🚇</span>
-          </div>
+          <Image
+            src="/assets/urbanflow/brand/urbanflow-pictogramme.svg"
+            alt="UrbanFlow"
+            width={80}
+            height={80}
+            priority
+            className="mx-auto mb-4"
+          />
           <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
             UrbanFlow
           </h1>
           <p className="text-sm text-[var(--color-text-tertiary)] mt-1">
-            Mobilité multimodale Paris
+            Mobilité multimodale à Paris
           </p>
         </div>
 
