@@ -1,0 +1,19 @@
+User-agent: *
+Allow: /$
+Allow: /legal$
+Allow: /privacy$
+Disallow: /search
+Disallow: /trip/
+Disallow: /favorites
+Disallow: /profile
+Disallow: /admin
+Disallow: /lines
+Disallow: /velib
+Disallow: /notifications
+Disallow: /offline
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+
+Sitemap: https://urbanflow.app/sitemap.xml

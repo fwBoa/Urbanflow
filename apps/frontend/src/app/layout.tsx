@@ -16,10 +16,30 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "UrbanFlow Mobility",
+  metadataBase: new URL("https://urbanflow.app"),
+  title: "UrbanFlow Mobility — Mobilité multimodale à Paris",
   description:
-    "Plateforme intelligente de mobilité multimodale pour Paris et son agglomération",
+    "Calculez vos itinéraires multimodaux (métro, RER, bus, tram, Vélib’) en temps réel à Paris et en Île-de-France. Navigation GPS immersive, alertes lignes et PWA offline.",
+  keywords: [
+    "UrbanFlow",
+    "mobilité",
+    "Île-de-France",
+    "Paris",
+    "transport",
+    "itinéraire",
+    "métro",
+    "RER",
+    "bus",
+    "tram",
+    "Vélib’",
+    "temps réel",
+    "PWA",
+  ],
   manifest: "/manifest.json",
+  robots: {
+    index: true,
+    follow: true,
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -27,11 +47,27 @@ export const metadata: Metadata = {
     startupImage: "/assets/urbanflow/brand/urbanflow-pictogramme.png",
   },
   openGraph: {
-    title: "UrbanFlow Mobility",
+    title: "UrbanFlow Mobility — Mobilité multimodale à Paris",
     description:
-      "Plateforme intelligente de mobilité multimodale pour Paris et son agglomération",
+      "Calculez vos itinéraires multimodaux en temps réel à Paris et en Île-de-France. Navigation GPS immersive, alertes lignes et PWA offline.",
     type: "website",
     locale: "fr_FR",
+    siteName: "UrbanFlow Mobility",
+    images: [
+      {
+        url: "/assets/urbanflow/brand/urbanflow-logo-clair.png",
+        width: 800,
+        height: 400,
+        alt: "UrbanFlow Mobility",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "UrbanFlow Mobility — Mobilité multimodale à Paris",
+    description:
+      "Calculez vos itinéraires multimodaux en temps réel à Paris et en Île-de-France.",
+    images: ["/assets/urbanflow/brand/urbanflow-logo-clair.png"],
   },
   icons: {
     icon: [
@@ -41,6 +77,9 @@ export const metadata: Metadata = {
     ],
     apple: "/assets/urbanflow/app-icons/apple-touch-icon.png",
     shortcut: "/assets/urbanflow/app-icons/favicon-32.png",
+  },
+  alternates: {
+    canonical: "https://urbanflow.app/",
   },
 };
 
