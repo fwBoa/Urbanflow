@@ -68,7 +68,7 @@ export default function SplashScreen() {
     <div
       aria-hidden={hidden}
       className={`
-        fixed inset-0 z-[100] flex flex-col items-center justify-center
+        fixed inset-0 z-[100000] flex flex-col items-center justify-center
         transition-opacity duration-700 ease-out
         ${hidden ? "opacity-0 pointer-events-none" : "opacity-100"}
       `}

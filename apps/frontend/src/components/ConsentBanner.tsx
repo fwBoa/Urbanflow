@@ -125,7 +125,7 @@ export default function ConsentBanner() {
 
   return (
     <div
-      className="fixed inset-0 z-[1000] bg-black/50 flex items-end sm:items-center justify-center p-4"
+      className="fixed inset-0 z-[99999] bg-black/50 flex items-end sm:items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="consent-title"
