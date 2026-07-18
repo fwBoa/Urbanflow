@@ -3,7 +3,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 
-const SPLASH_STORAGE_KEY = "uf:splash:v1";
 const SPLASH_MIN_MS = 2_000;
 
 const standaloneSubscribe = (onChange: () => void) => {
@@ -13,36 +12,25 @@ const standaloneSubscribe = (onChange: () => void) => {
   return () => mql.removeEventListener("change", onChange);
 };
 
-const standaloneGetSnapshot = () =>
-  window.matchMedia("(display-mode: standalone)").matches;
+const standaloneGetSnapshot = () => {
+  if (typeof window === "undefined") return false;
+  // iOS PWA launch uses navigator.standalone; modern Android uses display-mode.
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    !!(window.navigator as unknown as { standalone?: boolean }).standalone
+  );
+};
 
 const standaloneGetServerSnapshot = () => false;
 
-function wasSplashShown(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(SPLASH_STORAGE_KEY) === "shown";
-  } catch {
-    return false;
-  }
-}
-
-function markSplashShown(): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(SPLASH_STORAGE_KEY, "shown");
-  } catch {
-    // ignore
-  }
-}
-
 /**
- * Splash screen affichée au premier lancement de la PWA en mode standalone.
+ * Splash screen affichée au lancement de la PWA en mode standalone.
  *
- * - Visible uniquement si `display-mode: standalone` (PWA installée).
- - Masquée après SPLASH_MIN_MS pour masquer le premier paint / hydratation.
- * - Persistance via localStorage pour ne pas réafficher aux lancements suivants.
- * - SSR-safe : snapshot serveur à false, donc rien n'est rendu côté serveur.
+ * - Visible dès qu'on détecte un lancement standalone (iOS via
+ *   navigator.standalone, Android via display-mode: standalone).
+ * - Masquée après SPLASH_MIN_MS pour couvrir le premier paint / hydratation.
+ * - S'affiche à chaque cold start de la PWA, comme un splash screen mobile
+ *   natif.
  */
 export default function SplashScreen() {
   const standalone = useSyncExternalStore(
@@ -54,15 +42,14 @@ export default function SplashScreen() {
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
-    if (!standalone || wasSplashShown()) return;
+    if (!standalone) return;
 
     // L’affichage de la splash screen est une synchronisation initiale avec
-    // le mode d’affichage PWA et l’état localStorage ; il ne peut pas être
-    // déclenché par un événement externe.
+    // le mode d’affichage PWA ; il ne peut pas être déclenché par un événement
+    // externe.
     /* eslint-disable react-hooks/set-state-in-effect */
     setShow(true);
     /* eslint-enable react-hooks/set-state-in-effect */
-    markSplashShown();
 
     const timer = setTimeout(() => {
       setHidden(true);
