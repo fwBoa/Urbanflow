@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Shield, Cookie, BarChart3 } from "lucide-react";
 import UrbanFlowIcon from "./icons/UrbanFlowIcon";
+import { useSplash } from "@/contexts/SplashContext";
 
 const CONSENT_KEY = "urbanflow_consent";
 const CONSENT_VERSION = "1.0";
@@ -65,6 +66,7 @@ export default function ConsentBanner() {
   const [visible, setVisible] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [consent, setConsent] = useState<ConsentState>(defaultConsent);
+  const { isSplashVisible } = useSplash();
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -119,6 +121,7 @@ export default function ConsentBanner() {
 
   if (!mounted) return null;
   if (!visible) return null;
+  if (isSplashVisible) return null;
 
   return (
     <div

@@ -6,6 +6,7 @@ import PwaInstallBanner from "@/components/PwaInstallBanner";
 import SplashScreen from "@/components/SplashScreen";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { SplashProvider } from "@/contexts/SplashContext";
 import ConsentBanner from "@/components/ConsentBanner";
 import "./globals.css";
 
@@ -130,13 +131,15 @@ export default function RootLayout({
             } catch (e) {}
           })();`}
         </Script>
-        <AuthProvider>
-          <ThemeProvider>
-            <SplashScreen />
-            {children}
-            <ConsentBanner />
-          </ThemeProvider>
-        </AuthProvider>
+        <SplashProvider>
+          <AuthProvider>
+            <ThemeProvider>
+              <SplashScreen />
+              {children}
+              <ConsentBanner />
+            </ThemeProvider>
+          </AuthProvider>
+        </SplashProvider>
         <ServiceWorkerRegistration />
         <PwaInstallBanner />
       </body>

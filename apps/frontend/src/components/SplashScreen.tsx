@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
+import { useSplash } from "@/contexts/SplashContext";
 
 const SPLASH_MIN_MS = 2_000;
 
@@ -40,6 +41,7 @@ export default function SplashScreen() {
   );
   const [show, setShow] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const { setSplashVisible } = useSplash();
 
   useEffect(() => {
     if (!standalone) return;
@@ -49,14 +51,16 @@ export default function SplashScreen() {
     // externe.
     /* eslint-disable react-hooks/set-state-in-effect */
     setShow(true);
+    setSplashVisible(true);
     /* eslint-enable react-hooks/set-state-in-effect */
 
     const timer = setTimeout(() => {
       setHidden(true);
+      setSplashVisible(false);
     }, SPLASH_MIN_MS);
 
     return () => clearTimeout(timer);
-  }, [standalone]);
+  }, [standalone, setSplashVisible]);
 
   if (!show) return null;
 
