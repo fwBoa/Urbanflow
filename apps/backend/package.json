@@ -89,6 +89,11 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
+  "overrides": {
+    "brace-expansion": "^5.0.8",
+    "minimatch": "^10.0.3",
+    "glob": "^10.4.5"
+  },
   "jest": {
     "moduleFileExtensions": [
       "js",

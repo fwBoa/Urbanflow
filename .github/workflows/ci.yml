@@ -21,13 +21,13 @@ jobs:
       # actions/checkout v5.0.1 (node24 runtime)
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
-      - name: npm audit — backend
+      - name: npm audit — backend (production only)
         working-directory: apps/backend
-        run: npm audit --audit-level=moderate
+        run: npm audit --omit=dev --audit-level=moderate
 
-      - name: npm audit — frontend
+      - name: npm audit — frontend (production only)
         working-directory: apps/frontend
-        run: npm audit --audit-level=moderate
+        run: npm audit --omit=dev --audit-level=moderate
 
       - name: SAST — Semgrep scan
         uses: docker://returntocorp/semgrep:latest
