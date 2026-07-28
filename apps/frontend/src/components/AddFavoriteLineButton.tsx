@@ -112,18 +112,17 @@ export default function AddFavoriteLineButton({
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]
         ${
           isFavorite
-            ? "text-amber-500 hover:text-amber-600"
-            : "text-[var(--color-text-tertiary)] hover:text-amber-500"
+            ? "text-[var(--color-favorite-red)] hover:text-red-600"
+            : "text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)]"
         }
         ${loading ? "opacity-50 cursor-not-allowed" : ""}
       `}
     >
       <UrbanFlowIcon
-        type="action"
-        name="bookmark"
+        type="navigation"
+        name={isFavorite ? "favorites-filled" : "favorites"}
         size={iconSize}
         ariaHidden={true}
-        className={isFavorite ? "fill-current stroke-current" : "fill-none stroke-current"}
       />
       <span className="sr-only">{label}</span>
     </button>

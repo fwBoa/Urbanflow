@@ -213,9 +213,8 @@ function AlertsPageContent() {
         >
           <UrbanFlowIcon
             type="navigation"
-            name="favorites"
+            name={myLinesOnly ? "favorites-filled" : "favorites"}
             size={12}
-            className={myLinesOnly ? "fill-current" : "fill-none"}
           />
           Mes lignes
         </button>

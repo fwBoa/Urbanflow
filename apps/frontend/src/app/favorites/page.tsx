@@ -175,9 +175,6 @@ export default function FavoritesPage() {
                     >
                       {line.mode}
                     </span>
-                    <span className="text-xs text-[var(--color-text-secondary)]">
-                      {line.lineId}
-                    </span>
                     <button
                       className="text-[var(--color-favorite-red)] hover:scale-110 transition-transform p-0.5"
                       aria-label="Retirer des favoris"
@@ -186,7 +183,7 @@ export default function FavoritesPage() {
                         handleRemoveFavorite(line.id);
                       }}
                     >
-                      <UrbanFlowIcon type="navigation" name="favorites" size={14} className="fill-current" />
+                      <UrbanFlowIcon type="navigation" name="favorites-filled" size={14} />
                     </button>
                   </div>
                 ))}
@@ -253,7 +250,7 @@ export default function FavoritesPage() {
                       handleRemoveFavorite(fav.id);
                     }}
                   >
-                    <UrbanFlowIcon type="navigation" name="favorites" size={20} className="fill-current" />
+                    <UrbanFlowIcon type="navigation" name="favorites-filled" size={20} />
                   </button>
                 </div>
               </div>
@@ -314,9 +311,8 @@ export default function FavoritesPage() {
                 >
                   <UrbanFlowIcon
                     type="navigation"
-                    name="favorites"
+                    name={isHistoryItemFavorite(item) ? "favorites-filled" : "favorites"}
                     size={18}
-                    className={isHistoryItemFavorite(item) ? "fill-current" : "fill-none"}
                   />
                 </button>
               </div>

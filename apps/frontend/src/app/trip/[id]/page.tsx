@@ -956,9 +956,8 @@ export default function TripDetailPage() {
             >
               <UrbanFlowIcon
                 type="navigation"
-                name="favorites"
+                name={isFavoriteState ? "favorites-filled" : "favorites"}
                 size={20}
-                className={isFavoriteState ? "fill-current" : "fill-none"}
               />
             </button>
             <button
