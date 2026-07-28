@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Inter } from "next/font/google";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import PwaInstallBanner from "@/components/PwaInstallBanner";
+import PushNotificationBanner from "@/components/PushNotificationBanner";
 import SplashScreen from "@/components/SplashScreen";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -142,6 +143,7 @@ export default function RootLayout({
         </SplashProvider>
         <ServiceWorkerRegistration />
         <PwaInstallBanner />
+        <PushNotificationBanner />
       </body>
     </html>
   );
