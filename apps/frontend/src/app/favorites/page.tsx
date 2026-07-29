@@ -23,6 +23,8 @@ export default function FavoritesPage() {
   const [activeTab, setActiveTab] = useState<"favorites" | "history">("favorites");
   const [favorites, setFavorites] = useState<FavoriteJourney[]>([]);
   const [history, setHistory] = useState<HistoryJourney[]>([]);
+  const [clearModalOpen, setClearModalOpen] = useState(false);
+  const [selectedHistoryItems, setSelectedHistoryItems] = useState<Set<string>>(new Set());
 
   const favoriteLines = favorites.filter((f) => f.type === "line");
   const favoriteJourneys = favorites.filter((f) => f.type !== "line");
@@ -78,9 +80,51 @@ export default function FavoritesPage() {
     }
   };
 
-  const handleClearHistory = async () => {
+  const handleClearHistory = () => {
+    const notInFavorites = history.filter((item) => !isHistoryItemFavorite(item));
+    if (notInFavorites.length === 0) {
+      confirmClearHistory();
+      return;
+    }
+    setSelectedHistoryItems(new Set(notInFavorites.map((item) => item.id)));
+    setClearModalOpen(true);
+  };
+
+  const confirmClearHistory = async () => {
     await clearHistory();
     setHistory([]);
+    setClearModalOpen(false);
+    setSelectedHistoryItems(new Set());
+  };
+
+  const addSelectedToFavoritesAndClear = async () => {
+    const itemsToAdd = history.filter((item) => selectedHistoryItems.has(item.id));
+    for (const item of itemsToAdd) {
+      if (!isHistoryItemFavorite(item)) {
+        await addFavorite({
+          from: item.from,
+          to: item.to,
+          mode: item.mode,
+          modeColor: item.modeColor,
+          duration: item.duration,
+          co2: item.co2,
+          origin: item.origin,
+          destination: item.destination,
+        });
+      }
+    }
+    const updatedFavorites = await getFavorites();
+    setFavorites(updatedFavorites);
+    await confirmClearHistory();
+  };
+
+  const toggleSelectedHistoryItem = (id: string) => {
+    setSelectedHistoryItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const handleReplay = (item: FavoriteJourney | HistoryJourney) => {
@@ -281,8 +325,11 @@ export default function FavoritesPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span
-                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white"
-                      style={{ backgroundColor: item.modeColor }}
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                      style={{
+                        backgroundColor: item.modeColor,
+                        color: getContrastColor(item.modeColor),
+                      }}
                     >
                       {item.mode}
                     </span>
@@ -322,6 +369,80 @@ export default function FavoritesPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {clearModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-[var(--color-background)] rounded-[var(--card-radius)] p-5 w-full max-w-md border border-[var(--color-border)] shadow-xl">
+            <h3 className="text-base font-semibold text-[var(--color-text-primary)] mb-2">
+              Vider l&apos;historique ?
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+              Les trajets ci-dessous ne sont pas dans vos favoris. Souhaitez-vous les conserver avant de vider l&apos;historique ?
+            </p>
+
+            <div className="max-h-60 overflow-y-auto space-y-2 mb-4">
+              {history
+                .filter((item) => !isHistoryItemFavorite(item))
+                .map((item) => (
+                  <label
+                    key={item.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedHistoryItems.has(item.id)}
+                      onChange={() => toggleSelectedHistoryItem(item.id)}
+                      className="w-4 h-4 accent-[var(--color-primary)]"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: item.modeColor,
+                            color: getContrastColor(item.modeColor),
+                          }}
+                        >
+                          {item.mode}
+                        </span>
+                        <span className="text-sm text-[var(--color-text-primary)] truncate">
+                          {item.from} → {item.to}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                ))}
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+              <button
+                onClick={() => {
+                  setClearModalOpen(false);
+                  setSelectedHistoryItems(new Set());
+                }}
+                className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] rounded-[var(--cta-radius)] transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmClearHistory}
+                className="px-4 py-2 text-sm text-[var(--color-favorite-red)] hover:bg-[var(--color-favorite-red)]/10 rounded-[var(--cta-radius)] transition-colors"
+              >
+                Vider quand même
+              </button>
+              <button
+                onClick={addSelectedToFavoritesAndClear}
+                disabled={selectedHistoryItems.size === 0}
+                className="px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-[var(--cta-radius)] hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-50"
+              >
+                {selectedHistoryItems.size > 0
+                  ? `Ajouter ${selectedHistoryItems.size} favori${selectedHistoryItems.size > 1 ? "s" : ""} & vider`
+                  : "Ajouter aux favoris & vider"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </AppShell>
