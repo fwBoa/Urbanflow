@@ -15,6 +15,7 @@ import {
   type HistoryJourney,
 } from "@/services/favorites";
 import { useAuth } from "@/contexts/AuthContext";
+import { getContrastColor } from "@/lib/colors";
 
 export default function FavoritesPage() {
   const router = useRouter();
@@ -170,8 +171,11 @@ export default function FavoritesPage() {
                     className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]"
                   >
                     <span
-                      className="inline-flex items-center justify-center min-w-[28px] h-[22px] px-1 rounded text-[11px] font-bold text-white"
-                      style={{ backgroundColor: `#${line.modeColor}` }}
+                      className="inline-flex items-center justify-center min-w-[28px] h-[22px] px-1 rounded text-[11px] font-bold"
+                      style={{
+                        backgroundColor: `#${line.modeColor}`,
+                        color: getContrastColor(line.modeColor),
+                      }}
                     >
                       {line.mode}
                     </span>
