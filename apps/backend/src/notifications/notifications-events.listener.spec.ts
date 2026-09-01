@@ -138,16 +138,68 @@ describe('NotificationsEventsListener', () => {
       expect(notifRepo.create).toHaveBeenCalledTimes(2);
       expect(notifRepo.save).toHaveBeenCalled();
       expect(pushService.sendToUser).toHaveBeenCalledTimes(2);
+      // C6 : le push porte la ligne dans le titre (plus de titre générique)
       expect(pushService.sendToUser).toHaveBeenCalledWith(
         'user-1',
         expect.objectContaining({
-          title: 'UrbanFlow — Alerte trafic',
+          title: 'Perturbation — M1',
+          body: 'Traffic ralenti sur la ligne 1',
           actionUrl: '/notifications',
         }),
       );
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         'journey.disruption',
         expect.any(JourneyDisruptionEvent),
+      );
+    });
+
+    it('push avec N lignes agrégées quand plusieurs alertes simultanées', async () => {
+      (favoriteRepo.find as jest.Mock).mockImplementation((options: any) => {
+        if (options?.where?.type === 'journey') {
+          return Promise.resolve([
+            {
+              userId: 'user-1',
+              id: 'fav-1',
+              mode: 'M1',
+              type: 'journey',
+              from: 'A',
+              to: 'B',
+            },
+          ]);
+        }
+        return Promise.resolve([
+          { userId: 'user-1', mode: 'M1' },
+          { userId: 'user-2', mode: 'RER A' },
+        ]);
+      });
+
+      const event = new AlertsUpdatedEvent([
+        {
+          id: 'alert-1',
+          headerText: 'Perturbation M1',
+          descriptionText: 'Traffic ralenti',
+          severity: 'warning',
+          affectedRoutes: ['Métro 1'],
+          activePeriod: [{ start: new Date().toISOString(), end: '' }],
+        },
+        {
+          id: 'alert-2',
+          headerText: 'Perturbation RER A',
+          descriptionText: 'Trafic interrompu',
+          severity: 'warning',
+          affectedRoutes: ['RER A'],
+          activePeriod: [{ start: new Date().toISOString(), end: '' }],
+        },
+      ]);
+
+      await listener.handleAlertsUpdated(event);
+
+      expect(pushService.sendToUser).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          title: 'Perturbations sur 2 de vos lignes',
+          body: 'Métro 1 · RER A',
+        }),
       );
     });
 

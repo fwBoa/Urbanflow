@@ -17,7 +17,11 @@ import {
 } from './gtfs-parser.service';
 import { JourneyService, JourneyQuery, JourneyResult } from './journey.service';
 import { OsrmRouteResult, OsrmService } from './osrm.service';
-import { GtfsRtService, RealtimeAlert } from './gtfs-rt.service';
+import {
+  GtfsRtService,
+  RealtimeAlert,
+  structureAffectedLines,
+} from './gtfs-rt.service';
 import { NavitiaService } from './navitia.service';
 
 /**
@@ -395,13 +399,21 @@ export class TransportController {
       const alerts = await this.navitiaService.getAlerts();
       if (alerts.length > 0) {
         // Déclenche les notifications push pour les nouvelles alertes Navitia.
+        // C6 : affectedLines (code + mode + couleur IDFM) est déjà peuplé
+        // par NavitiaService::extractAffectedLines — pas de re-traitement.
         this.gtfsRtService.emitNewAlerts(alerts);
         return alerts;
       }
     } catch {
       // best-effort
     }
-    return this.gtfsRtService.getAlerts();
+    // Repli GTFS-RT : les lignes sont dérivées localement (structureAffectedLines)
+    return this.gtfsRtService.getAlerts().then((alerts) =>
+      alerts.map((a) => ({
+        ...a,
+        affectedLines: structureAffectedLines(a),
+      })),
+    );
   }
 
   // ─── Calcul d'itinéraire (F2) ────────────────────────────────────────

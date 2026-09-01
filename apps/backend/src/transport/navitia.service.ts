@@ -8,6 +8,7 @@ import type {
   TransportMode,
 } from './journey.service';
 import type { RealtimeAlert } from './gtfs-rt.service';
+import { detectLineMode, type LineMode } from './gtfs-rt.service';
 
 /**
  * Service d'intégration PRIM Navitia (Calculateur IDFM — accès générique v2).
@@ -348,6 +349,9 @@ export class NavitiaService {
           undefined,
         severity: this.mapSeverity(d.severity?.name || d.status),
         affectedRoutes: this.extractAffectedRoutes(d),
+        // C6 : vraies lignes structurées (code + mode + couleur IDFM),
+        // arrêts exclus — pour les pastilles côté /alerts.
+        affectedLines: this.extractAffectedLines(d),
         lineId: this.extractLineId(d),
         activePeriod: this.extractActivePeriod(d),
         cause: d.cause || undefined,
@@ -391,6 +395,54 @@ export class NavitiaService {
       if (pt?.code) routes.push(pt.code);
     }
     return [...new Set(routes)];
+  }
+
+  /**
+   * C6 : extrait les VRAIES lignes impactées (pas les arrêts) avec leurs
+   * métadonnées d'affichage. Navitia embarque `pt_object.line` uniquement
+   * quand l'objet est une ligne — code, commercial_mode ("Bus", "Métro",
+   * "RER"…), et couleur IDFM officielle (hex sans #).
+   */
+  private extractAffectedLines(d: NavitiaDisruption): Array<{
+    name: string;
+    mode: LineMode;
+    code: string;
+    color?: string;
+    lineId?: string;
+  }> {
+    const seen = new Set<string>();
+    const result: Array<{
+      name: string;
+      mode: LineMode;
+      code: string;
+      color?: string;
+      lineId?: string;
+    }> = [];
+    for (const l of d.impacted_objects ?? []) {
+      const pt = l.pt_object;
+      const line = pt?.line;
+      // Pas de line embarquée → c'est un arrêt/stoppoint, pas une ligne.
+      if (!line) continue;
+      const code = line.code ?? pt?.code ?? '';
+      const commercialMode = line.commercial_mode?.name ?? '';
+      // Nom d'affichage : "Bus 124", "Métro 8", "RER A"…
+      const name =
+        commercialMode && code
+          ? `${commercialMode} ${code}`
+          : (line.name ?? code ?? '');
+      const key = name.toUpperCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const mode: LineMode = detectLineMode(`${commercialMode} ${code}`);
+      result.push({
+        name,
+        mode,
+        code,
+        color: line.color,
+        lineId: line.id,
+      });
+    }
+    return result;
   }
 
   /**
@@ -591,6 +643,21 @@ interface NavitiaDisruptionsResponse {
   disruptions?: NavitiaDisruption[];
 }
 
+interface NavitiaPtObject {
+  name?: string;
+  code?: string;
+  /** Ligne embarquée : présente uniquement quand l'objet impacté est une LIGNE
+   *  (vs un arrêt, qui n'a qu'un name). Porte le code, le mode et la couleur IDFM. */
+  line?: {
+    id?: string;
+    name?: string;
+    code?: string;
+    /** Couleur officielle IDFM (hex sans #), ex. "FF1400". */
+    color?: string;
+    commercial_mode?: { name?: string };
+  };
+}
+
 interface NavitiaDisruption {
   id?: string;
   status?: string;
@@ -599,7 +666,5 @@ interface NavitiaDisruption {
   severity?: { name?: string };
   messages?: Array<{ text: string }>;
   application_periods?: Array<{ begin?: string; end?: string; start?: string }>;
-  impacted_objects?: Array<{
-    pt_object?: { name?: string; code?: string; line?: { code?: string } };
-  }>;
+  impacted_objects?: Array<{ pt_object?: NavitiaPtObject }>;
 }

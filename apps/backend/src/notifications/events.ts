@@ -12,6 +12,17 @@ export interface AlertInfo {
   descriptionText?: string;
   severity: 'info' | 'warning' | 'severe' | 'unknown';
   affectedRoutes: string[];
+  /**
+   * C6 : lignes impactées structurées (vraies lignes, arrêts exclus) —
+   * utilisées par le listener pour titrer le push avec la ligne concernée.
+   */
+  affectedLines?: Array<{
+    name: string;
+    mode: 'metro' | 'rer' | 'tram' | 'bus' | 'transilien' | 'autre';
+    code: string;
+    color?: string;
+    lineId?: string;
+  }>;
   /** Identifiant technique de la ligne affectée, quand disponible. */
   lineId?: string;
   activePeriod: { start: string; end: string }[];
