@@ -120,10 +120,74 @@ describe('PrimService', () => {
       geometry: { type: 'Point', coordinates: [2.35, 48.85] },
     };
 
+    // Mock routeur : les 2 appels api-adresse renvoient des features,
+    // l'appel Nominatim (POI, C1) renvoie un tableau vide (pas de lieu).
+    const mockHttpGet = (features: unknown[], pois: unknown[] = []) =>
+      jest.spyOn(httpService, 'get').mockImplementation((url: string) => {
+        if (String(url).includes('nominatim')) {
+          return of({ data: pois }) as any;
+        }
+        return of({ data: { features } }) as any;
+      });
+
     it('returns Paris results', async () => {
-      jest
-        .spyOn(httpService, 'get')
-        .mockReturnValue(of({ data: { features: [feature] } }) as any);
+      mockHttpGet([feature]);
+
+      const result = await service.geocode('1 rue de paris');
+      expect(result.total_count).toBe(1);
+      expect(result.results[0].isParis).toBe(true);
+    });
+
+    it('fusionne les lieux (POI Nominatim) avec les adresses', async () => {
+      mockHttpGet(
+        [feature],
+        [
+          {
+            place_id: 42,
+            name: 'Musée Picasso',
+            display_name: 'Musée Picasso, 5 Rue de Thorigny, Paris',
+            type: 'museum',
+            category: 'tourism',
+            lat: '48.8598',
+            lon: '2.3622',
+          },
+        ],
+      );
+
+      const result = await service.geocode('Musée Picasso');
+      expect(result.total_count).toBe(2);
+      // L'adresse d'abord, le lieu en complément
+      expect(result.results[0].label).toBe('1 Rue de Paris');
+      const poi = result.results[1];
+      expect(poi.label).toContain('Musée Picasso');
+      expect(poi.geometry?.coordinates).toEqual([2.3622, 48.8598]);
+      expect(poi.isParis).toBe(true);
+    });
+
+    it('ignore les types Nominatim non-POI (rues, suburbs)', async () => {
+      mockHttpGet(
+        [],
+        [
+          {
+            name: 'Rue de Rivoli',
+            type: 'residential', // pas dans la whitelist POI_TYPES
+            lat: '48.86',
+            lon: '2.36',
+          },
+        ],
+      );
+
+      const result = await service.geocode('Rivoli');
+      expect(result.total_count).toBe(0);
+    });
+
+    it('dégrade proprement si Nominatim échoue (adresses seules)', async () => {
+      jest.spyOn(httpService, 'get').mockImplementation((url: string) => {
+        if (String(url).includes('nominatim')) {
+          return new Promise(() => {}) as any; // requête pendante (catch → null)
+        }
+        return of({ data: { features: [feature] } }) as any;
+      });
 
       const result = await service.geocode('1 rue de paris');
       expect(result.total_count).toBe(1);

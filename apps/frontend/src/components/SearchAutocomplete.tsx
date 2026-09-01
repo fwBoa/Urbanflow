@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useId, useCallback, ReactNode } from "react";
-import { Building2 } from "lucide-react";
+import { Building2, Landmark } from "lucide-react";
 import { getModeColor } from "@/lib/modeMeta";
 import ModeIcon from "./ModeIcon";
 import SearchBar from "./SearchBar";
@@ -180,6 +180,14 @@ export default function SearchAutocomplete({
             }
 
             const addr = item.data;
+            // Kaizen C1 : les résultats « place » viennent de Nominatim (POI :
+            // musées, bars, parcs…). Icône Landmark + libellé « Lieu » pour les
+            // distinguer des adresses postales (api-adresse).
+            const isPlace =
+              addr.type === "place" ||
+              ["tourism", "historic", "leisure", "amenity"].includes(
+                addr.type.split("/")[0] || "",
+              );
             return (
               <div
                 key={`addr-${addr.label}-${index}`}
@@ -193,11 +201,15 @@ export default function SearchAutocomplete({
                   isHighlighted ? "bg-[var(--color-surface)]" : ""
                 }`}
               >
-                <Building2 size={14} style={{ color: addressIconColor }} />
+                {isPlace ? (
+                  <Landmark size={14} style={{ color: addressIconColor }} />
+                ) : (
+                  <Building2 size={14} style={{ color: addressIconColor }} />
+                )}
                 <div className="flex-1 min-w-0">
                   <span className="truncate block">{addr.label}</span>
                   <span className="text-[var(--color-text-tertiary)] text-xs">
-                    {addr.postcode} {addr.city} · Adresse
+                    {addr.postcode} {addr.city} · {isPlace ? "Lieu" : "Adresse"}
                   </span>
                 </div>
               </div>
