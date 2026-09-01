@@ -1,17 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import UrbanFlowIcon from "./icons/UrbanFlowIcon";
 import type { NearbyVelibStation } from "@/hooks/useTransport";
 
 // ─── Vélib' Station Card ──────────────────────────────────────────────
+// Kaizen C3b : la carte est cliquable — elle mène à l'itinéraire vers la
+// station (query params destLat/destLon/destLabel lus par /search).
 export function VelibStationCard({ station }: { station: NearbyVelibStation }) {
   const distText =
     station.distance < 1000
       ? `${station.distance} m`
       : `${(station.distance / 1000).toFixed(1)} km`;
 
+  const destQuery = `destLat=${station.position.lat}&destLon=${station.position.lon}&destLabel=${encodeURIComponent(station.name)}`;
+
   return (
-    <div className="flex items-center gap-3 bg-surface rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-md transition-all">
+    <Link
+      href={`/search?${destQuery}`}
+      className="flex items-center gap-3 bg-surface rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-md hover:border-[var(--color-primary)] transition-all group"
+      aria-label={`Itinéraire vers la station ${station.name}`}
+    >
       {/* Distance badge */}
       <div className="flex flex-col items-center min-w-[48px]">
         <span className="text-[13px] font-bold text-[var(--color-primary)]">{distText}</span>
@@ -22,11 +31,19 @@ export function VelibStationCard({ station }: { station: NearbyVelibStation }) {
 
       {/* Station name */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+        <p className="text-sm font-medium text-[var(--color-text-primary)] truncate group-hover:text-[var(--color-primary)] transition-colors">
           {station.name}
         </p>
       </div>
-    </div>
+
+      {/* Indicateur d'action : itinéraire */}
+      <UrbanFlowIcon
+        type="action"
+        name="chevron-right"
+        size={16}
+        className="text-[var(--color-text-tertiary)] shrink-0 group-hover:text-[var(--color-primary)] transition-colors"
+      />
+    </Link>
   );
 }
 

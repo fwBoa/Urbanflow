@@ -209,9 +209,22 @@ export default function MapComponent({
           iconAnchor: [14, 34],
           popupAnchor: [0, -30],
         });
+        // Kaizen C3b : le popup propose l'itinéraire vers la station.
+        // Sanitization : le nom est échappé avant insertion dans le HTML du popup,
+        // et les coordonnées sont des nombres natifs (pas d'injection possible).
+        const safeName = station.name
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+        const destQuery = `destLat=${station.position.lat}&destLon=${station.position.lon}&destLabel=${encodeURIComponent(station.name)}`;
+        const popupHtml = `<div style="text-align:center;min-width:140px">
+          <strong>${safeName}</strong>
+          <a href="/search?${destQuery}" style="display:inline-block;margin-top:6px;padding:4px 12px;border-radius:8px;background:#7CB342;color:#fff;text-decoration:none;font-size:12px;font-weight:600">Y aller</a>
+        </div>`;
         const marker = L.marker([station.position.lat, station.position.lon], { icon })
           .addTo(map)
-          .bindPopup(`<strong>${station.name}</strong>`);
+          .bindPopup(popupHtml);
         velibMarkersRef.current.push(marker);
       });
     }
