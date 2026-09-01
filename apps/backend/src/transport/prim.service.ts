@@ -98,6 +98,25 @@ interface GeoApiResponse {
 }
 
 /**
+ * Réponse Nominatim (OpenStreetMap) — recherche de lieux/POI.
+ * Utilisée en complément d'api-adresse pour les recherches par nom de
+ * lieu (« Musée Picasso », « Cirque d'Hiver ») que la base d'adresses
+ * postales ne connaît pas. Format `jsonv2`.
+ */
+interface NominatimPlace {
+  place_id?: number;
+  name?: string;
+  display_name?: string;
+  type?: string;
+  category?: string;
+  addresstype?: string;
+  lat?: string;
+  lon?: string;
+}
+
+type NominatimResponse = NominatimPlace[];
+
+/**
  * Service d'intégration avec la plateforme PRIM (Île-de-France Mobilités)
  * https://prim.iledefrance-mobilites.fr/
  *
@@ -591,12 +610,40 @@ export class PrimService implements OnModuleInit {
     };
 
     try {
+      // ─── Source POI (C1) : Nominatim en parallèle des adresses ───────
+      // api-adresse ne connaît que les adresses postales. Les utilisateurs
+      // cherchent par nom de lieu (« Musée Picasso », « Cirque d'Hiver »).
+      // Nominatim (OpenStreetMap) expose les POI : tourism, historic,
+      // amenity (bars, restaurants), leisure (parcs). Best-effort : null
+      // si échec, timeout 5 s.
+      const bbox = '2.2244,48.8156,2.4699,48.9022'; // Paris intra-muros élargi
+      const poiPromise = firstValueFrom(
+        this.httpService.get<NominatimResponse>(
+          'https://nominatim.openstreetmap.org/search',
+          {
+            params: {
+              q: query,
+              format: 'jsonv2',
+              limit: '5',
+              countrycodes: 'fr',
+              bounded: '1',
+              viewbox: bbox,
+              'accept-language': 'fr',
+            },
+            headers: { 'User-Agent': 'UrbanFlowMobility/1.0' },
+            timeout: 5000,
+          },
+        ),
+      ).catch(() => null);
+
       // Lance les deux requêtes en parallèle plutôt qu'en séquentiel :
       //  (a) city=Paris  → privilégie les adresses parisiennes
       //  (b) sans filtre → ratisse plus large (lieux, rues) en Île-de-France
       // On évite ainsi la somme des latences (~1.2s) → on paie seulement
       // la plus lente des deux (~600ms). api-adresse est gratuit/sans clé.
-      const [parisRes, broadRes] = await Promise.all([
+      // La source POI (C1) est la 3e requête du Promise.all — aucun coût
+      // de latence supplémentaire si Nominatim répond dans le pire délai.
+      const [parisRes, broadRes, poiRes] = await Promise.all([
         firstValueFrom(
           this.httpService.get<GeoApiResponse>(url, {
             params: { ...baseParams, city: 'Paris' },
@@ -609,6 +656,7 @@ export class PrimService implements OnModuleInit {
             timeout: 5000,
           }),
         ).catch(() => null),
+        poiPromise,
       ]);
 
       const parisFeatures = (parisRes?.data?.features ?? []).filter(
@@ -625,8 +673,77 @@ export class PrimService implements OnModuleInit {
         }
       }
 
-      // Normaliser la réponse pour le frontend — ne garder que Paris
-      const results = parisFeatures.slice(0, limit).map((f) => ({
+      // ─── Fusion des lieux (POI) avec les adresses ────────────────────
+      // Un lieu est pertinent quand son type est un vrai POI (pas une rue
+      // ou un suburb, déjà couverts par api-adresse). Max 3 lieux pour ne
+      // pas noyer les adresses ; ils viennent en complément, pas en tête.
+      const POI_TYPES = new Set([
+        'museum',
+        'attraction',
+        'monument',
+        'memorial',
+        'artwork',
+        'gallery',
+        'monastery',
+        'castle',
+        'ruins',
+        'fort',
+        'restaurant',
+        'bar',
+        'cafe',
+        'pub',
+        'fast_food',
+        'ice_cream',
+        'theatre',
+        'cinema',
+        'nightclub',
+        'library',
+        'arts_centre',
+        'marketplace',
+        'fountain',
+        'viewpoint',
+        'theme_park',
+        'zoo',
+        'aquarium',
+        'planetarium',
+        'stadium',
+        'sports_centre',
+        'park',
+        'garden',
+        'square',
+        'plaza',
+        'cemetery',
+        'university',
+        'college',
+        'school',
+        'hospital',
+        'place_of_worship',
+        'clock',
+        'tower',
+        'bridge',
+        'lighthouse',
+      ]);
+      const poiItems = (poiRes?.data ?? [])
+        .filter((p) => POI_TYPES.has(String(p.type)))
+        .slice(0, 3)
+        .map((p) => ({
+          label: p.name
+            ? `${p.name}${p.display_name?.split(',').slice(1, 3).join(',') ? `,${p.display_name.split(',').slice(1, 3).join(',')}` : ''}`
+            : p.display_name?.split(',').slice(0, 3).join(',') || query,
+          score: 0.5, // Score médian : sous les adresses exactes, au-dessus du vide
+          type: p.category || p.type || 'place',
+          city: p.display_name?.split(',')[2]?.trim() || 'Paris',
+          postcode: '',
+          context: 'Île-de-France',
+          geometry: {
+            type: 'Point',
+            coordinates: [Number(p.lon), Number(p.lat)],
+          },
+          isParis: true, // Bounding box Paris → dans le périmètre
+        }));
+
+      // Adresses d'abord (score api-adresse), puis lieux en complément
+      const addressResults = parisFeatures.slice(0, limit).map((f) => ({
         label: f.properties?.label ?? '',
         score: f.properties?.score ?? 0,
         type: f.properties?.type ?? '',
@@ -636,6 +753,10 @@ export class PrimService implements OnModuleInit {
         geometry: f.geometry ?? {},
         isParis: true, // Tous les résultats passent isParisResult
       }));
+      const results = [...addressResults, ...poiItems].slice(
+        0,
+        Math.max(limit, 5),
+      );
       return { total_count: results.length, results };
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
