@@ -74,11 +74,25 @@ export default function TripCard({
   const hasAlert = !!journey.alerts && journey.alerts.length > 0;
   const alertCount = journey.alerts?.length ?? 0;
 
+  // ─── Conteneur = div, pas button ────────────────────────────────────
+  // La carte contient AddFavoriteLineButton (un <button>) : un <button>
+  // ne peut pas contenir de <button> (HTML invalide → erreur d'hydratation
+  // Next 16). On utilise donc un div interactif : role="button" + tabIndex
+  // + activation clavier (Enter/Espace), équivalent en a11y.
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick?.();
+    }
+  };
+
   return (
-    <motion.button
+    <motion.div
       onClick={onClick}
-      type="button"
-      className="group w-full text-left bg-surface rounded-[var(--card-radius)] border border-[var(--color-border)] p-4 hover:shadow-md hover:border-[var(--color-primary)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-all overflow-hidden relative"
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
+      className="group w-full text-left bg-surface rounded-[var(--card-radius)] border border-[var(--color-border)] p-4 hover:shadow-md hover:border-[var(--color-primary)]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-all overflow-hidden relative cursor-pointer"
       aria-label={`Itinéraire ${lines.map((s) => s.lineName || s.mode).join(", ")}, ${journey.durationMinutes} min, ${transferLabel}, départ ${departure}, arrivée ${arrival}`}
       {...motionProps}
     >
@@ -155,7 +169,7 @@ export default function TripCard({
           <CO2Badge grams={journey.co2Ggrams} />
         </div>
       </div>
-    </motion.button>
+    </motion.div>
   );
 }
 
