@@ -145,13 +145,42 @@ export class NotificationsEventsListener {
 
     await this.notifRepo.save(notifications, { chunk: 500 });
 
-    // Push asynchrone : un seul message par utilisateur concerné, le détail est in-app.
+    // ─── Push enrichi (C6) : la ligne dans le titre, pas de push générique ──
+    // 1 ligne impactée → « Perturbation — Bus 124 » + message de l'alerte.
+    // N lignes → « Perturbations sur N de vos lignes » + liste des noms.
+    // Le détail complet reste in-app ; le push doit être identifiable en 1 s
+    // sur l'écran verrouillé (retours utilisateurs : lisibilité alertes).
+    // Priorité affectedLines (vraies lignes Navitia, arrêts exclus), repli
+    // sur la première route affectée.
     const notifiedUserIds = [...new Set(notifications.map((n) => n.userId))];
+    const alertLineNames = alerts
+      .flatMap((a) =>
+        (a.affectedLines ?? []).length > 0
+          ? a.affectedLines!.map((l) => l.name)
+          : [a.affectedRoutes[0]?.trim()],
+      )
+      .filter((l): l is string => Boolean(l));
+    const uniqueLines = [...new Set(alertLineNames)];
+
+    let pushTitle: string;
+    let pushBody: string;
+    if (uniqueLines.length === 1) {
+      pushTitle = `Perturbation — ${uniqueLines[0]}`;
+      const firstAlert = notifications[0];
+      pushBody = (firstAlert?.message || firstAlert?.title || '').slice(0, 100);
+    } else if (uniqueLines.length > 1) {
+      pushTitle = `Perturbations sur ${uniqueLines.length} de vos lignes`;
+      pushBody = `${uniqueLines.slice(0, 4).join(' · ')}`;
+    } else {
+      pushTitle = 'UrbanFlow — Alerte trafic';
+      pushBody = `${alerts.length} nouvelle(s) perturbation(s) détectée(s) sur vos lignes.`;
+    }
+
     await Promise.all(
       notifiedUserIds.map((userId) =>
         this.pushService.sendToUser(userId, {
-          title: 'UrbanFlow — Alerte trafic',
-          body: `${alerts.length} nouvelle(s) perturbation(s) détectée(s) sur vos lignes.`,
+          title: pushTitle,
+          body: pushBody,
           actionUrl: '/notifications',
         }),
       ),

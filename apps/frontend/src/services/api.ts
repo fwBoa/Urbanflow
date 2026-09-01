@@ -85,12 +85,28 @@ export interface ReverseGeocodeResult {
   isParis: boolean;
 }
 
+/** Ligne impactée structurée pour l'affichage (C6 — miroir du backend). */
+export interface AffectedLine {
+  /** Nom d'affichage, ex. "Bus 6541", "RER A", "Métro 8". */
+  name: string;
+  /** Mode de transport déduit du nom. */
+  mode: "metro" | "rer" | "tram" | "bus" | "transilien" | "autre";
+  /** Code de ligne (dernier token), ex. "A", "8", "72", "T3a", "N22". */
+  code: string;
+  /** Couleur officielle IDFM (hex sans #), quand Navitia l'expose. */
+  color?: string;
+  /** Identifiant technique de la ligne, quand disponible. */
+  lineId?: string;
+}
+
 export interface RealtimeAlert {
   id: string;
   headerText: string;
   descriptionText?: string;
   severity: "info" | "warning" | "severe" | "unknown";
   affectedRoutes: string[];
+  /** Lignes structurées pour pastilles mode/couleur (C6). */
+  affectedLines?: AffectedLine[];
   /** Identifiant technique stable de la ligne impactée quand disponible. */
   lineId?: string;
   activePeriod?: { start: string; end: string }[];

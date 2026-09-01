@@ -4,8 +4,9 @@ import { useState, useEffect, Suspense, useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
+import ModeBadge from "@/components/ModeBadge";
 import { apiService } from "@/services/api";
-import type { RealtimeAlert } from "@/services/api";
+import type { RealtimeAlert, AffectedLine } from "@/services/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { getFavorites, type FavoriteJourney } from "@/services/favorites";
@@ -18,6 +19,60 @@ function alertMatchesAnyFavorite(
   return favoriteLines.some((fav) =>
     alertMatchesLine(alert, fav.mode, undefined, fav.lineId || undefined),
   );
+}
+
+// ─── C6 : pastilles de lignes structurées ──────────────────────────────
+// Le backend expose affectedLines (nom + mode + code). On replie sur une
+// dérivation locale depuis affectedRoutes pour les alertes qui n'ont pas
+// encore le champ (repli GTFS-RT, cache stale…).
+
+/** Ordre de tri métier : sévérité d'abord, puis mode (métro > RER > …). */
+const SEVERITY_ORDER: Record<RealtimeAlert["severity"], number> = {
+  severe: 0,
+  warning: 1,
+  info: 2,
+  unknown: 3,
+};
+
+const MODE_ORDER: Record<AffectedLine["mode"], number> = {
+  metro: 0,
+  rer: 1,
+  transilien: 2,
+  tram: 3,
+  bus: 4,
+  autre: 5,
+};
+
+function detectModeFromName(name: string): AffectedLine["mode"] {
+  const n = name.toUpperCase();
+  if (n.includes("METRO") || n.includes("MÉTRO")) return "metro";
+  if (n.includes("RER")) return "rer";
+  if (n.includes("TRAM")) return "tram";
+  if (n.includes("BUS")) return "bus";
+  if (n.includes("TRANSILIEN") || n.includes("TRAIN")) return "transilien";
+  return "autre";
+}
+
+/** Lignes d'affichage d'une alerte : affectedLines (backend) ou dérivation locale. */
+function linesOf(alert: RealtimeAlert): AffectedLine[] {
+  if (alert.affectedLines && alert.affectedLines.length > 0) return alert.affectedLines;
+  const seen = new Set<string>();
+  const result: AffectedLine[] = [];
+  for (const route of alert.affectedRoutes) {
+    const name = route.trim();
+    if (!name) continue;
+    const key = name.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const tokens = key.split(" ").filter(Boolean);
+    result.push({
+      name,
+      mode: detectModeFromName(name),
+      code: tokens[tokens.length - 1] ?? "",
+      lineId: alert.lineId,
+    });
+  }
+  return result;
 }
 
 const severityConfig = {
@@ -61,6 +116,7 @@ function AlertsPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "severe" | "warning" | "info">("all");
+  const [modeFilter, setModeFilter] = useState<"all" | AffectedLine["mode"]>("all");
   const [query, setQuery] = useState("");
   const [myLinesOnly, setMyLinesOnly] = useState(false);
   const [favoriteLines, setFavoriteLines] = useState<FavoriteJourney[]>([]);
@@ -101,11 +157,17 @@ function AlertsPageContent() {
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredAlerts = useMemo(() => {
-    return alerts.filter((a) => {
+    const filtered = alerts.filter((a) => {
       const matchesSeverity = filter === "all" || a.severity === filter;
       if (!matchesSeverity) return false;
       if (myLinesOnly) {
         if (!alertMatchesAnyFavorite(a, favoriteLines)) return false;
+      }
+      // C6 : filtre par mode (les alertes sans ligne identifiée restent
+      // visibles uniquement en mode "all").
+      if (modeFilter !== "all") {
+        const modes = linesOf(a).map((l) => l.mode);
+        if (!modes.includes(modeFilter)) return false;
       }
       if (!normalizedQuery) return true;
       const haystack = [
@@ -118,7 +180,18 @@ function AlertsPageContent() {
         .toLowerCase();
       return haystack.includes(normalizedQuery);
     });
-  }, [alerts, filter, myLinesOnly, favoriteLines, normalizedQuery]);
+
+    // C6 : tri métier — sévérité (severe → warning → info), puis mode
+    // (métro → RER → transilien → tram → bus), pour scanner visuellement.
+    return filtered.sort((a, b) => {
+      const sevDiff =
+        (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3);
+      if (sevDiff !== 0) return sevDiff;
+      const aModes = linesOf(a).map((l) => MODE_ORDER[l.mode] ?? 5);
+      const bModes = linesOf(b).map((l) => MODE_ORDER[l.mode] ?? 5);
+      return Math.min(...aModes, 5) - Math.min(...bModes, 5);
+    });
+  }, [alerts, filter, modeFilter, myLinesOnly, favoriteLines, normalizedQuery]);
 
   if (loading) {
     return (
@@ -220,6 +293,34 @@ function AlertsPageContent() {
         </button>
       </div>
 
+      {/* Filtre par mode de transport (C6) */}
+      <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrer par mode de transport">
+        {(
+          [
+            { key: "all", label: "Tous modes" },
+            { key: "metro", label: "Métro" },
+            { key: "rer", label: "RER" },
+            { key: "transilien", label: "Transilien" },
+            { key: "tram", label: "Tram" },
+            { key: "bus", label: "Bus" },
+          ] as Array<{ key: "all" | AffectedLine["mode"]; label: string }>
+        ).map((m) => (
+          <button
+            key={m.key}
+            type="button"
+            onClick={() => setModeFilter(m.key)}
+            aria-pressed={modeFilter === m.key}
+            className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              modeFilter === m.key
+                ? "bg-[var(--color-primary)] text-white"
+                : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border border-[var(--color-border)]"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
       <p className="text-xs text-[var(--color-text-tertiary)]">
         {filteredAlerts.length} perturbation{filteredAlerts.length > 1 ? "s" : ""} affichée
         {filteredAlerts.length > 1 ? "s" : ""}
@@ -266,9 +367,27 @@ function AlertsPageContent() {
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${config.badge}`}>
                       {config.label}
                     </span>
-                    {alert.affectedRoutes.length > 0 && (
-                      <span className="text-[11px] text-[var(--color-text-tertiary)] truncate">
-                        {alert.affectedRoutes.join(", ")}
+                    {/* C6 : pastilles de lignes — mode + code + couleur IDFM,
+                        identifiables en 1 seconde (remplace le texte gris) */}
+                    {linesOf(alert).length > 0 && (
+                      <span className="inline-flex items-center gap-1 flex-wrap">
+                        {linesOf(alert)
+                          .slice(0, 4)
+                          .map((line) => (
+                            <ModeBadge
+                              key={`${alert.id}-${line.name}`}
+                              mode={line.mode}
+                              lineName={line.code || line.name}
+                              // Couleur officielle IDFM quand Navitia l'expose (hex sans #)
+                              lineColor={line.color ? `#${line.color}` : undefined}
+                              size="sm"
+                            />
+                          ))}
+                        {linesOf(alert).length > 4 && (
+                          <span className="text-[11px] text-[var(--color-text-tertiary)]">
+                            +{linesOf(alert).length - 4}
+                          </span>
+                        )}
                       </span>
                     )}
                   </div>

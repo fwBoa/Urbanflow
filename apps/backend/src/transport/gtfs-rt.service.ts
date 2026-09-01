@@ -11,11 +11,96 @@ export interface RealtimeAlert {
   descriptionText?: string;
   severity: 'info' | 'warning' | 'severe' | 'unknown';
   affectedRoutes: string[];
+  /**
+   * Lignes impactées, structurées pour l'affichage (C6) : pastille mode +
+   * code de ligne + couleur IDFM côté frontend. Dérivé d'affectedRoutes —
+   * le matching métier (bloc 69) continue d'utiliser affectedRoutes/lineId.
+   */
+  affectedLines?: AffectedLine[];
   /** Identifiant technique de la ligne affectée (ex. 'line:RAT:M1'), quand disponible. */
   lineId?: string;
   activePeriod: { start: string; end: string }[];
   cause?: string;
   effect?: string;
+}
+
+/** Mode de transport déduit du nom de ligne. Miroir de lib/alerts.ts côté frontend. */
+export type LineMode =
+  | 'metro'
+  | 'rer'
+  | 'tram'
+  | 'bus'
+  | 'transilien'
+  | 'autre';
+
+/** Ligne impactée structurée pour l'affichage (C6). */
+export interface AffectedLine {
+  /** Nom d'affichage, ex. "Bus 6541", "RER A", "Métro 8". */
+  name: string;
+  /** Mode de transport (déduit du nom ou lu depuis Navitia commercial_mode). */
+  mode: LineMode;
+  /** Code de ligne (dernier token), ex. "A", "8", "72", "T3a", "N22". */
+  code: string;
+  /** Couleur officielle IDFM (hex sans #), quand Navitia l'expose. */
+  color?: string;
+  /** Identifiant technique de la ligne, quand disponible. */
+  lineId?: string;
+}
+
+/**
+ * Extrait le mode de transport depuis un nom de ligne normalisé.
+ * Miroir de `lib/alerts.ts::detectMode` côté frontend — rester synchronisé.
+ */
+export function detectLineMode(name: string): LineMode {
+  const n = name
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[-_]/g, ' ');
+  if (n.includes('METRO') || n.includes('MÉTRO')) return 'metro';
+  if (n.includes('RER')) return 'rer';
+  if (n.includes('TRAM')) return 'tram';
+  if (n.includes('BUS')) return 'bus';
+  if (n.includes('TRANSILIEN') || n.includes('TRAIN')) return 'transilien';
+  return 'autre';
+}
+
+/**
+ * Détecte si un nom d'objet impacté Navitia est un ARRÊT et non une ligne.
+ * Les arrêts ont une commune entre parenthèses, ex. "Vigneux-sur-Seine
+ * (Vigneux-sur-Seine)", "Rue des Vignes (Châtenay-Malabry)".
+ * Les vraies lignes sont du type "RATP Bus 102", "Bord de Marne Bus 124",
+ * "RER A", "Métro 8" — jamais de parenthèse.
+ */
+export function isStopName(name: string): boolean {
+  return /\s\(.*\)$/.test(name.trim());
+}
+
+/**
+ * Structure les routes affectées d'une alerte en lignes affichables (C6).
+ * - exclut les arrêts (parenthèses) : seules les lignes deviennent des pastilles
+ * - déduit mode + code depuis le nom, déduplique par nom
+ */
+export function structureAffectedLines(
+  alert: Pick<RealtimeAlert, 'affectedRoutes' | 'lineId'>,
+): AffectedLine[] {
+  const seen = new Set<string>();
+  const result: AffectedLine[] = [];
+  for (const route of alert.affectedRoutes) {
+    const name = route.trim();
+    if (!name || isStopName(name)) continue;
+    const key = name.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const tokens = key.split(' ').filter(Boolean);
+    result.push({
+      name,
+      mode: detectLineMode(name),
+      code: tokens[tokens.length - 1] ?? '',
+      lineId: alert.lineId,
+    });
+  }
+  return result;
 }
 
 interface PrimDisruptionMessage {
