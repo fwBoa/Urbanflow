@@ -54,10 +54,31 @@ function SearchPageContent() {
   const isVelibMode = modeParam === "velib" || modeParam === "velo";
 
   const [activeFilter, setActiveFilter] = useState("fast");
-  const [origin, setOrigin] = useState("");
-  const [destination, setDestination] = useState("");
-  const [selectedOrigin, setSelectedOrigin] = useState<{ lat: number; lon: number } | null>(null);
-  const [selectedDest, setSelectedDest] = useState<{ lat: number; lon: number } | null>(null);
+
+  // ─── Préremplissage depuis les query params (C3b) ────────────────────
+  // `/search?destLat=…&destLon=…&destLabel=…` arrive depuis la page Vélib'
+  // (clic station) — la destination est déjà composée, il ne reste que le
+  // départ à définir. Idem originLat/originLon pour un appel inverse.
+  // Pattern : initialisateur paresseux de useState — valeur initiale dérivée
+  // une seule fois au premier rendu, sans effet (règle set-state-in-effect).
+  const parseCoord = (v: string | null): number | null => {
+    if (!v) return null;
+    const n = parseFloat(v);
+    return Number.isNaN(n) ? null : n;
+  };
+
+  const [origin, setOrigin] = useState(() => searchParams.get("originLabel") || "");
+  const [destination, setDestination] = useState(() => searchParams.get("destLabel") || "");
+  const [selectedOrigin, setSelectedOrigin] = useState<{ lat: number; lon: number } | null>(() => {
+    const lat = parseCoord(searchParams.get("originLat"));
+    const lon = parseCoord(searchParams.get("originLon"));
+    return lat !== null && lon !== null ? { lat, lon } : null;
+  });
+  const [selectedDest, setSelectedDest] = useState<{ lat: number; lon: number } | null>(() => {
+    const lat = parseCoord(searchParams.get("destLat"));
+    const lon = parseCoord(searchParams.get("destLon"));
+    return lat !== null && lon !== null ? { lat, lon } : null;
+  });
 
   // ─── Mode de transport sélectionné ──────────────────────────────────
   const initialModes = useMemo(() => {
