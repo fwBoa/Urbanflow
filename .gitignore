@@ -65,3 +65,7 @@ Rendu_*.md
 *.pdf
 *.docx
 *.pptx
+
+# ─── Retours utilisateurs & planification locale (non versionnés) ───
+UrbanFlow Mobility — Retour d'expérience.csv
+PLAN_AMELIORATIONS_RETOURS.md
