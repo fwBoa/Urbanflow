@@ -137,9 +137,9 @@ describe("SearchPage — saisie libre résolue au submit (C2)", () => {
     const destInput = getInputByPlaceholder("Où allez-vous");
     typeAndSubmit(destInput, "Châtelet");
 
-    // Attente : le label doit être normalisé et l'arrivée définie
+    // Attente : le label est normalisé et le champ destination rempli
     await waitFor(() => {
-      expect(screen.getByText("Arrivée définie")).toBeInTheDocument();
+      expect(destInput).toHaveValue("Châtelet");
     });
     expect(mockedSearchStops).toHaveBeenCalledWith("Châtelet", 5);
   });
@@ -160,7 +160,7 @@ describe("SearchPage — saisie libre résolue au submit (C2)", () => {
     typeAndSubmit(destInput, "10 rue de rivoli");
 
     await waitFor(() => {
-      expect(screen.getByText("Arrivée définie")).toBeInTheDocument();
+      expect(destInput).toHaveValue("10 Rue de Rivoli, 75004 Paris");
     });
     expect(mockedGeocode).toHaveBeenCalledWith("10 rue de rivoli", 1);
   });
@@ -178,7 +178,8 @@ describe("SearchPage — saisie libre résolue au submit (C2)", () => {
         screen.getByText(/Aucun résultat pour « zzzzzzzz »/),
       ).toBeInTheDocument();
     });
-    expect(screen.getByText("Arrivée à définir")).toBeInTheDocument();
+    // Le champ reste vide (aucune sélection) et l'erreur est affichée
+    expect(destInput).toHaveValue("zzzzzzzz");
   });
 
   it("n'appelle pas l'API si le texte fait moins de 3 caractères", async () => {

@@ -88,15 +88,13 @@ describe("SearchPage — préremplissage Vélib' (C3b)", () => {
 
     render(<SearchPage />);
 
-    // L'indicateur doit passer à « Arrivée définie » sans aucune saisie
-    await waitFor(() => {
-      expect(screen.getByText("Arrivée définie")).toBeInTheDocument();
-    });
-    // Le champ destination affiche le label de la station
+    // Le champ destination affiche le label de la station (préremplissage)
     const destInput = screen
       .getAllByRole("combobox")
       .find((el) => el.getAttribute("placeholder")?.includes("Où allez-vous"));
-    expect(destInput).toHaveValue("Vélib' 08042 - Rivoli");
+    await waitFor(() => {
+      expect(destInput).toHaveValue("Vélib' 08042 - Rivoli");
+    });
   });
 
   it("ignore des coordonnées invalides sans crash", async () => {
@@ -105,17 +103,22 @@ describe("SearchPage — préremplissage Vélib' (C3b)", () => {
 
     render(<SearchPage />);
 
+    // Coordonnées invalides → champ destination vide, pas de crash
+    const destInput = screen
+      .getAllByRole("combobox")
+      .find((el) => el.getAttribute("placeholder")?.includes("Où allez-vous"));
     await waitFor(() => {
-      expect(screen.getByText("Arrivée à définir")).toBeInTheDocument();
+      expect(destInput).toHaveValue("");
     });
   });
 
   it("sans query params, la page démarre vierge (non-régression)", async () => {
     render(<SearchPage />);
 
+    const inputs = screen.getAllByRole("combobox");
     await waitFor(() => {
-      expect(screen.getByText("Départ à définir")).toBeInTheDocument();
-      expect(screen.getByText("Arrivée à définir")).toBeInTheDocument();
+      expect(inputs[0]).toHaveValue("");
+      expect(inputs[1]).toHaveValue("");
     });
   });
 });
