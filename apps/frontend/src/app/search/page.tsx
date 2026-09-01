@@ -717,6 +717,15 @@ function SearchPageContent() {
                 <span className="font-semibold">Données GTFS indisponibles.</span> Les itinéraires affichés sont des estimations basées sur la distance. Les horaires et lignes réelles seront disponibles une fois le service PRIM de retour.
               </div>
             )}
+            {/* C4 : la valeur ajoutée d'UrbanFlow, visible dans le flow —
+                la décision « pourquoi cette app ? » se prend ici, pas dans
+                une page à propos (verbatims #3 et #4 du formulaire). */}
+            <p className="text-[11px] text-[var(--color-text-tertiary)] flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <UrbanFlowIcon type="status" name="leaf" size={11} className="text-[var(--color-eco-green)]" />
+              <span>
+                Données officielles Île-de-France Mobilités · hébergées en France · sans pistage publicitaire
+              </span>
+            </p>
             {sortedJourneys.map((trip, i) => (
               <TripCard
                 key={i}
