@@ -14,6 +14,7 @@ import { journeyToSegments } from "@/components/journey-helpers";
 import JourneyLineLazy from "@/components/JourneyLineLoader";
 import { UI_MODE_COLORS } from "@/constants/mode-colors";
 import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute, useNearbyStops, useStopTimes } from "@/hooks/useTransport";
+import { apiService } from "@/services/api";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -308,6 +309,83 @@ function SearchPageContent() {
     }
   };
 
+  // ─── Saisie libre résolue au submit ────────────────────────────────
+  // Kaizen (retours utilisateurs) : valider une adresse tapée sans cliquer
+  // une suggestion ne faisait rien (onSubmit vide) — « après quelques essais ».
+  // Au submit, on géocode le texte : priorité arrêt GTFS, sinon 1re adresse
+  // retournée par le backend (déjà filtrée Paris).
+  const [originResolving, setOriginResolving] = useState(false);
+  const [destResolving, setDestResolving] = useState(false);
+  const [originResolveError, setOriginResolveError] = useState<string | null>(null);
+  const [destResolveError, setDestResolveError] = useState<string | null>(null);
+
+  const resolveFreeText = useCallback(
+    async (
+      text: string,
+      kind: "origin" | "destination",
+    ): Promise<boolean> => {
+      const q = text.trim();
+      if (q.length < 3) {
+        (kind === "origin" ? setOriginResolveError : setDestResolveError)(
+          "Saisissez au moins 3 caractères, puis validez.",
+        );
+        return false;
+      }
+      (kind === "origin" ? setOriginResolving : setDestResolving)(true);
+      (kind === "origin" ? setOriginResolveError : setDestResolveError)(null);
+      try {
+        // Priorité arrêt GTFS (recherche par nom, déjà filtrée IDFM)
+        const stopsRes = await apiService.searchStops(q, 5);
+        const stop = stopsRes.results?.[0];
+        if (stop?.arrgeopoint) {
+          if (kind === "origin") {
+            setOrigin(stop.arrname);
+            setSelectedOrigin({ lat: stop.arrgeopoint.lat, lon: stop.arrgeopoint.lon });
+          } else {
+            setDestination(stop.arrname);
+            setSelectedDest({ lat: stop.arrgeopoint.lat, lon: stop.arrgeopoint.lon });
+          }
+          return true;
+        }
+        // Sinon geocoding d'adresse (le backend ne renvoie que Paris)
+        const geoRes = await apiService.geocode(q, 1);
+        const addr = geoRes.results?.[0];
+        if (addr?.geometry?.coordinates) {
+          if (kind === "origin") {
+            setOrigin(addr.label);
+            setSelectedOrigin({ lat: addr.geometry.coordinates[1], lon: addr.geometry.coordinates[0] });
+          } else {
+            setDestination(addr.label);
+            setSelectedDest({ lat: addr.geometry.coordinates[1], lon: addr.geometry.coordinates[0] });
+          }
+          return true;
+        }
+        (kind === "origin" ? setOriginResolveError : setDestResolveError)(
+          `Aucun résultat pour « ${q} ». Essayez une autre orthographe ou cliquez une suggestion.`,
+        );
+        return false;
+      } catch {
+        (kind === "origin" ? setOriginResolveError : setDestResolveError)(
+          "Recherche indisponible — vérifiez votre connexion.",
+        );
+        return false;
+      } finally {
+        (kind === "origin" ? setOriginResolving : setDestResolving)(false);
+      }
+    },
+    [],
+  );
+
+  const handleOriginSubmit = useCallback(() => {
+    // Déjà sélectionné via suggestion → rien à résoudre
+    if (selectedOrigin || !origin.trim()) return;
+    void resolveFreeText(origin, "origin");
+  }, [selectedOrigin, origin, resolveFreeText]);
+
+  const handleDestSubmit = useCallback(() => {
+    if (selectedDest || !destination.trim()) return;
+    void resolveFreeText(destination, "destination");
+  }, [selectedDest, destination, resolveFreeText]);
 
   // Get mode label from segments
   const getModeLabel = (journey: typeof journeys[0]) => {
@@ -425,13 +503,13 @@ function SearchPageContent() {
         <SearchAutocomplete
           placeholder={isVelibMode ? "Station Vélib' proche de…" : modeTitle ? `Arrêt ${modeTitle} proche de…` : "D'où partez-vous ? (arrêt ou adresse)"}
           value={origin}
-          onChange={(v) => { setOrigin(v); if (selectedOrigin) setSelectedOrigin(null); }}
+          onChange={(v) => { setOrigin(v); if (selectedOrigin) setSelectedOrigin(null); setOriginResolveError(null); }}
           onSelect={handleOriginSelect}
-          onSubmit={() => {}}
+          onSubmit={handleOriginSubmit}
+          isLoading={originResolving}
           stopSuggestions={originStops}
           addressSuggestions={originAddresses}
           addressIconColor="#2E7D9B"
-          isLoading={false}
           rightElement={
             <button
               type="button"
@@ -457,14 +535,60 @@ function SearchPageContent() {
         <SearchAutocomplete
           placeholder={isVelibMode ? "Où voulez-vous aller en Vélib' ?" : modeTitle ? `Où allez-vous en ${modeTitle} ?` : "Où allez-vous ? (arrêt ou adresse)"}
           value={destination}
-          onChange={(v) => { setDestination(v); if (selectedDest) setSelectedDest(null); }}
+          onChange={(v) => { setDestination(v); if (selectedDest) setSelectedDest(null); setDestResolveError(null); }}
           onSelect={handleDestSelect}
-          onSubmit={() => {}}
+          onSubmit={handleDestSubmit}
           stopSuggestions={destStops}
           addressSuggestions={destAddresses}
           addressIconColor="#FF6B35"
-          isLoading={false}
+          isLoading={destResolving}
         />
+
+        {/* Erreur de résolution de la saisie libre (départ) */}
+        {originResolveError && (
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2" role="alert">
+            <UrbanFlowIcon type="status" name="alert" size={14} className="shrink-0 mt-0.5" />
+            {originResolveError}
+          </div>
+        )}
+
+        {/* Erreur de résolution de la saisie libre (arrivée) */}
+        {destResolveError && (
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2" role="alert">
+            <UrbanFlowIcon type="status" name="alert" size={14} className="shrink-0 mt-0.5" />
+            {destResolveError}
+          </div>
+        )}
+
+        {/* Indicateurs d'état : départ / arrivée définis */}
+        <div className="flex items-center gap-3 text-xs text-[var(--color-text-tertiary)]" aria-live="polite">
+          <span className="inline-flex items-center gap-1">
+            <span
+              className={`inline-block w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                selectedOrigin
+                  ? "bg-[var(--color-eco-green)] text-white"
+                  : "bg-[var(--color-border)]"
+              }`}
+              aria-hidden="true"
+            >
+              {selectedOrigin ? "✓" : ""}
+            </span>
+            {selectedOrigin ? "Départ défini" : "Départ à définir"}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span
+              className={`inline-block w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                selectedDest
+                  ? "bg-[var(--color-eco-green)] text-white"
+                  : "bg-[var(--color-border)]"
+              }`}
+              aria-hidden="true"
+            >
+              {selectedDest ? "✓" : ""}
+            </span>
+            {selectedDest ? "Arrivée définie" : "Arrivée à définir"}
+          </span>
+        </div>
       </div>
 
       {/* Filters */}

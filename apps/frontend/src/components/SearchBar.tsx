@@ -94,7 +94,7 @@ const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(
 
         {/* Actions à droite : clear, loading, ou élément custom */}
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-          {isLoading && !rightElement && (
+          {isLoading && (
             <Loader2
               size={18}
               className="animate-spin text-[var(--color-primary)]"
