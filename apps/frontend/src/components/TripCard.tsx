@@ -166,7 +166,7 @@ export default function TripCard({
             <UrbanFlowIcon type="status" name="clock" size={16} />
             <span>{journey.durationMinutes} min</span>
           </div>
-          <CO2Badge grams={journey.co2Ggrams} />
+          <CO2Badge grams={journey.co2Ggrams} distanceKm={journey.distanceKm} />
         </div>
       </div>
     </motion.div>
