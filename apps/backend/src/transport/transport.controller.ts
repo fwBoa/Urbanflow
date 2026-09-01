@@ -407,13 +407,14 @@ export class TransportController {
     } catch {
       // best-effort
     }
-    // Repli GTFS-RT : les lignes sont dérivées localement (structureAffectedLines)
-    return this.gtfsRtService.getAlerts().then((alerts) =>
-      alerts.map((a) => ({
-        ...a,
-        affectedLines: structureAffectedLines(a),
-      })),
-    );
+    // Repli GTFS-RT : les lignes sont dérivées localement (structureAffectedLines).
+    // Promise.resolve : le service est asynchrone en prod, mais certains mocks
+    // (e2e) renvoient un tableau direct — on accepte les deux formes.
+    const rtAlerts = await Promise.resolve(this.gtfsRtService.getAlerts());
+    return rtAlerts.map((a) => ({
+      ...a,
+      affectedLines: structureAffectedLines(a),
+    }));
   }
 
   // ─── Calcul d'itinéraire (F2) ────────────────────────────────────────
