@@ -31,6 +31,8 @@ import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { MAP_MODE_COLORS } from "@/constants/mode-colors";
 import { apiService } from "@/services/api";
 import type { JourneyResult } from "@/services/api";
+import { cacheLastTrip, getCachedLastTrip } from "@/services/offlineDb";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { Immersion } from "@/services/immersion";
 import {
   addToHistory,
@@ -340,6 +342,13 @@ export default function TripDetailPage() {
   // ─── Écran de succès à l'arrivée ─────────────────────────────────────
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // Itération 3 : trajet servi depuis le cache IndexedDB (hors-ligne).
+  const [fromCache, setFromCache] = useState(false);
+  // Itération 3 : échec du recalcul sans cache — écran d'erreur dédié.
+  const [recalcFailed, setRecalcFailed] = useState(false);
+  // État réseau (hooks en haut du composant — jamais dans le JSX).
+  const isOnline = useOnlineStatus();
+
   // Le recalcul est automatiquement en cours si on n'a pas de trip mais qu'on a les coords.
   const [recalcDone, setRecalcDone] = useState(false);
   const tripLoading = !trip && hasRecalcCoords && !recalcDone;
@@ -372,10 +381,36 @@ export default function TripDetailPage() {
         } catch {
           // best-effort
         }
+        // Itération 3 : mémorise le trajet pour la consultation hors-ligne.
+        cacheLastTrip(
+          parseFloat(originLatParam!),
+          parseFloat(originLonParam!),
+          parseFloat(destLatParam!),
+          parseFloat(destLonParam!),
+          best,
+        );
       })
-      .catch((err) => {
+      .catch(async (err) => {
         if (cancelled || controller.signal.aborted) return;
         console.warn("Trip recalculation failed:", err);
+        // Hors-ligne (ou échec réseau) : tenter le dernier trajet connu
+        // pour ces coordonnées avant d'afficher un échec sec.
+        try {
+          const cached = await getCachedLastTrip(
+            parseFloat(originLatParam!),
+            parseFloat(originLonParam!),
+            parseFloat(destLatParam!),
+            parseFloat(destLonParam!),
+          );
+          if (!cancelled && cached) {
+            setTrip(cached as JourneyResult);
+            setFromCache(true);
+          } else if (!cancelled) {
+            setRecalcFailed(true);
+          }
+        } catch {
+          if (!cancelled) setRecalcFailed(true);
+        }
       })
       .finally(() => {
         if (!cancelled && !controller.signal.aborted) setRecalcDone(true);
@@ -1001,6 +1036,49 @@ export default function TripDetailPage() {
         </div>
       )}
 
+      {/* Itération 3 : trajet servi depuis le cache (hors-ligne / échec réseau) */}
+      {fromCache && trip && (
+        <div
+          role="status"
+          className="mb-3 flex items-center gap-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-200"
+        >
+          <UrbanFlowIcon type="status" name="clock" size={14} className="shrink-0" />
+          <span>
+            Itinéraire consulté depuis vos données enregistrées (hors ligne) —
+            les horaires peuvent avoir changé. Reconnectez-vous pour un recalcul.
+          </span>
+        </div>
+      )}
+
+      {/* Itération 3 : échec de calcul sans cache — message explicite au lieu
+          du fallback muet (qui affichait un trajet fictif Châtelet → La Défense
+          comme s'il était réel, incohérence bloquée en itération 3). */}
+      {recalcFailed && !trip && !fromCache && (
+        <div className="flex flex-col items-center justify-center py-12 px-6 text-center text-[var(--color-text-secondary)]">
+          <UrbanFlowIcon
+            type="status"
+            name="alert"
+            size={32}
+            className="text-[var(--color-mobility-orange)] mb-3"
+          />
+          <p className="text-sm font-medium text-[var(--color-text-primary)] mb-1">
+            Impossible d&apos;afficher cet itinéraire
+          </p>
+          <p className="text-sm mb-4">
+            {isOnline
+              ? "Le calcul a échoué. Réessayez dans un instant."
+              : "Vous êtes hors ligne et cet itinéraire n&apos;est pas enregistré sur cet appareil."}
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 rounded-[var(--cta-radius)] bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary-dark)] transition-colors"
+          >
+            Réessayer
+          </button>
+        </div>
+      )}
+
       {/* Bannière turn-by-turn (overlay fixed sous le header, nav only) */}
       {isNavigating && instruction && (
         <TurnByTurnBanner
@@ -1009,8 +1087,9 @@ export default function TripDetailPage() {
         />
       )}
 
-      {/* Mode normal : résumé, timeline, carte, CTA */}
-      {!isNavigating && (
+      {/* Mode normal : résumé, timeline, carte, CTA — masqué si le calcul a
+          échoué sans trajet (on ne montre jamais le trajet fictif de secours) */}
+      {!isNavigating && !(recalcFailed && !trip && !fromCache) && (
         <>
           {/* Summary Card */}
           <motion.div
