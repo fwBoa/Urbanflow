@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import Header from "./Header";
 import NavBar from "./NavBar";
+import OfflineBanner from "./OfflineBanner";
 
 interface AppShellProps {
   children: ReactNode;
@@ -26,6 +27,7 @@ export default function AppShell({ children, title, showBack, rightAction, fullB
         Aller au contenu principal
       </a>
       <Header title={title} showBack={showBack} rightAction={rightAction} />
+      <OfflineBanner />
       <main
         id="main-content"
         className={`flex-1 w-full ${
