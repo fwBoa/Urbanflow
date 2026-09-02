@@ -137,3 +137,72 @@ export function getModeLabel(mode?: string, lineName?: string): string {
   }
   return label;
 }
+
+/**
+ * Formate une valeur de mode stockée en base (favoris, historique) pour un
+ * affichage lisible. Ces champs contiennent des valeurs hétérogènes selon
+ * la source : un nom de ligne (« A », « RER A », « Métro 1 » — historique
+ * recherche), un mode canonique (« rer », « marche » — trajet guidé), ou un
+ * libellé composé (« RER A + Métro 1 » — correspondances). On normalise
+ * chaque segment vers un libellé français plutôt que d'afficher la valeur
+ * brute (ex. « A » ou « marche »), peu intelligible pour l'utilisateur.
+ */
+const KNOWN_MODES = new Set([
+  "metro",
+  "rer",
+  "transilien",
+  "train",
+  "tram",
+  "bus",
+  "velib",
+  "velo",
+  "walking",
+  "marche",
+]);
+
+export function formatModeLabel(mode?: string | null): string {
+  if (!mode) return "Trajet";
+  // Libellé composé (« RER A + Métro 1 ») : on formate chaque segment.
+  if (mode.includes("+")) {
+    return mode
+      .split("+")
+      .map((part) => formatModeLabel(part.trim()))
+      .join(" + ");
+  }
+  const trimmed = mode.trim();
+  const normalized = normalizeMode(trimmed);
+  // Mode canonique PUR (« rer », « marche », « velib »…) : libellé FR.
+  // Attention : normalizeMode matche par inclusion (« RER A » → « rer »),
+  // on n'accepte donc que si la valeur est exactement la clé canonique —
+  // sinon « RER A » perdrait son code de ligne.
+  if (KNOWN_MODES.has(normalized) && trimmed.toLowerCase() === normalized) {
+    return getModeLabel(normalized);
+  }
+  // Nom de ligne (« RER A », « Métro 1 ») : déduire le mode du nom pour
+  // reconstituer un libellé complet plutôt que le code seul.
+  const detected = detectLineModeFromName(trimmed);
+  if (detected) {
+    return getModeLabel(detected, extractLineNameCode(trimmed));
+  }
+  // Valeur non reconnue (ex. « A ») : afficher telle quelle.
+  return mode;
+}
+
+/** Détecte le mode depuis un nom de ligne (« RER A » → rer). */
+function detectLineModeFromName(name: string): string | undefined {
+  const m = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (m.includes("métro") || m.includes("metro")) return "metro";
+  if (m.includes("rer")) return "rer";
+  if (m.includes("tram")) return "tram";
+  if (m.includes("transilien") || m.includes("train")) return "transilien";
+  if (m.includes("bus")) return "bus";
+  if (m.includes("velib") || m.includes("velo")) return "velib";
+  if (m.includes("marche") || m.includes("walking")) return "walking";
+  return undefined;
+}
+
+/** Extrait le code de ligne d'un nom (« RER A » → « A », « Métro 1 » → « 1 »). */
+function extractLineNameCode(name: string): string {
+  const tokens = name.trim().split(/\s+/).filter(Boolean);
+  return tokens[tokens.length - 1] ?? "";
+}

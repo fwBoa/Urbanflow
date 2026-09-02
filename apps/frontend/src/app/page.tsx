@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import NotificationBell from "@/components/NotificationBell";
 import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
@@ -8,15 +8,13 @@ import Header from "@/components/Header";
 import NavBar from "@/components/NavBar";
 import CO2Badge from "@/components/CO2Badge";
 import DynamicMap from "@/components/DynamicMap";
-import { NearbyVelibSection } from "@/components/VelibStationCard";
-import { useVelibStations, useNearbyVelib } from "@/hooks/useTransport";
 import { getHistory } from "@/services/favorites";
 import type { HistoryJourney } from "@/services/favorites";
+import { formatModeLabel } from "@/lib/modeMeta";
 
 export default function HomePage() {
   const router = useRouter();
   const [recentTrips, setRecentTrips] = useState<HistoryJourney[]>([]);
-  const { stations: velibStations } = useVelibStations(50);
 
   // ─── Load recent trips from history ────────────────────────────────
   useEffect(() => {
@@ -25,45 +23,6 @@ export default function HomePage() {
       setRecentTrips(history.slice(0, 3));
     });
   }, []);
-
-  // ─── Geolocation for nearby Vélib' (F4) ────────────────────────────
-  const [userPosition, setUserPosition] = useState<{ lat: number; lon: number } | null>(null);
-  const [geoError, setGeoError] = useState<string | null>(null);
-
-  const requestLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setGeoError("La géolocalisation n'est pas supportée par votre navigateur");
-      return;
-    }
-    setGeoError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserPosition({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-      },
-      (err) => {
-        setGeoError(
-          err.code === err.PERMISSION_DENIED
-            ? "Activez la localisation pour voir les Vélib' proches"
-            : "Impossible de déterminer votre position"
-        );
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  }, []);
-
-  // Auto-request location on mount
-  useEffect(() => {
-    // requestLocation updates internal state; this is the intended initialization path.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    requestLocation();
-  }, [requestLocation]);
-
-  const { stations: nearbyVelib, loading: nearbyLoading, error: nearbyError } = useNearbyVelib(
-    userPosition?.lat ?? null,
-    userPosition?.lon ?? null,
-    2,
-    8
-  );
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -97,36 +56,12 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* Nearby Vélib' (F4) */}
-        <NearbyVelibSection
-          stations={nearbyVelib}
-          loading={nearbyLoading && userPosition !== null}
-          error={geoError || nearbyError}
-          onRequestLocation={requestLocation}
-        />
-
-        {/* Map */}
+        {/* Map (centrée sur Paris — la vue Vélib' dédiée vit sur /velib) */}
         <div className="rounded-[var(--card-radius)] h-44 mb-6 border border-[var(--color-border)] overflow-hidden">
           <DynamicMap
-            center={userPosition ? [userPosition.lat, userPosition.lon] : [48.8566, 2.3522]}
-            zoom={userPosition ? 15 : 13}
-            showVelib
-            velibStations={nearbyVelib.length > 0
-              ? nearbyVelib.map((s) => ({
-                  position: s.position,
-                  name: s.name,
-                  available_bikes: s.available_bikes,
-                  available_bike_stands: s.available_bike_stands,
-                }))
-              : velibStations.map((s) => ({
-                  position: s.position,
-                  name: s.name,
-                  available_bikes: s.available_bikes,
-                  available_bike_stands: s.available_bike_stands,
-                }))
-            }
-            userPosition={userPosition ? { lat: userPosition.lat, lon: userPosition.lon } : null}
-            onLocateUser={requestLocation}
+            center={[48.8566, 2.3522]}
+            zoom={13}
+            userPosition={null}
           />
         </div>
 
@@ -160,7 +95,7 @@ export default function HomePage() {
                         className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold text-white"
                         style={{ backgroundColor: trip.modeColor }}
                       >
-                        {trip.mode}
+                        {formatModeLabel(trip.mode)}
                       </span>
                     )}
                     <CO2Badge grams={trip.co2} />

@@ -15,6 +15,7 @@ import {
   type FavoriteJourney,
 } from "@/services/favorites";
 import { alertMatchesLine } from "@/lib/alerts";
+import { formatModeLabel } from "@/lib/modeMeta";
 
 const MODE_TABS = [
   { key: "metro" as const, label: "Métro", emoji: "🚇" },
@@ -32,16 +33,6 @@ function modeIcon(mode: string) {
   if (m.includes("bus")) return <UrbanFlowIcon type="transport" name="bus" size={14} />;
   if (m.includes("metro") || m.includes("métro")) return <UrbanFlowIcon type="transport" name="train" size={14} />;
   return <UrbanFlowIcon type="action" name="locate" size={14} />;
-}
-
-function lineModeLabel(mode: string) {
-  const m = mode.toLowerCase();
-  if (m.includes("metro") || m.includes("métro")) return "Métro";
-  if (m.includes("rer")) return "RER";
-  if (m.includes("tram")) return "Tramway";
-  if (m.includes("transilien") || m.includes("train")) return "Train";
-  if (m.includes("bus")) return "Bus";
-  return mode;
 }
 
 function normalizeHex(c?: string): string {
@@ -106,7 +97,7 @@ function FavoriteLineCard({
               {lineName}
             </p>
             <p className="text-xs text-[var(--color-text-tertiary)]">
-              {lineModeLabel(fav.mode || networkLine?.name || "")}
+              {formatModeLabel(fav.mode || networkLine?.name || "")}
             </p>
           </div>
         </div>

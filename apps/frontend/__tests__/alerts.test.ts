@@ -52,6 +52,35 @@ describe("alertMatchesLine", () => {
     expect(alertMatchesLine(makeAlert(["Tram T3a"]), "A")).toBe(false);
   });
 
+  it("accepte un code court (1 caractère) quand les modes coïncident (bug prod RER A)", () => {
+    // En prod, la carte favori/réseau passe lineName="A" + lineMode="rer" :
+    // le garde ≥ 2 caractères bloquait le matching avec « RER A ».
+    expect(alertMatchesLine(makeAlert(["RER A"]), "A", "rer")).toBe(true);
+    expect(alertMatchesLine(makeAlert(["Métro 1"]), "1", "metro")).toBe(true);
+    // Modes différents : toujours rejeté (non-régression collision).
+    expect(alertMatchesLine(makeAlert(["Tram T3a"]), "A", "rer")).toBe(false);
+  });
+
+  it("match par affectedLines[].lineId sans préfixe line:IDFM:", () => {
+    const alert = {
+      ...makeAlert(["RER A"]),
+      affectedLines: [
+        {
+          name: "RER A",
+          mode: "rer" as const,
+          code: "A",
+          color: "EB2132",
+          lineId: "line:IDFM:C01742",
+        },
+      ],
+    };
+    // La ligne réseau/réfavorite est enregistrée sous l'ID GTFS « C01742 ».
+    expect(alertMatchesLine(alert, "RER A", "rer", "C01742")).toBe(true);
+    expect(alertMatchesLine(alert, "A", "rer", "C01742")).toBe(true);
+    // Un autre ID qui ne matche ni par ID ni par nom → false.
+    expect(alertMatchesLine({ ...alert, affectedRoutes: ["Autre"] }, "RER A", "rer", "C99999")).toBe(false);
+  });
+
   it("accepte le fallback sous-chaîne pour des noms longs", () => {
     expect(alertMatchesLine(makeAlert(["RER A — Incident"]), "RER A")).toBe(
       true,

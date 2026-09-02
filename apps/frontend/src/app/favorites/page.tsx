@@ -16,6 +16,7 @@ import {
 } from "@/services/favorites";
 import { useAuth } from "@/contexts/AuthContext";
 import { getContrastColor } from "@/lib/colors";
+import { formatModeLabel } from "@/lib/modeMeta";
 
 export default function FavoritesPage() {
   const router = useRouter();
@@ -278,7 +279,7 @@ export default function FavoritesPage() {
                         className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-white"
                         style={{ backgroundColor: fav.modeColor }}
                       >
-                        {fav.mode}
+                        {formatModeLabel(fav.mode)}
                       </span>
                       <CO2Badge grams={fav.co2} />
                     </div>
@@ -331,7 +332,7 @@ export default function FavoritesPage() {
                         color: getContrastColor(item.modeColor),
                       }}
                     >
-                      {item.mode}
+                      {formatModeLabel(item.mode)}
                     </span>
                     <CO2Badge grams={item.co2} />
                   </div>

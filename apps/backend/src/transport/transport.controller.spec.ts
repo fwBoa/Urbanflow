@@ -422,6 +422,66 @@ describe('TransportController', () => {
       expect(matched).toHaveLength(1);
     });
 
+    // Non-régression : un code de ligne à 1 caractère (« A ») doit matcher
+    // quand le mode coïncide — le garde ≥ 2 caractères privait RER A et
+    // Métro 1-9 de leurs alertes sur les cartes favoris/réseau (bug prod).
+    it('matches alert pour un code court quand le mode coïncide', () => {
+      const matched = (controller as any).alertMatchesLine(
+        {
+          id: 'a1',
+          headerText: 'RER A : trafic perturbé.',
+          severity: 'warning',
+          affectedRoutes: ['RER A'],
+          activePeriod: [],
+        },
+        'A',
+        'rer',
+      );
+      expect(matched).toBe(true);
+    });
+
+    it('does not match code court quand le mode diffère', () => {
+      const matched = (controller as any).alertMatchesLine(
+        {
+          id: 'a1',
+          headerText: 'Tram T3a : travaux.',
+          severity: 'warning',
+          affectedRoutes: ['Tram T3a'],
+          activePeriod: [],
+        },
+        'A',
+        'rer',
+      );
+      expect(matched).toBe(false);
+    });
+
+    // Non-régression : le matching par identifiant technique doit unifier
+    // « C01742 » (GTFS, favoris/réseau) avec « line:IDFM:C01742 » (Navitia).
+    it('matches alert par affectedLines[].lineId sans préfixe line:IDFM:', () => {
+      const matched = (controller as any).alertMatchesLine(
+        {
+          id: 'a1',
+          headerText: 'RER A : trafic perturbé.',
+          severity: 'warning',
+          affectedRoutes: ['RER A'],
+          affectedLines: [
+            {
+              name: 'RER A',
+              mode: 'rer',
+              code: 'A',
+              color: 'EB2132',
+              lineId: 'line:IDFM:C01742',
+            },
+          ],
+          activePeriod: [],
+        },
+        'RER A',
+        'rer',
+        'C01742',
+      );
+      expect(matched).toBe(true);
+    });
+
     it('does not match Métro 1 with Bus 1 (same code, different mode)', () => {
       const metroJourney = {
         ...journey,

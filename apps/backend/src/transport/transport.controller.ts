@@ -557,6 +557,7 @@ export class TransportController {
           alert,
           segment.lineName || segment.mode || '',
           segment.mode,
+          segment.lineId,
         ),
       ),
     );
@@ -603,8 +604,24 @@ export class TransportController {
     alert: RealtimeAlert,
     lineName: string,
     lineMode?: string,
+    lineId?: string,
   ): boolean {
     if (!lineName) return false;
+
+    // Matching direct par identifiant technique : la ligne favorite/réseau
+    // (ex. « C01742 ») contre l'ID Navitia structuré de l'alerte
+    // (ex. « line:IDFM:C01742 »). On compare après retrait du préfixe
+    // « line:IDFM: » pour unifier les deux référentiels.
+    if (lineId && alert.affectedLines?.length) {
+      const bare = lineId.replace(/^line:IDFM:/i, '').toUpperCase();
+      const matchedById = alert.affectedLines.some((al) => {
+        const alBare = (al.lineId ?? '')
+          .replace(/^line:IDFM:/i, '')
+          .toUpperCase();
+        return alBare && alBare === bare;
+      });
+      if (matchedById) return true;
+    }
 
     const normalizedLine = this.normalizeLineName(lineName);
     const lineCode = this.extractLineCode(normalizedLine);
@@ -625,12 +642,16 @@ export class TransportController {
 
       // Correspondance par code de ligne exact.
       if (lineCode && routeCode && lineCode === routeCode) {
-        // Si les deux côtés expriment un mode, ils doivent coïncider.
+        // Si les deux côtés expriment un mode, ils doivent coïncider —
+        // dans ce cas même un code court (« A », « 1 ») est fiable :
+        // RER A ≠ Tram T3a est garanti par le mode, et le garde ≥ 2
+        // caractères privait injustement RER A et Métro 1-9 de leurs
+        // alertes (bug constaté en prod).
         if (lineModeHint && routeMode) {
           return lineModeHint === routeMode;
         }
         // Sans mode explicite, on exige un code d'au moins 2 caractères
-        // pour éviter les collisions sur des codes trop courts (ex. "A").
+        // pour éviter les collisions sur des codes trop courts.
         return lineCode.length >= 2;
       }
 
