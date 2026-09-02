@@ -213,7 +213,14 @@ export async function addFavoriteLine(line: {
 
 export async function removeFavoriteLine(lineId: string): Promise<void> {
   const favorites = await getFavorites();
-  const fav = favorites.find((f) => f.type === "line" && f.lineId === lineId);
+  // Matching par identité : tolère les deux référentiels d'ID (« A » vs
+  // « C01742 », préfixe « line:IDFM: ») pour retrouver le favori à retirer.
+  const bare = (id?: string | null) =>
+    (id ?? "").replace(/^line:IDFM:/i, "").toUpperCase();
+  const target = bare(lineId);
+  const fav = favorites.find(
+    (f) => f.type === "line" && f.lineId && bare(f.lineId) === target,
+  );
   if (fav) {
     await removeFavorite(fav.id);
   }

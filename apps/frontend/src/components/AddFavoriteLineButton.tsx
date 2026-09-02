@@ -47,7 +47,23 @@ export default function AddFavoriteLineButton({
     getFavoriteLines()
       .then((favs) => {
         if (cancelled) return;
-        setIsFavorite(favs.some((f) => f.lineId === lineId));
+        // Comparaison par identité de ligne : les favoris anciens peuvent
+        // porter un ID d'un autre référentiel (« A » vs « C01742 ») — on
+        // compare le code de ligne en secours pour éviter un cœur gris à
+        // tort (le backend déduplique désormais par identité).
+        const bare = (id?: string | null) =>
+          (id ?? "").replace(/^line:IDFM:/i, "").toUpperCase();
+        setIsFavorite(
+          favs.some(
+            (f) =>
+              bare(f.lineId) === bare(lineId) ||
+              // Fallback code court : « C01742 » vs « A » ne matchent pas,
+              // mais « A » vs « A » (même code, modes équivalents) oui.
+              (!!f.lineId &&
+                f.lineId.length <= 3 &&
+                bare(f.lineId) === bare(lineId)),
+          ),
+        );
       })
       .catch(() => {
         if (cancelled) return;

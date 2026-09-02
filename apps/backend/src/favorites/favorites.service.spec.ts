@@ -155,6 +155,64 @@ describe('FavoritesService', () => {
         expect.objectContaining({ userId: 'user-1' }),
       );
     });
+
+    // B3 — dédup lignes suivies par identité (mode + code), pas par
+    // libellé brut. Bug prod : le même RER A pouvait être suivi deux fois
+    // (« A »/segment vs « C01742 »/réseau).
+    it('dedupe line favorites by identity even with different labels', async () => {
+      const existing = {
+        ...mockFavorite,
+        id: 'fav-line-old',
+        type: 'line' as const,
+        lineId: 'C01742',
+        mode: 'RER A',
+        modeColor: '#EB2132',
+      };
+      jest.spyOn(favRepo, 'find').mockResolvedValue([existing]);
+      jest
+        .spyOn(favRepo, 'save')
+        .mockImplementation((f: Favorite) => Promise.resolve(f));
+      // Ré-ajout de la même ligne via une autre source : lineId sans
+      // préfixe, mode en code court — l'identité (code C01742) est la même.
+      const result = await service.addFavorite('user-1', {
+        type: 'line',
+        lineId: 'line:IDFM:C01742',
+        from: '',
+        to: '',
+        mode: 'RER A',
+        modeColor: '#EB2132',
+        duration: '0',
+        co2: 0,
+      });
+      expect(result).toBe(existing);
+      expect(favRepo.save).toHaveBeenCalledWith(existing);
+      expect(favRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a line favorite when identity differs', async () => {
+      const existing = {
+        ...mockFavorite,
+        id: 'fav-line-metro1',
+        type: 'line' as const,
+        lineId: 'C01371',
+        mode: 'Métro 1',
+        modeColor: '#FFCE00',
+      };
+      jest.spyOn(favRepo, 'find').mockResolvedValue([existing]);
+      jest.spyOn(favRepo, 'create').mockReturnValue(mockFavorite);
+      jest.spyOn(favRepo, 'save').mockResolvedValue(mockFavorite);
+      await service.addFavorite('user-1', {
+        type: 'line',
+        lineId: 'C01742',
+        from: '',
+        to: '',
+        mode: 'RER A',
+        modeColor: '#EB2132',
+        duration: '0',
+        co2: 0,
+      });
+      expect(favRepo.create).toHaveBeenCalled();
+    });
   });
 
   describe('removeFavorite', () => {
