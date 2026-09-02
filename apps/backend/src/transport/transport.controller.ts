@@ -566,6 +566,24 @@ export class TransportController {
     return s.toUpperCase().replace(/\s+/g, ' ').trim().replace(/[-_]/g, ' ');
   }
 
+  /**
+   * Normalise un mode de transport vers la clé canonique (metro/rer/tram/
+   * bus/transilien). Les libellés Navitia sont capitalisés et francisés
+   * (« Métro », « RER », « Tramway », « Bus ») — sans cette normalisation,
+   * le matching mode échoue ('RER' !== 'rer') et toutes les alertes sont
+   * filtrées à tort (bug constaté en prod, trajet RER A).
+   */
+  private normalizeMode(mode: string | undefined): string | undefined {
+    if (!mode) return undefined;
+    const m = mode.toLowerCase().trim();
+    if (m.includes('métro') || m.includes('metro')) return 'metro';
+    if (m.includes('rer')) return 'rer';
+    if (m.includes('tram')) return 'tram';
+    if (m.includes('bus')) return 'bus';
+    if (m.includes('transilien') || m.includes('train')) return 'transilien';
+    return undefined;
+  }
+
   private detectLineMode(name: string): string | undefined {
     const n = this.normalizeLineName(name);
     if (n.includes('METRO') || n.includes('MÉTRO')) return 'metro';
@@ -590,7 +608,10 @@ export class TransportController {
 
     const normalizedLine = this.normalizeLineName(lineName);
     const lineCode = this.extractLineCode(normalizedLine);
-    const lineModeHint = lineMode || this.detectLineMode(normalizedLine);
+    // C6-fix : normaliser le mode du segment (« RER » → « rer ») — les
+    // libellés Navitia sont capitalisés, sinon le matching mode échoue.
+    const lineModeHint =
+      this.normalizeMode(lineMode) ?? this.detectLineMode(normalizedLine);
 
     return alert.affectedRoutes.some((route) => {
       const normalizedRoute = this.normalizeLineName(route);

@@ -339,24 +339,38 @@ export class NavitiaService {
         '/disruptions',
         { count: '50' },
       );
-      return (data.disruptions ?? []).slice(0, 50).map((d, i) => ({
-        id: d.id || `alert-${i}`,
+      return (data.disruptions ?? []).slice(0, 50).map((d, i) => {
         // Les messages Navitia sont du HTML (ex. "<p>La ligne 72…</p>") :
-        // on strip les balises + collapse les espaces pour un affichage propre.
-        headerText: this.stripHtml(d.messages?.[0]?.text) || 'Perturbation',
-        descriptionText:
+        // on strip les balises + décode les entités + collapse les espaces.
+        const header = this.stripHtml(d.messages?.[0]?.text) || 'Perturbation';
+        // La description Navitia répète presque toujours le titre (le 1er
+        // message = le titre). On la déduplique : si la description commence
+        // par le titre, on retire la redondance pour un affichage propre.
+        let description =
           this.stripHtml(d.messages?.map((m) => m.text).join(' — ')) ||
-          undefined,
-        severity: this.mapSeverity(d.severity?.name || d.status),
-        affectedRoutes: this.extractAffectedRoutes(d),
-        // C6 : vraies lignes structurées (code + mode + couleur IDFM),
-        // arrêts exclus — pour les pastilles côté /alerts.
-        affectedLines: this.extractAffectedLines(d),
-        lineId: this.extractLineId(d),
-        activePeriod: this.extractActivePeriod(d),
-        cause: d.cause || undefined,
-        effect: d.effect || undefined,
-      }));
+          undefined;
+        if (description && description.startsWith(header)) {
+          const rest = description
+            .slice(header.length)
+            .replace(/^[—\s—-]+/, '')
+            .trim();
+          description = rest || undefined;
+        }
+        return {
+          id: d.id || `alert-${i}`,
+          headerText: header,
+          descriptionText: description,
+          severity: this.mapSeverity(d.severity?.name || d.status),
+          affectedRoutes: this.extractAffectedRoutes(d),
+          // C6 : vraies lignes structurées (code + mode + couleur IDFM),
+          // arrêts exclus — pour les pastilles côté /alerts.
+          affectedLines: this.extractAffectedLines(d),
+          lineId: this.extractLineId(d),
+          activePeriod: this.extractActivePeriod(d),
+          cause: d.cause || undefined,
+          effect: d.effect || undefined,
+        };
+      });
     } catch (e) {
       this.logger.warn(
         `Navitia disruptions unavailable: ${e instanceof Error ? e.message : e}`,
@@ -565,16 +579,32 @@ export class NavitiaService {
   }
 
   /**
-   * Retire les balises HTML des messages Navitia (renvoyés en HTML) et
-   * collapse les espaces / sauts de ligne. "<p>La ligne 72…</p>" → "La ligne 72…".
+   * Retire les balises HTML des messages Navitia (renvoyés en HTML), décode
+   * les entités HTML (nommées et numériques : &#233; → é) et collapse les
+   * espaces / sauts de ligne. "<p>La ligne 72…</p>" → "La ligne 72…".
    */
   private stripHtml(html: string | undefined): string {
     if (!html) return '';
-    return html
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    return (
+      html
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        // Entités numériques décimales (&#233;) et hexadécimales (&#xE9;)
+        .replace(/&#(\d+);/g, (_, code: string) =>
+          String.fromCodePoint(parseInt(code, 10)),
+        )
+        .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) =>
+          String.fromCodePoint(parseInt(hex, 16)),
+        )
+        // Entités nommées courantes
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim()
+    );
   }
 
   private haversineKm(

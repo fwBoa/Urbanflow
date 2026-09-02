@@ -398,6 +398,30 @@ describe('TransportController', () => {
       expect(matched).toHaveLength(0);
     });
 
+    // Non-régression : les segments Navitia exposent un mode capitalisé
+    // (« RER », « Métro ») — sans normalisation, 'RER' !== 'rer' et les
+    // alertes disparaissent des trajets (bug constaté en prod).
+    it('matches alert quand le mode du segment est le libellé Navitia capitalisé', () => {
+      const journeyNavitiaLabel = {
+        ...journey,
+        segments: [{ type: 'transit' as const, mode: 'RER', lineName: 'A' }],
+      };
+      const alerts: RealtimeAlert[] = [
+        {
+          id: 'a1',
+          headerText: 'RER A : La Défense -> St-Germain-en-L. trafic perturbé.',
+          severity: 'warning',
+          affectedRoutes: ['RER A'],
+          activePeriod: [],
+        },
+      ];
+      const matched = (controller as any).matchAlertsForJourney(
+        journeyNavitiaLabel,
+        alerts,
+      );
+      expect(matched).toHaveLength(1);
+    });
+
     it('does not match Métro 1 with Bus 1 (same code, different mode)', () => {
       const metroJourney = {
         ...journey,

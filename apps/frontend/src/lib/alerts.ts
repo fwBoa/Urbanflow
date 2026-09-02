@@ -24,6 +24,22 @@ function detectMode(name: string): string | undefined {
 }
 
 /**
+ * Normalise un libellé de mode Navitia (« RER », « Métro », « Tramway »,
+ * « Bus »…) vers la clé canonique (rer/metro/tram/bus/transilien).
+ * Sans cette normalisation, le matching mode échoue sur la casse.
+ */
+function normalizeMode(mode: string | undefined): string | undefined {
+  if (!mode) return undefined;
+  const m = mode.toLowerCase().trim();
+  if (m.includes("métro") || m.includes("metro")) return "metro";
+  if (m.includes("rer")) return "rer";
+  if (m.includes("tram")) return "tram";
+  if (m.includes("bus")) return "bus";
+  if (m.includes("transilien") || m.includes("train")) return "transilien";
+  return undefined;
+}
+
+/**
  * Extrait le code de ligne (dernier token alphanumérique).
  * Exemples : "RER A" → "A", "Métro 1" → "1", "Bus 72" → "72".
  */
@@ -53,7 +69,10 @@ export function alertMatchesLine(
 
   const normalizedLine = normalizeLineName(lineName);
   const lineCode = extractLineCode(normalizedLine);
-  const lineModeHint = lineMode || detectMode(normalizedLine);
+  // Fix : normaliser le mode du segment (« RER » → « rer ») — les libellés
+  // Navitia sont capitalisés, sinon le matching mode échoue et les alertes
+  // disparaissent des trajets (bug constaté en prod, trajet RER A).
+  const lineModeHint = normalizeMode(lineMode) || detectMode(normalizedLine);
 
   return alert.affectedRoutes.some((route) => {
     const normalizedRoute = normalizeLineName(route);
