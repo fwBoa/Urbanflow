@@ -436,6 +436,11 @@ function SearchPageContent() {
       modeColor: getModeColor(journey),
       duration: `${journey.durationMinutes} min`,
       co2: journey.co2Ggrams,
+      // Coordonnées indispensables au replay (favoris/historique/home) :
+      // sans elles, handleReplay retombe sur /search au lieu de /trip
+      // (bug constaté : aucun trajet récent n'était rejouable).
+      origin: selectedOrigin ?? undefined,
+      destination: selectedDest ?? undefined,
     });
     // Store bulky journey state in sessionStorage instead of URL query string
     // to avoid exceeding browser/proxy URL length limits (Kaizen).

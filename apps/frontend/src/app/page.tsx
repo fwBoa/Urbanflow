@@ -78,7 +78,27 @@ export default function HomePage() {
             recentTrips.map((trip, i) => (
               <button
                 key={trip.id || i}
-                onClick={() => router.push(`/search?mode=${encodeURIComponent(trip.mode.toLowerCase().replace(/['\s]/g, ""))}`)}
+                onClick={() => {
+                  // Replay direct si les coordonnées sont enregistrées,
+                  // sinon recherche préremplie avec les libellés — jamais
+                  // de paramètre « mode » fabriqué depuis un libellé composé
+                  // (ex. « RER A + Métro 1 »), invalide comme filtre.
+                  if (trip.origin && trip.destination) {
+                    const query = new URLSearchParams({
+                      originLat: String(trip.origin.lat),
+                      originLon: String(trip.origin.lon),
+                      destLat: String(trip.destination.lat),
+                      destLon: String(trip.destination.lon),
+                    });
+                    router.push(`/trip/${trip.id}?${query.toString()}`);
+                  } else {
+                    const params = new URLSearchParams();
+                    if (trip.from && trip.from !== "Départ") params.set("originLabel", trip.from);
+                    if (trip.to && trip.to !== "Arrivée") params.set("destLabel", trip.to);
+                    const qs = params.toString();
+                    router.push(qs ? `/search?${qs}` : "/search");
+                  }
+                }}
                 className="w-full flex items-center gap-3 bg-surface rounded-[var(--card-radius)] p-3 border border-[var(--color-border)] hover:shadow-md transition-all text-left"
               >
                 <div className="flex-1 min-w-0">

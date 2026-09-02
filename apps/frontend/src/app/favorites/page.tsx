@@ -129,6 +129,11 @@ export default function FavoritesPage() {
   };
 
   const handleReplay = (item: FavoriteJourney | HistoryJourney) => {
+    // Favori ligne (cœur) → page lignes, pas de trajet à rejouer.
+    if ("type" in item && item.type === "line") {
+      router.push("/lines");
+      return;
+    }
     const hasOrigin = "origin" in item && item.origin;
     const hasDest = "destination" in item && item.destination;
     if (hasOrigin && hasDest) {
@@ -140,9 +145,15 @@ export default function FavoritesPage() {
         destLon: String(item.destination!.lon),
       });
       router.push(`/trip/${id}?${query.toString()}`);
-    } else {
-      router.push("/search");
+      return;
     }
+    // Pas de coordonnées (anciens enregistrements) : on relance au moins la
+    // recherche préremplie avec les libellés connus plutôt qu'un /search vide.
+    const params = new URLSearchParams();
+    if (item.from && item.from !== "Départ") params.set("originLabel", item.from);
+    if (item.to && item.to !== "Arrivée") params.set("destLabel", item.to);
+    const qs = params.toString();
+    router.push(qs ? `/search?${qs}` : "/search");
   };
 
   const formatDate = (dateStr: string) => {
