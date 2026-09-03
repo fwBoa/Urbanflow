@@ -25,7 +25,15 @@
   <symbol id="uf-status-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" fill="none"/><path d="M12 7v5l3.5 2" stroke="currentColor" fill="none"/></symbol>
   <symbol id="uf-status-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" fill="none"/><path d="M12 11v6" stroke="currentColor" fill="none"/><circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none"/></symbol>
   <symbol id="uf-status-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Z" stroke="currentColor" fill="none"/><path d="M12 9v5" stroke="currentColor" fill="none"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></symbol>
-  <symbol id="uf-status-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" fill="none"/><path d="m8 12 2.5 2.5L16.5 8" stroke="currentColor" fill="none"/></symbol>
+  <symbol id="uf-status-medal" viewBox="0 0 24 24">
+    <!-- Rubans du ruban de médaille -->
+    <path d="M8.5 2.5 12 8l3.5-5.5" stroke="currentColor" fill="none" stroke-linejoin="round"/>
+    <!-- Disque de la médaille -->
+    <circle cx="12" cy="14.5" r="7" stroke="currentColor" fill="none"/>
+    <!-- Étoile au trait, centrée dans la médaille -->
+    <path d="m12 11 1.05 2.13 2.35.31-1.7 1.65.4 2.36-2.1-1.1-2.1 1.1.4-2.36-1.7-1.65 2.35-.34z" stroke="currentColor" fill="none" stroke-linejoin="round"/>
+  </symbol>
+    <symbol id="uf-status-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" fill="none"/><path d="m8 12 2.5 2.5L16.5 8" stroke="currentColor" fill="none"/></symbol>
   <symbol id="uf-status-leaf" viewBox="0 0 24 24"><path d="M20 4C10 4 5 9 5 15c0 3 2 5 5 5 6 0 10-6 10-16Z" stroke="currentColor" fill="none"/><path d="M5 20c2-6 6-9 11-12" stroke="currentColor" fill="none"/></symbol>
   <symbol id="uf-status-co2" viewBox="0 0 24 24"><path d="M7 16a4 4 0 1 1 1-7.9A5.5 5.5 0 0 1 18.5 10 3 3 0 0 1 18 16H7Z" stroke="currentColor" fill="none"/><text x="7" y="14" fill="currentColor" stroke="none" font-family="Inter,Arial" font-size="6" font-weight="600">CO₂</text></symbol>
   <symbol id="uf-status-realtime" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/><path d="M8.5 8.5a5 5 0 0 0 0 7m7-7a5 5 0 0 1 0 7M5.5 5.5a9 9 0 0 0 0 13m13-13a9 9 0 0 1 0 13" stroke="currentColor" fill="none"/></symbol></defs>

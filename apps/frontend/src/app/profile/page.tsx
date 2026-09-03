@@ -12,7 +12,6 @@ import {
   Download,
   Shield,
   FileText,
-  Sparkles,
   Lock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -71,6 +70,10 @@ export default function ProfilePage() {
   const [newBadges, setNewBadges] = useState<Badge[]>([]);
   // Confirmation de déconnexion (pop-up au lieu d'une déconnexion immédiate).
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  // Confirmation avant effacement de l'historique (action irréversible).
+  const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
+  // État de chargement de l'effacement (évite les doubles taps).
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   // ─── Changement de mot de passe ───
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -257,6 +260,26 @@ export default function ProfilePage() {
     router.push("/");
   };
 
+  const confirmClearHistory = async () => {
+    setClearingHistory(true);
+    try {
+      await clearHistory();
+      const s = await getStats();
+      setStats(s);
+      try {
+        const b = await getBadges();
+        setBadges(b);
+        setBadgesError(null);
+      } catch (err) {
+        console.error(err);
+        setBadgesError("Impossible de recharger les badges.");
+      }
+      setShowClearHistoryConfirm(false);
+    } finally {
+      setClearingHistory(false);
+    }
+  };
+
   const formatCo2 = (grams: number) => {
     if (grams >= 1000) return `${(grams / 1000).toFixed(1)}kg`;
     return `${grams}g`;
@@ -321,7 +344,7 @@ export default function ProfilePage() {
                   transition={{ type: "spring", duration: 0.55, bounce: 0.3, delay: 0.08 }}
                   className="relative shrink-0 w-11 h-11 rounded-full bg-gradient-to-br from-[var(--color-mobility-orange)]/25 to-[var(--color-mobility-orange)]/10 ring-1 ring-[var(--color-mobility-orange)]/30 flex items-center justify-center"
                 >
-                  <Sparkles size={18} className="text-[var(--color-mobility-orange)]" />
+                  <UrbanFlowIcon type="status" name="medal" size={18} className="text-[var(--color-mobility-orange)]" />
                 </motion.div>
                 <div className="flex-1 min-w-0">
                   <motion.p
@@ -771,19 +794,7 @@ export default function ProfilePage() {
           </button>
         )}
         <button
-          onClick={async () => {
-            await clearHistory();
-            const s = await getStats();
-            setStats(s);
-            try {
-              const b = await getBadges();
-              setBadges(b);
-              setBadgesError(null);
-            } catch (err) {
-              console.error(err);
-              setBadgesError("Impossible de recharger les badges.");
-            }
-          }}
+          onClick={() => setShowClearHistoryConfirm(true)}
           className="w-full flex items-center justify-center gap-2 py-3 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-favorite-red)] transition-colors"
         >
           <UrbanFlowIcon type="action" name="trash" size={14} />
@@ -902,6 +913,47 @@ export default function ProfilePage() {
                 className="px-4 py-2 rounded-[var(--cta-radius)] text-sm font-medium bg-[var(--color-favorite-red)] text-white hover:opacity-90 transition-opacity"
               >
                 Se déconnecter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation avant effacement de l'historique — irréversible */}
+      {showClearHistoryConfirm && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clear-history-confirm-title"
+        >
+          <div className="bg-[var(--color-background)] rounded-[var(--card-radius)] p-5 w-full max-w-md border border-[var(--color-border)] shadow-xl">
+            <h3
+              id="clear-history-confirm-title"
+              className="text-base font-semibold text-[var(--color-text-primary)] mb-2"
+            >
+              Effacer l&apos;historique ?
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)] mb-5">
+              Cette action est irréversible : tous tes trajets enregistrés
+              seront supprimés. Tes favoris et tes succès restent inchangés.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowClearHistoryConfirm(false)}
+                disabled={clearingHistory}
+                className="px-4 py-2 rounded-[var(--cta-radius)] text-sm font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] border border-[var(--color-border)] hover:bg-[var(--color-border)]/40 transition-colors disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmClearHistory}
+                disabled={clearingHistory}
+                className="px-4 py-2 rounded-[var(--cta-radius)] text-sm font-medium bg-[var(--color-favorite-red)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {clearingHistory ? "Suppression…" : "Effacer"}
               </button>
             </div>
           </div>
