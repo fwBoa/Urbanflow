@@ -524,12 +524,19 @@ describe('UrbanFlow API (e2e)', () => {
   });
 
   it('GET /api/notifications/unread-count → compte les non-lues', async () => {
+    // Le compte peut être 0 (aucune notif) ou ≥ 1 (le flux e2e précédent —
+    // favori + historique — a pu débloquer un badge, ce qui crée depuis
+    // l'itération badges une notification « Nouveau succès » asynchrone).
+    // Ce test valide la forme de la réponse et la cohérence du compteur :
+    // c'est mark-all-read qui porte l'assertion forte (→ count 0 après).
     const res = await request(app.getHttpServer())
       .get('/api/notifications/unread-count')
       .set('Cookie', authCookie)
       .expect(200);
 
-    expect(res.body).toEqual({ count: 0 });
+    expect(res.body).toHaveProperty('count');
+    expect(typeof res.body.count).toBe('number');
+    expect(res.body.count).toBeGreaterThanOrEqual(0);
   });
 
   it('POST /api/notifications/mark-all-read → marque tout comme lu', async () => {
