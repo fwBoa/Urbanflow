@@ -268,67 +268,110 @@ export default function ProfilePage() {
 
   return (
     <AppShell title="Profil">
-      {/* Célébration de nouveaux badges — animée (respecte reduced motion) */}
+      {/* ─── Célébration de badges — chorégraphie d'obtention ───────────
+          Rareté (1er débloquage = événement rare) → droit au delight.
+          Principes appliqués (emil-design-eng) : entrée ease-out custom,
+          jamais scale(0) (partir de 0.95 + opacity), stagger 70ms max,
+          springs asymétriques, exit plus rapide que l'entrée, GPU-safe
+          (transform/opacity uniquement), reduced-motion respecté. */}
       <AnimatePresence>
         {newBadges.length > 0 && (
           <motion.div
-            initial={reducedMotion ? false : { opacity: 0, y: -16, scale: 0.96 }}
+            initial={reducedMotion ? false : { opacity: 0, y: -14, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
-            transition={{ type: "spring", stiffness: 300, damping: 24 }}
+            exit={reducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ type: "spring", duration: 0.5, bounce: 0.18 }}
             role="status"
-            className="mb-4 rounded-[var(--card-radius)] bg-[var(--color-mobility-orange)]/10 border border-[var(--color-mobility-orange)]/20 p-3 relative overflow-hidden"
+            className="mb-4 relative rounded-[1.25rem] p-[1px] bg-gradient-to-b from-[var(--color-mobility-orange)]/40 via-[var(--color-mobility-orange)]/15 to-transparent"
           >
-            {/* Halo animé en fond (masqué si reduced motion) */}
-            {!reducedMotion && (
-              <motion.div
-                aria-hidden
-                className="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-[var(--color-mobility-orange)]/10 blur-2xl"
-                animate={{ scale: [1, 1.4, 1], opacity: [0.4, 0.7, 0.4] }}
-                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-              />
-            )}
-            <div className="flex items-start gap-3 relative">
-              <motion.div
-                initial={reducedMotion ? false : { scale: 0, rotate: -30 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: "spring", stiffness: 400, damping: 15, delay: 0.1 }}
-                className="w-8 h-8 rounded-full bg-[var(--color-mobility-orange)]/15 flex items-center justify-center shrink-0"
-              >
-                <Sparkles size={16} className="text-[var(--color-mobility-orange)]" />
-              </motion.div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                  {newBadges.length > 1
-                    ? `${newBadges.length} nouveaux succès débloqués !`
-                    : "Nouveau succès débloqué !"}
-                </p>
-                <div className="flex flex-wrap gap-2 mt-1.5">
-                  {newBadges.map((b, i) => (
+            {/* Double-bezel : coque dégradée + cœur interne net */}
+            <div className="relative rounded-[calc(1.25rem-1px)] bg-[var(--color-surface)] p-3.5 overflow-hidden">
+              {/* Particules de célébration : 6 éclats qui montent puis
+                  s'estompent — décoration rare, une seule fois par badge.
+                  transform/opacity uniquement (GPU-safe). */}
+              {!reducedMotion && (
+                <div aria-hidden className="absolute inset-0 pointer-events-none">
+                  {[...Array(6)].map((_, i) => (
                     <motion.span
-                      key={b.key}
-                      initial={reducedMotion ? false : { opacity: 0, scale: 0.6 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 500,
-                        damping: 20,
-                        delay: 0.25 + i * 0.12,
+                      key={i}
+                      className="absolute w-1.5 h-1.5 rounded-full bg-[var(--color-mobility-orange)]"
+                      style={{ left: `${12 + i * 14}%`, bottom: 8 }}
+                      initial={{ opacity: 0, y: 0, scale: 0.5 }}
+                      animate={{
+                        opacity: [0, 0.9, 0.9, 0],
+                        y: [-4, -22, -38, -52],
+                        scale: [0.5, 1, 0.9, 0.3],
                       }}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text-primary)] border border-[var(--color-border)]"
-                    >
-                      <span className="text-base" aria-hidden>{b.emoji}</span> {b.label}
-                    </motion.span>
+                      transition={{
+                        duration: 1.6,
+                        delay: 0.3 + i * 0.14,
+                        ease: [0.23, 1, 0.32, 1],
+                        times: [0, 0.25, 0.7, 1],
+                      }}
+                    />
                   ))}
                 </div>
+              )}
+              <div className="flex items-start gap-3 relative">
+                {/* Médaille : rotation compense le pop (entre par la gauche,
+                    se redresse en spring — rien n'apparaît de nulle part). */}
+                <motion.div
+                  initial={reducedMotion ? false : { opacity: 0, scale: 0.6, rotate: -14 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", duration: 0.55, bounce: 0.3, delay: 0.08 }}
+                  className="relative shrink-0 w-11 h-11 rounded-full bg-gradient-to-br from-[var(--color-mobility-orange)]/25 to-[var(--color-mobility-orange)]/10 ring-1 ring-[var(--color-mobility-orange)]/30 flex items-center justify-center"
+                >
+                  <Sparkles size={18} className="text-[var(--color-mobility-orange)]" />
+                </motion.div>
+                <div className="flex-1 min-w-0">
+                  <motion.p
+                    initial={reducedMotion ? false : { opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.14, duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                    className="text-sm font-semibold text-[var(--color-text-primary)]"
+                  >
+                    {newBadges.length > 1
+                      ? `${newBadges.length} nouveaux succès débloqués !`
+                      : "Nouveau succès débloqué !"}
+                  </motion.p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {newBadges.map((b, i) => (
+                      <motion.span
+                        key={b.key}
+                        initial={reducedMotion ? false : { opacity: 0, scale: 0.85, y: 8 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        transition={{
+                          type: "spring",
+                          duration: 0.45,
+                          bounce: 0.25,
+                          delay: 0.22 + i * 0.07,
+                        }}
+                        className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text-primary)] border border-[var(--color-mobility-orange)]/25 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+                      >
+                        {/* L'emoji est la médaille : il pop avec un léger
+                            overshot (bounce) — célébration, pas dashboard. */}
+                        <motion.span
+                          aria-hidden
+                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--color-mobility-orange)]/15 text-sm"
+                          initial={reducedMotion ? false : { scale: 0.5 }}
+                          animate={{ scale: [1.15, 1] }}
+                          transition={{ delay: 0.3 + i * 0.07, duration: 0.35 }}
+                        >
+                          {b.emoji}
+                        </motion.span>
+                        {b.label}
+                      </motion.span>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setNewBadges([])}
+                  className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] p-1 rounded-full transition-colors active:scale-90"
+                  aria-label="Fermer la célébration"
+                >
+                  <UrbanFlowIcon type="action" name="close" size={16} />
+                </button>
               </div>
-              <button
-                onClick={() => setNewBadges([])}
-                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] p-1"
-                aria-label="Fermer"
-              >
-                <UrbanFlowIcon type="action" name="close" size={16} />
-              </button>
             </div>
           </motion.div>
         )}
