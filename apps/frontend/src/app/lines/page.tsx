@@ -16,6 +16,7 @@ import {
 } from "@/services/favorites";
 import { alertMatchesLine } from "@/lib/alerts";
 import { formatModeLabel } from "@/lib/modeMeta";
+import { normalizeHexColor } from "@/lib/colors";
 
 const MODE_TABS = [
   { key: "metro" as const, label: "Métro", emoji: "🚇" },
@@ -33,12 +34,6 @@ function modeIcon(mode: string) {
   if (m.includes("bus")) return <UrbanFlowIcon type="transport" name="bus" size={14} />;
   if (m.includes("metro") || m.includes("métro")) return <UrbanFlowIcon type="transport" name="train" size={14} />;
   return <UrbanFlowIcon type="action" name="locate" size={14} />;
-}
-
-function normalizeHex(c?: string): string {
-  if (!c) return "#2E7D9B";
-  if (c.startsWith("#")) return c;
-  return `#${c}`;
 }
 
 function findLineById(
@@ -65,7 +60,7 @@ function FavoriteLineCard({
   onToggle: () => void;
 }) {
   const lineName = fav.mode || networkLine?.shortName || "Ligne";
-  const lineColor = normalizeHex(fav.modeColor || networkLine?.color);
+  const lineColor = normalizeHexColor(fav.modeColor || networkLine?.color);
   const lineId = fav.lineId || networkLine?.id;
   const lineAlerts = useMemo(
     () =>
@@ -198,7 +193,7 @@ function LineBadge({
     >
       <span
         className="inline-flex items-center justify-center min-w-[28px] h-[22px] px-1 rounded text-[11px] font-bold text-white"
-        style={{ backgroundColor: `#${line.color}` }}
+        style={{ backgroundColor: normalizeHexColor(line.color) }}
       >
         {line.shortName}
       </span>
@@ -286,7 +281,9 @@ export default function LinesPage() {
           lineId: line.id,
           lineName: line.shortName,
           mode,
-          modeColor: `#${line.color}`,
+          // Sans « # » : même convention que l'API réseau. L'affichage
+          // normalise via normalizeHexColor (le # est ajouté à la lecture).
+          modeColor: line.color,
         });
         setFavoriteLines((prev) => [...prev, { ...fav, type: "line" }]);
       }

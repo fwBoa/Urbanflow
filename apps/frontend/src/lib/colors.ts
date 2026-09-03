@@ -29,3 +29,31 @@ export function getContrastColor(backgroundColor: string): string {
   }
   return hexToLuminance(hex) > 0.5 ? "#000000" : "#FFFFFF";
 }
+
+/**
+ * Normalise une couleur hexadécimale vers la forme « #RRGGBB », quelle que
+ * soit la convention de la source : le référentiel réseau IDFM renvoie les
+ * couleurs sans « # » (« eb2132 ») tandis que les segments de trajet et les
+ * favoris historiques les stockent avec (« #eb2132 »). Sans normalisation,
+ * préfixer un `#` à une valeur déjà préfixée produit un CSS invalide
+ * (« ##eb2132 » → fond transparent, texte illisible — bug constaté sur les
+ * chips « Lignes suivies » de /favorites). Tolère aussi les formats 3 et
+ * 8 digits ; fallback bleu UrbanFlow si la valeur est inexploitable.
+ */
+export function normalizeHexColor(color?: string | null): string {
+  if (!color) return "#2E7D9B";
+  // Retire TOUS les dièses initiaux : certaines entrées historiques stockent
+  // un double préfixe (« ##eb2132 ») — la faute du bug des pastilles blanches.
+  let hex = color.trim().replace(/^#+/, "");
+  // Format court (#abc → #aabbcc)
+  if (/^[0-9A-Fa-f]{3}$/.test(hex)) {
+    hex = hex
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  if (/^[0-9A-Fa-f]{6}$/.test(hex)) {
+    return `#${hex.toUpperCase()}`;
+  }
+  return "#2E7D9B";
+}

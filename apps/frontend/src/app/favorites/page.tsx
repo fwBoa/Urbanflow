@@ -15,7 +15,7 @@ import {
   type HistoryJourney,
 } from "@/services/favorites";
 import { useAuth } from "@/contexts/AuthContext";
-import { getContrastColor } from "@/lib/colors";
+import { getContrastColor, normalizeHexColor as normalizeHex } from "@/lib/colors";
 import { formatModeLabel } from "@/lib/modeMeta";
 
 export default function FavoritesPage() {
@@ -229,7 +229,12 @@ export default function FavoritesPage() {
                     <span
                       className="inline-flex items-center justify-center min-w-[28px] h-[22px] px-1 rounded text-[11px] font-bold"
                       style={{
-                        backgroundColor: `#${line.modeColor}`,
+                        // modeColor peut être stocké avec ou sans « # »
+                        // selon la source du favori (segment vs réseau) :
+                        // normaliser avant de construire le CSS, sinon un
+                        // double « # » produit un fond invalide (invisible
+                        // en clair, texte blanc illisible en foncé).
+                        backgroundColor: normalizeHex(line.modeColor),
                         color: getContrastColor(line.modeColor),
                       }}
                     >

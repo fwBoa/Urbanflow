@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { getFavorites, type FavoriteJourney } from "@/services/favorites";
 import { alertMatchesLine } from "@/lib/alerts";
+import { normalizeHexColor } from "@/lib/colors";
 
 function alertMatchesAnyFavorite(
   alert: RealtimeAlert,
@@ -378,8 +379,9 @@ function AlertsPageContent() {
                               key={`${alert.id}-${line.name}`}
                               mode={line.mode}
                               lineName={line.code || line.name}
-                              // Couleur officielle IDFM quand Navitia l'expose (hex sans #)
-                              lineColor={line.color ? `#${line.color}` : undefined}
+                              // Couleur officielle IDFM — normalisée (la source
+                              // peut exposer la valeur avec ou sans « # »)
+                              lineColor={line.color ? normalizeHexColor(line.color) : undefined}
                               size="sm"
                             />
                           ))}
