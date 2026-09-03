@@ -16,6 +16,8 @@ import {
   Lock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import UrbanFlowIcon from "@/components/icons/UrbanFlowIcon";
 import AppShell from "@/components/AppShell";
 import Switch from "@/components/Switch";
@@ -57,6 +59,7 @@ const avatarOptions = ["🚇", "🚲", "🚊", "🚈", "🚍", "🚶", "🌍", "
 export default function ProfilePage() {
   const { user, isAuthenticated, logout } = useAuth();
   const router = useRouter();
+  const reducedMotion = usePrefersReducedMotion();
   const [stats, setStats] = useState<UserStats>({ totalTrips: 0, co2Saved: 0, favoriteCount: 0 });
   const [prefs, setPrefs] = useState<UserPreferences>(() => getPreferences());
   const [profile, setProfile] = useState<UserProfile>({ name: "Utilisateur", email: "", avatar: "🚇" });
@@ -264,40 +267,71 @@ export default function ProfilePage() {
 
   return (
     <AppShell title="Profil">
-      {/* Notification de nouveaux badges */}
-      {newBadges.length > 0 && (
-        <div className="mb-4 rounded-[var(--card-radius)] bg-[var(--color-mobility-orange)]/10 border border-[var(--color-mobility-orange)]/20 p-3">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-[var(--color-mobility-orange)]/15 flex items-center justify-center shrink-0">
-              <Sparkles size={16} className="text-[var(--color-mobility-orange)]" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                {newBadges.length > 1
-                  ? `${newBadges.length} nouveaux succès débloqués !`
-                  : "Nouveau succès débloqué !"}
-              </p>
-              <div className="flex flex-wrap gap-2 mt-1.5">
-                {newBadges.map((b) => (
-                  <span
-                    key={b.key}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text-primary)] border border-[var(--color-border)]"
-                  >
-                    <span>{b.emoji}</span> {b.label}
-                  </span>
-                ))}
+      {/* Célébration de nouveaux badges — animée (respecte reduced motion) */}
+      <AnimatePresence>
+        {newBadges.length > 0 && (
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: -16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reducedMotion ? undefined : { opacity: 0, y: -8 }}
+            transition={{ type: "spring", stiffness: 300, damping: 24 }}
+            role="status"
+            className="mb-4 rounded-[var(--card-radius)] bg-[var(--color-mobility-orange)]/10 border border-[var(--color-mobility-orange)]/20 p-3 relative overflow-hidden"
+          >
+            {/* Halo animé en fond (masqué si reduced motion) */}
+            {!reducedMotion && (
+              <motion.div
+                aria-hidden
+                className="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-[var(--color-mobility-orange)]/10 blur-2xl"
+                animate={{ scale: [1, 1.4, 1], opacity: [0.4, 0.7, 0.4] }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+              />
+            )}
+            <div className="flex items-start gap-3 relative">
+              <motion.div
+                initial={reducedMotion ? false : { scale: 0, rotate: -30 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 15, delay: 0.1 }}
+                className="w-8 h-8 rounded-full bg-[var(--color-mobility-orange)]/15 flex items-center justify-center shrink-0"
+              >
+                <Sparkles size={16} className="text-[var(--color-mobility-orange)]" />
+              </motion.div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  {newBadges.length > 1
+                    ? `${newBadges.length} nouveaux succès débloqués !`
+                    : "Nouveau succès débloqué !"}
+                </p>
+                <div className="flex flex-wrap gap-2 mt-1.5">
+                  {newBadges.map((b, i) => (
+                    <motion.span
+                      key={b.key}
+                      initial={reducedMotion ? false : { opacity: 0, scale: 0.6 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 20,
+                        delay: 0.25 + i * 0.12,
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text-primary)] border border-[var(--color-border)]"
+                    >
+                      <span className="text-base" aria-hidden>{b.emoji}</span> {b.label}
+                    </motion.span>
+                  ))}
+                </div>
               </div>
+              <button
+                onClick={() => setNewBadges([])}
+                className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] p-1"
+                aria-label="Fermer"
+              >
+                <UrbanFlowIcon type="action" name="close" size={16} />
+              </button>
             </div>
-            <button
-              onClick={() => setNewBadges([])}
-              className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] p-1"
-              aria-label="Fermer"
-            >
-              <UrbanFlowIcon type="action" name="close" size={16} />
-            </button>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Avatar & Info */}
       <div className="flex flex-col items-center mb-6">

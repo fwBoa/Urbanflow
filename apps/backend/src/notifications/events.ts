@@ -87,3 +87,16 @@ export class HistoryUpdatedEvent {
 export class FavoritesUpdatedEvent {
   constructor(public readonly userId: string) {}
 }
+
+/** Badge débloqué par un utilisateur — porte les données d'affichage du push. */
+export class BadgeUnlockedEvent {
+  constructor(
+    public readonly userId: string,
+    /** Clé technique du badge (ex. 'first_trip'). */
+    public readonly badgeKey: string,
+    /** Libellé affichable (ex. « Premier trajet »). */
+    public readonly label: string,
+    /** Emoji du badge (ex. « 🎉 »). */
+    public readonly emoji: string,
+  ) {}
+}

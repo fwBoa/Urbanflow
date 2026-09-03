@@ -1,12 +1,13 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { OnEvent } from '@nestjs/event-emitter';
+import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
 import { Repository } from 'typeorm';
 import { BadgeUnlock } from './badge.entity';
 import { FavoritesService } from '../favorites/favorites.service';
 import {
   HistoryUpdatedEvent,
   FavoritesUpdatedEvent,
+  BadgeUnlockedEvent,
 } from '../notifications/events';
 
 export interface BadgeDefinition {
@@ -83,6 +84,7 @@ export class BadgesService {
     @InjectRepository(BadgeUnlock)
     private readonly badgeRepo: Repository<BadgeUnlock>,
     private readonly favoritesService: FavoritesService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -118,7 +120,18 @@ export class BadgesService {
       badgeKey,
       metadata: { ...stats },
     });
-    return this.badgeRepo.save(unlock);
+    const saved = await this.badgeRepo.save(unlock);
+
+    // Notifie l'utilisateur de son nouveau badge (push + cloche in-app).
+    // Émis APRÈS la persistance — jamais pour un badge déjà possédé.
+    const def = BADGE_DEFINITIONS.find((d) => d.key === badgeKey);
+    if (def) {
+      this.eventEmitter.emit(
+        'badge.unlocked',
+        new BadgeUnlockedEvent(userId, def.key, def.label, def.emoji),
+      );
+    }
+    return saved;
   }
 
   /**

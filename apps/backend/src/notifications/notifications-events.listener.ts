@@ -14,6 +14,7 @@ import {
   DepartureReminderEvent,
   JourneyDisruptionEvent,
   WeeklyDigestEvent,
+  BadgeUnlockedEvent,
 } from './events';
 
 /**
@@ -391,6 +392,43 @@ export class NotificationsEventsListener {
     });
 
     this.logger.log(`Weekly digest sent to user ${userId}`);
+  }
+
+  /**
+   * Badge débloqué : notification in-app + push de célébration.
+   * Émis par BadgesService après persistance du unlock — l'utilisateur
+   * concerné est le seul destinataire, pas de filtre nécessaire.
+   */
+  @OnEvent('badge.unlocked', { async: true })
+  async handleBadgeUnlocked({
+    userId,
+    label,
+    emoji,
+  }: BadgeUnlockedEvent): Promise<void> {
+    const title = `${emoji} Nouveau succès : ${label}`;
+    const body = 'Félicitations ! Consultez vos succès dans votre profil.';
+    const actionUrl = '/profile';
+
+    await this.notifRepo.save(
+      this.notifRepo.create({
+        userId,
+        type: 'info',
+        title,
+        message: body,
+        actionUrl,
+        isRead: false,
+      }),
+    );
+
+    // Le push part même si les notifications temps réel sont désactivées :
+    // un déblocage de badge est sollicité par l'usage, pas du spam.
+    await this.pushService.sendToUser(userId, {
+      title,
+      body,
+      actionUrl,
+    });
+
+    this.logger.log(`Badge unlocked notification sent to user ${userId}`);
   }
 
   private lineMatchesRoute(lineName: string, route: string): boolean {

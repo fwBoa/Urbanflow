@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Repository } from 'typeorm';
 import { BadgesService, type UserBadgeStats } from './badges.service';
 import { BadgeUnlock } from './badge.entity';
@@ -41,6 +42,10 @@ describe('BadgesService', () => {
         {
           provide: FavoritesService,
           useValue: mockFavoritesService,
+        },
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
         },
       ],
     }).compile();
@@ -118,6 +123,52 @@ describe('BadgesService', () => {
       await service.handleHistoryUpdated(new HistoryUpdatedEvent('user-1'));
       expect(favoritesService.getStats).toHaveBeenCalledWith('user-1');
       expect(badgeRepo.save).toHaveBeenCalled();
+    });
+
+    it('emits badge.unlocked for each newly unlocked badge only', async () => {
+      const emitter = service['eventEmitter'];
+      (emitter.emit as jest.Mock).mockClear();
+      // Simule la persistance : findOne retourne l'existant au 2e appel.
+      let unlockCount = 0;
+      jest.spyOn(badgeRepo, 'findOne').mockImplementation(() =>
+        Promise.resolve(
+          unlockCount > 0
+            ? ({
+                id: 'u1',
+                userId: 'user-1',
+                badgeKey: 'first_trip',
+              } as BadgeUnlock)
+            : null,
+        ),
+      );
+      jest.spyOn(badgeRepo, 'save').mockImplementation(() => {
+        unlockCount += 1;
+        return Promise.resolve({
+          id: 'u1',
+          userId: 'user-1',
+          badgeKey: 'first_trip',
+          metadata: {},
+        } as BadgeUnlock);
+      });
+      await service.handleHistoryUpdated(new HistoryUpdatedEvent('user-1'));
+      const calls = (emitter.emit as jest.Mock).mock.calls.filter(
+        ([event]) => event === 'badge.unlocked',
+      );
+      // Un seul événement émis au premier unlock, avec les données d'affichage.
+      expect(calls).toHaveLength(1);
+      const [, event] = calls[0];
+      expect(event.badgeKey).toBeDefined();
+      expect(event.label).toBeDefined();
+      expect(event.emoji).toBeDefined();
+      expect(event.userId).toBe('user-1');
+      // Rejouer le même unlock ne ré-émet pas (pas de doublon).
+      (emitter.emit as jest.Mock).mockClear();
+      await service.handleHistoryUpdated(new HistoryUpdatedEvent('user-1'));
+      expect(
+        (emitter.emit as jest.Mock).mock.calls.filter(
+          ([e]) => e === 'badge.unlocked',
+        ).length,
+      ).toBe(0);
     });
   });
 
