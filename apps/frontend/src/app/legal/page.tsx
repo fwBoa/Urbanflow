@@ -27,10 +27,10 @@ export default function LegalPage() {
             2. Hébergeur
           </h2>
           <ul className="space-y-1">
-            <li><strong>Hostinger</strong></li>
-            <li>Hostinger International Ltd, Jonavos g. 60, 03101 Vilnius, Lituanie</li>
-            <li>Datacenter : Paris, France</li>
-            <li>Site : <a href="https://www.hostinger.fr" target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] underline">hostinger.fr</a></li>
+            <li><strong>OVHcloud</strong></li>
+            <li>OVH SAS, 2 rue Kellermann, 59100 Roubaix, France</li>
+            <li>Infrastructure : VPS OVHcloud, datacenter européen (Roubaix/Gravelines)</li>
+            <li>Site : <a href="https://www.ovhcloud.com/fr/" target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] underline">ovhcloud.com</a></li>
           </ul>
         </section>
 
@@ -105,10 +105,30 @@ export default function LegalPage() {
           </p>
         </section>
 
+        {/* ─── Services optionnels (notifications, badges) ─── */}
+        <section>
+          <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
+            6. Services optionnels
+          </h2>
+          <ul className="space-y-1">
+            <li>
+              <strong>Notifications push</strong> (Web Push / VAPID) — envoyées
+              uniquement avec ton consentement explicite, pour les perturbations
+              sur tes lignes suivies, les rappels de départ, ton récap hebdomadaire
+              et tes succès débloqués. Désactivables à tout moment depuis le profil.
+            </li>
+            <li>
+              <strong>Succès (badges)</strong> — attribués selon ton usage de
+              l&apos;application (nombre de trajets, CO₂ économisé, favoris).
+              Consultables et effacés avec ton compte.
+            </li>
+          </ul>
+        </section>
+
         {/* ─── Limitation de responsabilité ─── */}
         <section>
           <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
-            6. Limitation de responsabilité
+            7. Limitation de responsabilité
           </h2>
           <p>
             UrbanFlow Mobility est un projet académique. Les informations de transport sont fournies à titre indicatif
@@ -121,7 +141,7 @@ export default function LegalPage() {
         {/* ─── Contact ─── */}
         <section>
           <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
-            7. Contact
+            8. Contact
           </h2>
           <ul className="space-y-1">
             <li>Questions générales : <a href="mailto:contact@urbanflow.app" className="text-[var(--color-primary)] underline">contact@urbanflow.app</a></li>
@@ -130,7 +150,7 @@ export default function LegalPage() {
         </section>
 
         <p className="text-xs text-[var(--color-text-tertiary)]">
-          Dernière mise à jour : 20 mai 2026
+          Dernière mise à jour : 3 septembre 2026
         </p>
       </div>
     </AppShell>

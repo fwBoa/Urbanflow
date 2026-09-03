@@ -17,6 +17,10 @@ export default function PrivacyPage() {
           <p>
             Contact : <a href="mailto:jeandavidzamblezie@outlook.fr" className="text-[var(--color-primary)] underline">jeandavidzamblezie@outlook.fr</a>
           </p>
+          <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">
+            Projet académique (T6 CDSD) — aucune donnée n&apos;est vendue ni
+            cédée à des tiers à des fins publicitaires.
+          </p>
         </section>
 
         {/* ─── Données collectées ─── */}
@@ -69,6 +73,24 @@ export default function PrivacyPage() {
                   <td className="py-2">90 jours</td>
                 </tr>
                 <tr>
+                  <td className="py-2 pr-2">Abonnement push (endpoint navigateur, clés de chiffrement)</td>
+                  <td className="py-2 pr-2">Notifications push (perturbations, rappels, récap, succès)</td>
+                  <td className="py-2 pr-2">Consentement (art. 6.1.a)</td>
+                  <td className="py-2">Jusqu&apos;au retrait du consentement</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-2">Notifications in-app</td>
+                  <td className="py-2 pr-2">Alertes ciblées, récap hebdomadaire, succès débloqués</td>
+                  <td className="py-2 pr-2">Consentement (art. 6.1.a)</td>
+                  <td className="py-2">Durée du compte — effaçables à tout moment</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-2">Succès débloqués (badges)</td>
+                  <td className="py-2 pr-2">Gamification de l&apos;usage</td>
+                  <td className="py-2 pr-2">Consentement (art. 6.1.a)</td>
+                  <td className="py-2">Durée du compte</td>
+                </tr>
+                <tr>
                   <td className="py-2 pr-2">Logs de navigation</td>
                   <td className="py-2 pr-2">Sécurité et debug</td>
                   <td className="py-2 pr-2">Intérêt légitime (art. 6.1.f)</td>
@@ -88,6 +110,7 @@ export default function PrivacyPage() {
             <li><strong>Géolocalisation</strong> : bannière explicite au premier accès. Refus possible, l&apos;application reste utilisable.</li>
             <li><strong>Compte utilisateur</strong> : case à cocher non pré-cochée pour les CGU et la politique de confidentialité.</li>
             <li><strong>Cookies</strong> : bannière avec choix granulaire (nécessaires, fonctionnels, analytiques).</li>
+            <li><strong>Notifications push</strong> : permission navigateur demandée à l&apos;activation dans le profil ; révocable depuis le réglages du navigateur et l&apos;application.</li>
           </ul>
           <p className="mt-2">
             Chaque consentement est enregistré avec la date, l&apos;horodatage et la version de la politique.
@@ -186,7 +209,7 @@ export default function PrivacyPage() {
             La date de dernière mise à jour est indiquée ci-dessous.
           </p>
           <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">
-            Dernière mise à jour : 10 juillet 2026 — Version 1.1
+            Dernière mise à jour : 3 septembre 2026 — Version 1.2
           </p>
         </section>
       </div>
