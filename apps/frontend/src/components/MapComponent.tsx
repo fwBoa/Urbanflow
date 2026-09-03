@@ -298,8 +298,11 @@ export default function MapComponent({
     const icon = L.icon({
       className: "user-position-marker",
       iconUrl: "/assets/urbanflow/map/user-location.svg",
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
+      // Rendu 32×32 (SVG 40×40 sans rognage) : point GPS lisible en mobilité.
+      // L'ancienne version (halo 13px sur iconSize 24×24) produisait un effet
+      // « spirale » — cercles concentriques tronqués par le viewport.
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
     });
 
     userMarkerRef.current = L.marker([userPosition.lat, userPosition.lon], {
