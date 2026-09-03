@@ -16,7 +16,7 @@ export default function Header({ title, showBack = false, rightAction }: HeaderP
 
   return (
     <header
-      className="sticky top-0 z-40 grid grid-cols-[1fr_auto_1fr] items-center h-[var(--header-height)] px-4 bg-background/85 backdrop-blur-md text-[var(--color-text-primary)] border-b border-[var(--color-border)]/60 safe-area-top transition-colors duration-300"
+      className="sticky top-0 z-[1100] grid grid-cols-[1fr_auto_1fr] items-center h-[var(--header-height)] px-4 bg-background/85 backdrop-blur-md text-[var(--color-text-primary)] border-b border-[var(--color-border)]/60 safe-area-top transition-colors duration-300"
       role="banner"
     >
       <div className="justify-self-start">
