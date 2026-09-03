@@ -69,6 +69,8 @@ export default function ProfilePage() {
   const [nameInput, setNameInput] = useState("");
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [newBadges, setNewBadges] = useState<Badge[]>([]);
+  // Confirmation de déconnexion (pop-up au lieu d'une déconnexion immédiate).
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ─── Changement de mot de passe ───
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -246,6 +248,11 @@ export default function ProfilePage() {
   };
 
   const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutConfirm(false);
     logout();
     router.push("/");
   };
@@ -818,6 +825,45 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation de déconnexion — même pattern que la modale /favorites */}
+      {showLogoutConfirm && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="logout-confirm-title"
+        >
+          <div className="bg-[var(--color-background)] rounded-[var(--card-radius)] p-5 w-full max-w-md border border-[var(--color-border)] shadow-xl">
+            <h3
+              id="logout-confirm-title"
+              className="text-base font-semibold text-[var(--color-text-primary)] mb-2"
+            >
+              Se déconnecter ?
+            </h3>
+            <p className="text-sm text-[var(--color-text-secondary)] mb-5">
+              Tu devras te reconnecter pour retrouver tes favoris, ton
+              historique et tes notifications.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                className="px-4 py-2 rounded-[var(--cta-radius)] text-sm font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)] border border-[var(--color-border)] hover:bg-[var(--color-border)]/40 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmLogout}
+                className="px-4 py-2 rounded-[var(--cta-radius)] text-sm font-medium bg-[var(--color-favorite-red)] text-white hover:opacity-90 transition-opacity"
+              >
+                Se déconnecter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
