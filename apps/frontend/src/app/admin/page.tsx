@@ -18,7 +18,7 @@ import {
   Database,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import { adminApi, type DashboardStats, type User, type GtfsStatus } from "@/services/admin";
+import { adminApi, type DashboardStats, type User, type GtfsStatus, type ServicesHealth } from "@/services/admin";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function AdminPage() {
@@ -31,6 +31,14 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Santé des services (opérateur)
+  const [servicesHealth, setServicesHealth] = useState<ServicesHealth | null>(null);
+
+  // Test badge (force le déblocage pour valider push + célébration)
+  const [badgeTestUser, setBadgeTestUser] = useState<string>("");
+  const [badgeTestKey, setBadgeTestKey] = useState<string>("first_trip");
+  const [badgeTesting, setBadgeTesting] = useState(false);
 
   // Broadcast notification state
   const [broadcastTitle, setBroadcastTitle] = useState("");
@@ -55,18 +63,45 @@ export default function AdminPage() {
     try {
       setLoading(true);
       setError(null);
-      const [dashboardStats, usersList, gtfs] = await Promise.all([
+      const [dashboardStats, usersList, gtfs, health] = await Promise.all([
         adminApi.getDashboard(),
         adminApi.getUsers(),
         adminApi.getGtfsStatus(),
+        adminApi.getServicesHealth().catch(() => null),
       ]);
       setStats(dashboardStats);
       setUsers(usersList);
       setGtfsStatus(gtfs);
+      setServicesHealth(health);
+      // Pré-sélectionne le premier utilisateur pour le test badge
+      // (functional update : pas de dépendance au state dans le closure).
+      setBadgeTestUser((current) => current || usersList[0]?.id || "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur de chargement");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleForceBadgeUnlock() {
+    if (!badgeTestUser) return;
+    setBadgeTesting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await adminApi.forceBadgeUnlock({
+        userId: badgeTestUser,
+        badgeKey: badgeTestKey,
+      });
+      setSuccess(
+        res.unlocked
+          ? `Badge « ${res.badge?.label} » débloqué — push + célébration envoyés.`
+          : `Badge « ${res.badge?.label} » déjà possédé — aucune nouvelle notification (idempotent).`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec du déblocage");
+    } finally {
+      setBadgeTesting(false);
     }
   }
 
@@ -281,6 +316,110 @@ export default function AdminPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Services Health */}
+      <div className="bg-[var(--color-surface)] rounded-[var(--card-radius)] p-4 border border-[var(--color-border)] mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-[var(--color-text-primary)] flex items-center gap-2">
+            <Activity size={16} />
+            Santé des services
+          </h3>
+          {servicesHealth && (
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                servicesHealth.status === "healthy"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-amber-100 text-amber-800"
+              }`}
+            >
+              {servicesHealth.status === "healthy" ? "OPÉRATIONNEL" : "DÉGRADÉ"}
+            </span>
+          )}
+        </div>
+        {servicesHealth ? (
+          <div className="space-y-1.5">
+            {servicesHealth.checks.map((check) => (
+              <div
+                key={check.name}
+                className="flex items-center justify-between gap-2 text-xs"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {check.status === "up" ? (
+                    <CheckCircle className="text-green-600 shrink-0" size={14} />
+                  ) : (
+                    <XCircle className="text-red-600 shrink-0" size={14} />
+                  )}
+                  <span className="text-[var(--color-text-primary)] text-xs font-medium truncate">
+                    {check.name}
+                  </span>
+                </div>
+                <span className="text-[10px] text-[var(--color-text-tertiary)] shrink-0">
+                  {check.detail
+                    ? check.detail
+                    : check.latencyMs != null
+                      ? `${check.latencyMs} ms`
+                      : ""}
+                </span>
+              </div>
+            ))}
+            <p className="text-[10px] text-[var(--color-text-tertiary)] pt-1">
+              Vérifié à{" "}
+              {new Date(servicesHealth.timestamp).toLocaleTimeString("fr-FR")}
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-[var(--color-text-tertiary)]">
+            État des services indisponible.
+          </p>
+        )}
+      </div>
+
+      {/* Badge unlock test */}
+      <div className="bg-[var(--color-surface)] rounded-[var(--card-radius)] p-4 border border-[var(--color-border)] mb-6">
+        <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-1 flex items-center gap-2">
+          <TrendingUp size={16} />
+          Test : forcer un déblocage de badge
+        </h3>
+        <p className="text-xs text-[var(--color-text-tertiary)] mb-3">
+          Déclenche la chaîne complète (notification in-app + push + célébration
+          au prochain chargement du profil) sans attendre les seuils réels.
+          Idempotent : re-forcer un badge possédé ne re-notifie pas.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <select
+            value={badgeTestUser}
+            onChange={(e) => setBadgeTestUser(e.target.value)}
+            aria-label="Utilisateur cible"
+            className="flex-1 px-2.5 py-2 bg-white border border-[var(--color-border)] rounded-lg text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]"
+          >
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.displayName || u.email}
+              </option>
+            ))}
+          </select>
+          <select
+            value={badgeTestKey}
+            onChange={(e) => setBadgeTestKey(e.target.value)}
+            aria-label="Badge à débloquer"
+            className="px-2.5 py-2 bg-white border border-[var(--color-border)] rounded-lg text-xs text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]"
+          >
+            <option value="first_trip">🎉 Premier trajet</option>
+            <option value="eco_warrior">🌿 Éco-guerrier</option>
+            <option value="explorer">🗺️ Explorateur</option>
+            <option value="regular">🚇 Régulier</option>
+            <option value="velib_fan">🚲 Vélib&apos; fan</option>
+            <option value="carbon_neutral">🌍 Carbone neutre</option>
+          </select>
+          <button
+            onClick={handleForceBadgeUnlock}
+            disabled={badgeTesting || !badgeTestUser}
+            className="px-3 py-2 text-xs font-medium bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-dark)] disabled:opacity-50 whitespace-nowrap"
+          >
+            {badgeTesting ? "Déblocage…" : "Débloquer"}
+          </button>
+        </div>
       </div>
 
       {/* Broadcast Notification */}

@@ -196,6 +196,25 @@ export class PrimService implements OnModuleInit {
   }
 
   /**
+   * Ping léger du PRIM pour le health-check admin : une requête minimum
+   * (limit 1) suffit à valider la clé API et la joignabilité. Timeout
+   * volontairement court — un service lent est un service dégradé.
+   */
+  async checkConnectivity(): Promise<boolean> {
+    try {
+      await firstValueFrom(
+        this.httpService.get(
+          `${this.dataApiUrl}/catalog/datasets/referentiel-des-lignes/records`,
+          { params: { limit: '1' }, timeout: 3000 },
+        ),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Effectue un appel à l'API OpenData IDFM (données statiques)
    */
   private async callDataApi<T = unknown>(

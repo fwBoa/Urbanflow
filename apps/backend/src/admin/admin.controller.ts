@@ -123,4 +123,35 @@ export class AdminController {
   async getGtfsStatus() {
     return this.adminService.getGtfsStatus();
   }
+
+  // ─── Santé des services & outils de test ─────────────────────────────────
+
+  /**
+   * GET /api/admin/services-health → état des sous-systèmes
+   * (PostgreSQL, table badges, Navitia PRIM, GTFS). Vue opérateur :
+   * détecte les dégradations qui échouent silencieusement ailleurs.
+   */
+  @Get('services-health')
+  @Roles('admin')
+  async getServicesHealth() {
+    return this.adminService.getServicesHealth();
+  }
+
+  /**
+   * POST /api/admin/badges/unlock → force le déblocage d'un badge
+   * (test de la chaîne notification push + célébration sans attendre
+   * les seuils réels). Idempotent : re-forcer ne re-notifie pas.
+   * Body : { userId, badgeKey }
+   */
+  @Post('badges/unlock')
+  @Roles('admin')
+  async forceBadgeUnlock(@Body() body: { userId: string; badgeKey: string }) {
+    if (!body?.userId || !body?.badgeKey) {
+      throw new HttpException(
+        'userId et badgeKey sont requis',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return this.adminService.forceBadgeUnlock(body.userId, body.badgeKey);
+  }
 }

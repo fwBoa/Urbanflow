@@ -7,7 +7,10 @@ import { History } from '../favorites/history.entity';
 import { Notification } from '../notifications/notification.entity';
 import { GtfsParserService } from '../transport/gtfs-parser.service';
 import { PrimService } from '../transport/prim.service';
-import { BroadcastNotificationEvent } from '../notifications/events';
+import {
+  BroadcastNotificationEvent,
+  BadgeUnlockedEvent,
+} from '../notifications/events';
 
 @Injectable()
 export class AdminService {
@@ -237,5 +240,139 @@ export class AdminService {
       lastLoadTime: await this.gtfsParser.getLastLoadTime(),
       stats: loaded ? await this.gtfsParser.getStats() : null,
     };
+  }
+
+  /**
+   * Santé des services internes — vue opérateur pour l'admin.
+   * Chaque check est best-effort : un service dégradé ne doit pas faire
+   * échouer le rapport des autres (c'est précisément l'info qu'on veut).
+   * L'état SQL de chaque sous-système (ex. table badge_unlocks joignable)
+   * permet de détecter les bugs de mapping/colonnes qui échouent
+   * silencieusement ailleurs (Bloc 80).
+   */
+  async getServicesHealth() {
+    const checks: Array<{
+      name: string;
+      status: 'up' | 'down';
+      detail?: string;
+      latencyMs?: number;
+    }> = [];
+
+    // 1. PostgreSQL — la requête la plus simple possible + latence.
+    const dbStart = Date.now();
+    try {
+      await this.userRepo.query('SELECT 1');
+      checks.push({
+        name: 'PostgreSQL',
+        status: 'up',
+        latencyMs: Date.now() - dbStart,
+      });
+    } catch (err) {
+      checks.push({
+        name: 'PostgreSQL',
+        status: 'down',
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // 2. Table badge_unlocks joignable (le bug silencieux du Bloc 80).
+    try {
+      const count = await this.userRepo.manager
+        .getRepository('BadgeUnlock')
+        .count();
+      checks.push({
+        name: 'Badges (badge_unlocks)',
+        status: 'up',
+        detail: `${count} badge(s) débloqué(s)`,
+      });
+    } catch (err) {
+      checks.push({
+        name: 'Badges (badge_unlocks)',
+        status: 'down',
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // 3. Navitia PRIM — ping des disruptions (source des alertes).
+    const primStart = Date.now();
+    try {
+      const reachable = await this.primService.checkConnectivity();
+      checks.push({
+        name: 'Navitia PRIM',
+        status: reachable ? 'up' : 'down',
+        latencyMs: Date.now() - primStart,
+      });
+    } catch (err) {
+      checks.push({
+        name: 'Navitia PRIM',
+        status: 'down',
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // 4. GTFS chargé.
+    const gtfsLoaded = await this.gtfsParser.isLoaded();
+    checks.push({
+      name: 'GTFS (données réseau)',
+      status: gtfsLoaded ? 'up' : 'down',
+      detail: gtfsLoaded ? undefined : 'Données non chargées',
+    });
+
+    const allUp = checks.every((c) => c.status === 'up');
+    return {
+      status: allUp ? 'healthy' : 'degraded',
+      checks,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Force le déblocage d'un badge pour tester la chaîne complète
+   * (notification in-app + push + célébration) sans attendre les seuils
+   * réels. Utilise la même porte que le déblocage organique : l'événement
+   * `badge.unlocked` est émis, le listener fait le reste.
+   */
+  async forceBadgeUnlock(
+    userId: string,
+    badgeKey: string,
+  ): Promise<{
+    unlocked: boolean;
+    badge?: { key: string; label: string; emoji: string };
+  }> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`Utilisateur ${userId} introuvable`);
+
+    const BADGE_CATALOG: Record<string, { label: string; emoji: string }> = {
+      first_trip: { label: 'Premier trajet', emoji: '🎉' },
+      eco_warrior: { label: 'Éco-guerrier', emoji: '🌿' },
+      explorer: { label: 'Explorateur', emoji: '🗺️' },
+      regular: { label: 'Régulier', emoji: '🚇' },
+      velib_fan: { label: "Vélib' fan", emoji: '🚲' },
+      carbon_neutral: { label: 'Carbone neutre', emoji: '🌍' },
+    };
+    const def = BADGE_CATALOG[badgeKey];
+    if (!def) {
+      throw new NotFoundException(
+        `Badge inconnu : ${badgeKey} (disponibles : ${Object.keys(BADGE_CATALOG).join(', ')})`,
+      );
+    }
+
+    // Persiste directement (idempotent) puis émet — le listener notifie.
+    const existing: Array<{ id: string }> = await this.userRepo.manager.query(
+      'SELECT id FROM badge_unlocks WHERE user_id = $1 AND badge_key = $2',
+      [userId, badgeKey],
+    );
+    if (existing.length > 0) {
+      return { unlocked: false, badge: { key: badgeKey, ...def } };
+    }
+    await this.userRepo.manager.query(
+      'INSERT INTO badge_unlocks (user_id, badge_key, metadata, unlocked_at) VALUES ($1, $2, $3::jsonb, now())',
+      [userId, badgeKey, JSON.stringify({ forcedByAdmin: true })],
+    );
+    this.eventEmitter.emit(
+      'badge.unlocked',
+      new BadgeUnlockedEvent(userId, badgeKey, def.label, def.emoji),
+    );
+    return { unlocked: true, badge: { key: badgeKey, ...def } };
   }
 }

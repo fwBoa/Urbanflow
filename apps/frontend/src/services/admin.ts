@@ -67,6 +67,19 @@ export interface GtfsStatus {
   } | null;
 }
 
+export interface ServiceCheck {
+  name: string;
+  status: 'up' | 'down';
+  detail?: string;
+  latencyMs?: number;
+}
+
+export interface ServicesHealth {
+  status: 'healthy' | 'degraded';
+  checks: ServiceCheck[];
+  timestamp: string;
+}
+
 // "" in prod → relative "/api/..." via nginx; set in .env for dev cross-port.
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
@@ -139,4 +152,15 @@ export const adminApi = {
   // GTFS
   getGtfsStatus: () => fetchAdmin<GtfsStatus>('/api/admin/gtfs/status'),
   reloadGtfs: () => postAdmin<{ success: boolean; message: string }>('/api/admin/gtfs/reload', {}),
+
+  // Santé des services (état opérateur : DB, badges, Navitia, GTFS)
+  getServicesHealth: () =>
+    fetchAdmin<ServicesHealth>('/api/admin/services-health'),
+
+  // Test badge : force le déblocage (déclenche push + célébration)
+  forceBadgeUnlock: (body: { userId: string; badgeKey: string }) =>
+    postAdmin<{ unlocked: boolean; badge?: { key: string; label: string; emoji: string } }>(
+      '/api/admin/badges/unlock',
+      body,
+    ),
 };
