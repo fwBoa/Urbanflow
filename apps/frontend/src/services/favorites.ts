@@ -140,6 +140,11 @@ export async function addFavorite(journey: {
     const f = await res.json();
     return {
       id: f.id,
+      // lineId : indispensable à la mise à jour optimiste du cœur dans
+      // /lines — sans lui, le favori fraîchement ajouté ne matchait pas
+      // favLineIds et le cœur restait gris jusqu'au rechargement.
+      lineId: (f.lineId as string | undefined) || undefined,
+      type: (f.type as "journey" | "line" | undefined) || "journey",
       from: f.from,
       to: f.to,
       mode: f.mode,
