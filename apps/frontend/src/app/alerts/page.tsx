@@ -45,6 +45,44 @@ const MODE_ORDER: Record<AffectedLine["mode"], number> = {
   autre: 5,
 };
 
+/**
+ * Formate la période de validité Navitia d'une alerte en libellé français.
+ * Format source : « 20260726T094010 » (basic ISO sans séparateurs).
+ * Un jour : « 26 juil. » ; une plage : « 26 juil. → 26 août 2027 ».
+ */
+function formatActivePeriod(
+  periods: { start?: string; end?: string }[],
+): string {
+  const parseNavitia = (s: string): Date | null => {
+    const m = s.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
+    if (!m) return null;
+    return new Date(
+      Number(m[1]),
+      Number(m[2]) - 1,
+      Number(m[3]),
+      Number(m[4]),
+      Number(m[5]),
+      Number(m[6]),
+    );
+  };
+  const fmtDay = (d: Date) =>
+    d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  const first = periods[0];
+  const start = first?.start ? parseNavitia(first.start) : null;
+  const end = first?.end ? parseNavitia(first.end) : null;
+  if (!start) return "";
+  const sameDay =
+    end && start.toDateString() === end.toDateString();
+  if (end && !sameDay) {
+    const endYear =
+      start.getFullYear() !== end.getFullYear()
+        ? ` ${end.getFullYear()}`
+        : "";
+    return `Du ${fmtDay(start)} au ${fmtDay(end)}${endYear}`;
+  }
+  return `Le ${fmtDay(start)}`;
+}
+
 function detectModeFromName(name: string): AffectedLine["mode"] {
   const n = name.toUpperCase();
   if (n.includes("METRO") || n.includes("MÉTRO")) return "metro";
@@ -122,6 +160,9 @@ function AlertsPageContent() {
   const [query, setQuery] = useState("");
   const [myLinesOnly, setMyLinesOnly] = useState(false);
   const [favoriteLines, setFavoriteLines] = useState<FavoriteJourney[]>([]);
+  // Itération datation : heure du dernier fetch réussi — rend le polling
+  // visible (l'utilisateur peut vérifier que la liste est fraîche).
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -129,6 +170,7 @@ function AlertsPageContent() {
       .getRealtimeAlerts(controller.signal)
       .then((data) => {
         setAlerts(data);
+        setLastUpdated(new Date());
       })
       .catch((err) => {
         if (controller.signal.aborted) return;
@@ -152,6 +194,7 @@ function AlertsPageContent() {
         if (controller.signal.aborted) return;
         setAlerts(data);
         setError(null);
+        setLastUpdated(new Date());
       })
       .catch((err) => {
         if (controller.signal.aborted || err?.name === "AbortError") return;
@@ -345,6 +388,16 @@ function AlertsPageContent() {
       <p className="text-xs text-[var(--color-text-tertiary)]">
         {filteredAlerts.length} perturbation{filteredAlerts.length > 1 ? "s" : ""} affichée
         {filteredAlerts.length > 1 ? "s" : ""}
+        {lastUpdated && (
+          <>
+            {" · "}Actualisé à{" "}
+            {lastUpdated.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
+          </>
+        )}
       </p>
 
       {filteredAlerts.length === 0 && (
@@ -419,6 +472,13 @@ function AlertsPageContent() {
                   {alert.descriptionText && (
                     <p className={`text-xs mt-1 opacity-90 ${config.text}`}>
                       {alert.descriptionText}
+                    </p>
+                  )}
+                  {/* Période de validité Navitia : contexte de datation de la
+                      perturbation (du ... au ...), indépendant du polling. */}
+                  {alert.activePeriod?.[0]?.start && (
+                    <p className="text-[11px] mt-1.5 opacity-70 ${config.text}">
+                      {formatActivePeriod(alert.activePeriod)}
                     </p>
                   )}
                 </div>
