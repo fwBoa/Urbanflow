@@ -30,7 +30,7 @@ export class PushService implements OnModuleInit {
     const privateKey = this.config.get<string>('VAPID_PRIVATE_KEY');
     const subject = this.config.get<string>(
       'VAPID_SUBJECT',
-      'mailto:contact@urbanflow.app',
+      'mailto:jeandavidzamblezie@outlook.fr',
     );
 
     if (!publicKey || !privateKey) {

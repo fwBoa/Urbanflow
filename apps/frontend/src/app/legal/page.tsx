@@ -16,7 +16,7 @@ export default function LegalPage() {
           </p>
           <ul className="mt-2 space-y-1">
             <li>Type : Projet étudiant (T6 CDSD)</li>
-            <li>Contact : <a href="mailto:contact@urbanflow.app" className="text-[var(--color-primary)] underline">contact@urbanflow.app</a></li>
+            <li>Contact : <a href="mailto:jeandavidzamblezie@outlook.fr" className="text-[var(--color-primary)] underline">jeandavidzamblezie@outlook.fr</a></li>
             <li>Directeur de la publication : Le responsable du projet UrbanFlow Mobility</li>
           </ul>
         </section>
@@ -144,8 +144,8 @@ export default function LegalPage() {
             8. Contact
           </h2>
           <ul className="space-y-1">
-            <li>Questions générales : <a href="mailto:contact@urbanflow.app" className="text-[var(--color-primary)] underline">contact@urbanflow.app</a></li>
-            <li>Données personnelles : <a href="mailto:privacy@urbanflow.app" className="text-[var(--color-primary)] underline">privacy@urbanflow.app</a></li>
+            <li>Questions générales et données personnelles : <a href="mailto:jeandavidzamblezie@outlook.fr" className="text-[var(--color-primary)] underline">jeandavidzamblezie@outlook.fr</a></li>
+            <li>Les notifications système (réinitialisation de mot de passe) proviennent d&apos;une adresse no-reply automatique.</li>
           </ul>
         </section>
 
