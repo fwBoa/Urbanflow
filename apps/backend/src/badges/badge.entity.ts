@@ -40,6 +40,6 @@ export class BadgeUnlock {
   @Column({ name: 'seen_at', type: 'timestamp', nullable: true })
   seenAt?: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'unlocked_at' })
   unlockedAt!: Date;
 }
