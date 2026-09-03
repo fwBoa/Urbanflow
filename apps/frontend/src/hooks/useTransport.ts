@@ -60,6 +60,53 @@ function useApiData<T>(
   return { data, setData, loading, error };
 }
 
+/**
+ * Re-exécute une callback à intervalle régulier, avec trois garde-fous :
+ * - la page doit être **visible** (onglet en arrière-plan → pause) ;
+ * - le navigateur doit être **en ligne** (offline → pause, reprise au retour) ;
+ * - les appels se chevauchent jamais (si un fetch dépasse l'intervalle, le
+ *   tick suivant est sauté).
+ *
+ * Usage : rafraîchissement léger des données temps réel (alertes) sans
+ * infrastructure SSE. Intervalle typique : 60 000 ms.
+ */
+export function usePolling(callback: () => void, intervalMs: number) {
+  const savedCallback = useRef(callback);
+
+  // Toujours la dernière version de la callback (sans relancer l'effet).
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
+
+  useEffect(() => {
+    if (intervalMs <= 0) return;
+    let running = false;
+    const tick = () => {
+      if (running || document.hidden || !navigator.onLine) return;
+      running = true;
+      try {
+        savedCallback.current();
+      } finally {
+        running = false;
+      }
+    };
+    const id = setInterval(tick, intervalMs);
+    // Re-fetch immédiat au retour sur l'onglet / au retour du réseau :
+    // l'utilisateur revient précisément pour voir du frais.
+    const onVisible = () => {
+      if (!document.hidden) tick();
+    };
+    const onOnline = () => tick();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [intervalMs]);
+}
+
 // ─── Lines by Mode ──────────────────────────────────────────────────
 export interface LineByMode {
   id: string;
@@ -329,12 +376,23 @@ export function useRoute() {
 }
 
 // ─── Realtime alerts ───────────────────────────────────────────────
+// Rafraîchissement : fetch au montage + polling 60 s (page visible et
+// en ligne uniquement — voir usePolling). Le backend interroge Navitia
+// à chaque requête : le polling suffit à garder l'écran frais ; pas de
+// SSE (complexité non justifiée pour de la data perturbation).
+export const ALERTS_POLL_INTERVAL = 60_000;
+
 export function useRealtimeAlerts() {
+  const [fetchStamp, setFetchStamp] = useState(0);
   const { data: alerts, loading, error } = useApiData<RealtimeAlert[]>(
     (signal) => apiService.getRealtimeAlerts(signal),
     [],
-    [],
+    // Re-déclenche le fetch initial à chaque stamp de polling.
+    [fetchStamp],
   );
+
+  usePolling(() => setFetchStamp((s) => s + 1), ALERTS_POLL_INTERVAL);
+
   return { alerts: alerts || [], loading, error };
 }
 

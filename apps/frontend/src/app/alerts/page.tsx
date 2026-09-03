@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getFavorites, type FavoriteJourney } from "@/services/favorites";
 import { alertMatchesLine } from "@/lib/alerts";
 import { normalizeHexColor } from "@/lib/colors";
+import { usePolling, ALERTS_POLL_INTERVAL } from "@/hooks/useTransport";
 
 function alertMatchesAnyFavorite(
   alert: RealtimeAlert,
@@ -139,6 +140,25 @@ function AlertsPageContent() {
       });
     return () => controller.abort();
   }, []);
+
+  // Polling léger (60 s, page visible + en ligne uniquement) : la page
+  // reste fraîche sans spinner ni rechargement — la mise à jour remplace
+  // silencieusement les données en place.
+  usePolling(() => {
+    const controller = new AbortController();
+    apiService
+      .getRealtimeAlerts(controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setAlerts(data);
+        setError(null);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted || err?.name === "AbortError") return;
+        // Polling en échec : on garde les données déjà affichées.
+        console.warn("Alerts poll failed:", err);
+      });
+  }, ALERTS_POLL_INTERVAL);
 
   useEffect(() => {
     if (!isAuthenticated || !myLinesOnly) return;
