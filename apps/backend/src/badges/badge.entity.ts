@@ -22,7 +22,14 @@ export class BadgeUnlock {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'user_id', type: 'varchar', length: 255 })
+  /**
+   * Mapping explicite : la table prod résulte de `synchronize` (dev,
+   * colonnes camelCase) PUIS de la migration du Bloc 75 (badge_key
+   * snake_case). Schéma réel mélangé que l'entité doit refléter
+   * exactement — sinon TypeORM tente des ADD COLUMN en échec
+   * (bug silencieux du Bloc 80).
+   */
+  @Column({ type: 'varchar', length: 255 })
   userId!: string;
 
   @Column({ name: 'badge_key', type: 'varchar', length: 64 })
@@ -40,6 +47,6 @@ export class BadgeUnlock {
   @Column({ name: 'seen_at', type: 'timestamp', nullable: true })
   seenAt?: Date | null;
 
-  @CreateDateColumn({ name: 'unlocked_at' })
+  @CreateDateColumn()
   unlockedAt!: Date;
 }
