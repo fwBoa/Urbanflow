@@ -145,13 +145,19 @@ export class AdminController {
    */
   @Post('badges/unlock')
   @Roles('admin')
-  async forceBadgeUnlock(@Body() body: { userId: string; badgeKey: string }) {
+  async forceBadgeUnlock(
+    @Body() body: { userId: string; badgeKey: string; replay?: boolean },
+  ) {
     if (!body?.userId || !body?.badgeKey) {
       throw new HttpException(
         'userId et badgeKey sont requis',
         HttpStatus.BAD_REQUEST,
       );
     }
-    return this.adminService.forceBadgeUnlock(body.userId, body.badgeKey);
+    return this.adminService.forceBadgeUnlock(
+      body.userId,
+      body.badgeKey,
+      body.replay === true,
+    );
   }
 }

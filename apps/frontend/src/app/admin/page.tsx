@@ -39,6 +39,8 @@ export default function AdminPage() {
   const [badgeTestUser, setBadgeTestUser] = useState<string>("");
   const [badgeTestKey, setBadgeTestKey] = useState<string>("first_trip");
   const [badgeTesting, setBadgeTesting] = useState(false);
+  // Rejouer : re-émet la notification même si le badge est déjà possédé.
+  const [badgeTestReplay, setBadgeTestReplay] = useState(false);
 
   // Broadcast notification state
   const [broadcastTitle, setBroadcastTitle] = useState("");
@@ -92,11 +94,12 @@ export default function AdminPage() {
       const res = await adminApi.forceBadgeUnlock({
         userId: badgeTestUser,
         badgeKey: badgeTestKey,
+        replay: badgeTestReplay,
       });
       setSuccess(
         res.unlocked
           ? `Badge « ${res.badge?.label} » débloqué — push + célébration envoyés.`
-          : `Badge « ${res.badge?.label} » déjà possédé — aucune nouvelle notification (idempotent).`,
+          : `Badge « ${res.badge?.label} » déjà possédé — cocher « Rejouer » pour re-notifier.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Échec du déblocage");
@@ -417,9 +420,19 @@ export default function AdminPage() {
             disabled={badgeTesting || !badgeTestUser}
             className="px-3 py-2 text-xs font-medium bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-dark)] disabled:opacity-50 whitespace-nowrap"
           >
-            {badgeTesting ? "Déblocage…" : "Débloquer"}
+            {badgeTesting ? "Déblocage…" : badgeTestReplay ? "Rejouer" : "Débloquer"}
           </button>
         </div>
+        <label className="mt-2 inline-flex items-center gap-2 text-xs text-[var(--color-text-secondary)] cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={badgeTestReplay}
+            onChange={(e) => setBadgeTestReplay(e.target.checked)}
+            className="w-3.5 h-3.5 accent-[var(--color-primary)]"
+          />
+          Rejouer la notification même si le badge est déjà possédé (pour tester
+          l&apos;animation)
+        </label>
       </div>
 
       {/* Broadcast Notification */}

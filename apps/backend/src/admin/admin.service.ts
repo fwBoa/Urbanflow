@@ -335,6 +335,7 @@ export class AdminService {
   async forceBadgeUnlock(
     userId: string,
     badgeKey: string,
+    replay = false,
   ): Promise<{
     unlocked: boolean;
     badge?: { key: string; label: string; emoji: string };
@@ -363,10 +364,19 @@ export class AdminService {
       [userId, badgeKey],
     );
     if (existing.length > 0) {
-      return { unlocked: false, badge: { key: badgeKey, ...def } };
+      // Mode test : si replay=true, on REJOUE la notification — réinitialise
+      // la célébration (seen_at=null) et re-émet le push. Utile pour tester
+      // l'animation sans attendre un nouveau seuil. Sinon : idempotent.
+      if (!replay) {
+        return { unlocked: false, badge: { key: badgeKey, ...def } };
+      }
+      await this.userRepo.manager.query(
+        'UPDATE badge_unlocks SET seen_at = NULL WHERE user_id = $1 AND badge_key = $2',
+        [userId, badgeKey],
+      );
     }
     await this.userRepo.manager.query(
-      'INSERT INTO badge_unlocks (user_id, badge_key, metadata, unlocked_at) VALUES ($1, $2, $3::jsonb, now())',
+      'INSERT INTO badge_unlocks (user_id, badge_key, metadata, unlocked_at) VALUES ($1, $2, $3::jsonb, now()) ON CONFLICT DO NOTHING',
       [userId, badgeKey, JSON.stringify({ forcedByAdmin: true })],
     );
     this.eventEmitter.emit(

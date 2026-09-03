@@ -157,8 +157,10 @@ export const adminApi = {
   getServicesHealth: () =>
     fetchAdmin<ServicesHealth>('/api/admin/services-health'),
 
-  // Test badge : force le déblocage (déclenche push + célébration)
-  forceBadgeUnlock: (body: { userId: string; badgeKey: string }) =>
+  // Test badge : force le déblocage (déclenche push + célébration).
+  // replay=true : re-émet la notification même si le badge est déjà possédé
+  // (réinitialise la célébration) — pour tester l'animation à volonté.
+  forceBadgeUnlock: (body: { userId: string; badgeKey: string; replay?: boolean }) =>
     postAdmin<{ unlocked: boolean; badge?: { key: string; label: string; emoji: string } }>(
       '/api/admin/badges/unlock',
       body,
