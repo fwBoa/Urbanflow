@@ -106,7 +106,9 @@ export default function ProfilePage() {
     async function loadData() {
       const [s, b] = await Promise.all([
         getStats(),
-        getBadges().catch((err) => {
+        // celebrate=true : le backend marque les badges non vus et les
+        // retourne avec newlyUnlocked — détection serveur, plus de localStorage.
+        getBadges(true).catch((err) => {
           console.error(err);
           setBadgesError("Impossible de charger les badges.");
           return [] as Badge[];
@@ -114,17 +116,9 @@ export default function ProfilePage() {
       ]);
       setStats(s);
       setBadges(b);
-      // Détecte les nouveaux badges débloqués depuis la dernière visite du profil.
-      try {
-        const seenKey = "uf:seen-badges";
-        const seen = JSON.parse(localStorage.getItem(seenKey) || "[]") as string[];
-        const freshlyUnlocked = b.filter((badge) => badge.unlocked && !seen.includes(badge.key));
-        if (freshlyUnlocked.length > 0) {
-          setNewBadges(freshlyUnlocked);
-        }
-        localStorage.setItem(seenKey, JSON.stringify(b.map((badge) => badge.key)));
-      } catch {
-        // ignore
+      const fresh = b.filter((badge) => badge.newlyUnlocked);
+      if (fresh.length > 0) {
+        setNewBadges(fresh);
       }
     }
     /* eslint-disable react-hooks/set-state-in-effect */

@@ -55,6 +55,8 @@ export interface Badge {
   emoji: string;
   description: string;
   unlocked: boolean;
+  /** Badge débloqué jamais vu — à célébrer (GET ?celebrate=true). */
+  newlyUnlocked?: boolean;
 }
 
 // ─── Storage keys ─────────────────────────────────────────────────
@@ -428,9 +430,16 @@ const ANONYMOUS_BADGES: Badge[] = [
   },
 ];
 
-export async function getBadges(): Promise<Badge[]> {
+/**
+ * Récupère les badges. `celebrate=true` : le backend marque les badges
+ * débloqués non vus et les retourne avec newlyUnlocked: true — source de
+ * vérité serveur pour la célébration animée (remplace l'ancien marqueur
+ * localStorage, fragile : un rechargement consommait la détection).
+ */
+export async function getBadges(celebrate = false): Promise<Badge[]> {
   try {
-    const res = await fetch(`${API()}/api/badges`, { credentials: "include" });
+    const url = celebrate ? `${API()}/api/badges?celebrate=true` : `${API()}/api/badges`;
+    const res = await fetch(url, { credentials: "include" });
     if (res.status === 401) return ANONYMOUS_BADGES;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return (await res.json()) as Badge[];

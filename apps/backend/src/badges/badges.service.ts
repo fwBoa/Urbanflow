@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { BadgeUnlock } from './badge.entity';
 import { FavoritesService } from '../favorites/favorites.service';
 import {
@@ -136,8 +136,14 @@ export class BadgesService {
 
   /**
    * Retourne tous les badges avec leur état de déblocage.
+   *
+   * `celebrate=true` (profil) : les badges débloqués non encore vus
+   * (`seenAt` null) sont retournés avec `newlyUnlocked: true` puis marqués
+   * vus — source de vérité serveur pour la célébration animée, plus fiable
+   * que l'ancien marqueur localStorage (un rechargement pouvait consommer
+   * la détection sans que l'utilisateur voie l'animation).
    */
-  async getBadges(userId: string): Promise<BadgeDto[]> {
+  async getBadges(userId: string, celebrate = false): Promise<BadgeDto[]> {
     if (!userId) {
       throw new BadRequestException('userId requis');
     }
@@ -161,13 +167,33 @@ export class BadgesService {
     }
     const unlockedSet = new Set(unlockedKeys);
 
-    return BADGE_DEFINITIONS.map((def) => ({
+    // Badges persistés jamais vus → célébration à l'ouverture du profil.
+    let freshKeys = new Set<string>();
+    if (celebrate) {
+      const rows = await this.badgeRepo.find({ where: { userId } });
+      freshKeys = new Set(rows.filter((r) => !r.seenAt).map((r) => r.badgeKey));
+    }
+
+    const result = BADGE_DEFINITIONS.map((def) => ({
       key: def.key,
       label: def.label,
       emoji: def.emoji,
       description: def.description,
       unlocked: unlockedSet.has(def.key) || def.condition(stats),
+      newlyUnlocked:
+        celebrate && freshKeys.has(def.key) ? (true as const) : undefined,
     }));
+    // Marquer vu seulement après avoir construit la réponse (best-effort :
+    // un échec de marquage ne doit pas casser la lecture).
+    if (celebrate && freshKeys.size > 0) {
+      this.badgeRepo
+        .update(
+          { userId, badgeKey: In(Array.from(freshKeys)) },
+          { seenAt: new Date() },
+        )
+        .catch(() => undefined);
+    }
+    return result;
   }
 
   private async getUnlockedBadgeKeys(userId: string): Promise<string[]> {
