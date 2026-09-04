@@ -23,13 +23,12 @@ export class BadgeUnlock {
   id!: string;
 
   /**
-   * Mapping explicite : la table prod résulte de `synchronize` (dev,
-   * colonnes camelCase) PUIS de la migration du Bloc 75 (badge_key
-   * snake_case). Schéma réel mélangé que l'entité doit refléter
-   * exactement — sinon TypeORM tente des ADD COLUMN en échec
-   * (bug silencieux du Bloc 80).
+   * Mapping explicite obligatoire : la table prod (créée par migration)
+   * utilise les noms snake_case. Sans `name:`, TypeORM génère du camelCase
+   * et toutes les requêtes échouent en prod
+   * (« column BadgeUnlock.userId does not exist »).
    */
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ name: 'user_id', type: 'varchar', length: 255 })
   userId!: string;
 
   @Column({ name: 'badge_key', type: 'varchar', length: 64 })
@@ -47,6 +46,6 @@ export class BadgeUnlock {
   @Column({ name: 'seen_at', type: 'timestamp', nullable: true })
   seenAt?: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'unlocked_at' })
   unlockedAt!: Date;
 }
