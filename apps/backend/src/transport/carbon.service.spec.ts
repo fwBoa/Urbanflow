@@ -165,6 +165,21 @@ describe('CarbonService', () => {
       expect(result.segments).toHaveLength(0);
       expect(result.comparisonWithCar).toBeNull();
     });
+
+    it('should compare against the dominant mode of the trip, not hardcoded metro', () => {
+      // Trajet à dominante bus (95 g/km) : la comparaison vs voiture doit
+      // refléter le mode réellement emprunté (le bus), pas le métro.
+      const result = service.summarizeMultimodalTrip([
+        { mode: 'marche', distanceKm: 0.2 },
+        { mode: 'bus', distanceKm: 10 },
+      ]);
+
+      expect(result.comparisonWithCar!.comparedMode).toBe('bus');
+      // La comparaison porte sur la distance TOTALE (0,2 + 10 = 10,2 km) :
+      // économie = (170 - 95) × 10,2 = 765 g → équivalent voiture = 765/170 = 4,5 km
+      expect(result.comparisonWithCar!.savedGco2).toBe(765);
+      expect(result.comparisonWithCar!.carKmEquivalent).toBeCloseTo(4.5, 1);
+    });
   });
 
   // ─── getAllFactors ───────────────────────────────────────────────

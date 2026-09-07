@@ -182,9 +182,17 @@ export class CarbonService {
       0,
     );
 
+    // Mode dominant du trajet réel (plus grande distance) — la comparaison
+    // vs voiture doit refléter ce que l'utilisateur emprunte, pas un mode
+    // supposé. Fallback 'metro' si la distance totale est nulle.
+    const dominantMode =
+      segments.length > 0
+        ? segments.reduce((a, b) => (b.distanceKm > a.distanceKm ? b : a)).mode
+        : 'metro';
+
     const comparisonWithCar =
       totalDistanceKm > 0
-        ? this.compareModes('voiture', 'metro', totalDistanceKm)
+        ? this.compareModes('voiture', dominantMode, totalDistanceKm)
         : null;
 
     return {

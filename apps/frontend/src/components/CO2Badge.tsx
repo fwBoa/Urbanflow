@@ -39,11 +39,7 @@ export default function CO2Badge({
         size === "sm"
           ? "px-2 py-0.5 text-[11px]"
           : "px-3 py-1 text-xs"
-      } ${
-        isZero
-          ? "bg-[var(--color-eco-green)]/10 text-[var(--color-eco-green)]"
-          : "bg-[var(--color-eco-green)]/10 text-[var(--color-eco-green)]"
-      }`}
+      } bg-[var(--color-eco-green)]/10 text-[var(--color-eco-green)]`}
       aria-label={title}
       title={title}
     >
