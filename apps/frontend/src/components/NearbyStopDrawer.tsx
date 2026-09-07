@@ -88,10 +88,13 @@ export default function NearbyStopDrawer({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", stiffness: 320, damping: 30 }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-[var(--card-radius)] shadow-2xl border-t border-[var(--color-border)] max-h-[80vh] overflow-y-auto"
+            className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-[var(--card-radius)] shadow-2xl border-t border-[var(--color-border)] max-h-[80vh] overflow-y-auto md:left-auto md:right-4 md:bottom-4 md:top-auto md:w-[420px] md:rounded-[var(--card-radius)] md:border md:border-[var(--color-border)] md:shadow-2xl"
           >
-            {/* Handle visuel pour mobile */}
-            <div className="w-full flex justify-center pt-2 pb-1" aria-hidden="true">
+            {/* Handle visuel pour mobile (masqué sur desktop : carte flottante) */}
+            <div
+              className="w-full flex justify-center pt-2 pb-1 md:hidden"
+              aria-hidden="true"
+            >
               <div className="w-10 h-1 rounded-full bg-[var(--color-border)]" />
             </div>
 

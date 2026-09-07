@@ -305,10 +305,10 @@ export default function ProfilePage() {
             exit={reducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.98 }}
             transition={{ type: "spring", duration: 0.5, bounce: 0.18 }}
             role="status"
-            className="mb-4 relative rounded-[1.25rem] p-[1px] bg-gradient-to-b from-[var(--color-mobility-orange)]/40 via-[var(--color-mobility-orange)]/15 to-transparent"
+            className="mb-4 relative rounded-[var(--card-radius)] p-[1px] bg-gradient-to-b from-[var(--color-eco-green)]/40 via-[var(--color-eco-green)]/15 to-transparent"
           >
             {/* Double-bezel : coque dégradée + cœur interne net */}
-            <div className="relative rounded-[calc(1.25rem-1px)] bg-[var(--color-surface)] p-3.5 overflow-hidden">
+            <div className="relative rounded-[calc(var(--card-radius)-1px)] bg-[var(--color-surface)] p-3.5 overflow-hidden">
               {/* Particules de célébration : 6 éclats qui montent puis
                   s'estompent — décoration rare, une seule fois par badge.
                   transform/opacity uniquement (GPU-safe). */}
@@ -317,7 +317,7 @@ export default function ProfilePage() {
                   {[...Array(6)].map((_, i) => (
                     <motion.span
                       key={i}
-                      className="absolute w-1.5 h-1.5 rounded-full bg-[var(--color-mobility-orange)]"
+                      className="absolute w-1.5 h-1.5 rounded-full bg-[var(--color-eco-green)]"
                       style={{ left: `${12 + i * 14}%`, bottom: 8 }}
                       initial={{ opacity: 0, y: 0, scale: 0.5 }}
                       animate={{
@@ -342,9 +342,9 @@ export default function ProfilePage() {
                   initial={reducedMotion ? false : { opacity: 0, scale: 0.6, rotate: -14 }}
                   animate={{ opacity: 1, scale: 1, rotate: 0 }}
                   transition={{ type: "spring", duration: 0.55, bounce: 0.3, delay: 0.08 }}
-                  className="relative shrink-0 w-11 h-11 rounded-full bg-gradient-to-br from-[var(--color-mobility-orange)]/25 to-[var(--color-mobility-orange)]/10 ring-1 ring-[var(--color-mobility-orange)]/30 flex items-center justify-center"
+                  className="relative shrink-0 w-11 h-11 rounded-full bg-[var(--color-eco-green)]/15 ring-1 ring-[var(--color-eco-green)]/30 flex items-center justify-center"
                 >
-                  <UrbanFlowIcon type="status" name="medal" size={18} className="text-[var(--color-mobility-orange)]" />
+                  <UrbanFlowIcon type="status" name="medal" size={18} className="text-[var(--color-eco-green)]" />
                 </motion.div>
                 <div className="flex-1 min-w-0">
                   <motion.p
@@ -369,13 +369,13 @@ export default function ProfilePage() {
                           bounce: 0.25,
                           delay: 0.22 + i * 0.07,
                         }}
-                        className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text-primary)] border border-[var(--color-mobility-orange)]/25 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+                        className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text-primary)] border border-[var(--color-eco-green)]/25 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
                       >
                         {/* L'emoji est la médaille : il pop avec un léger
                             overshot (bounce) — célébration, pas dashboard. */}
                         <motion.span
                           aria-hidden
-                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--color-mobility-orange)]/15 text-sm"
+                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--color-eco-green)]/15 text-sm"
                           initial={reducedMotion ? false : { scale: 0.5 }}
                           animate={{ scale: [1.15, 1] }}
                           transition={{ delay: 0.3 + i * 0.07, duration: 0.35 }}
