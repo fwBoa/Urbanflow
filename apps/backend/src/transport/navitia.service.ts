@@ -343,19 +343,37 @@ export class NavitiaService {
         // Les messages Navitia sont du HTML (ex. "<p>La ligne 72…</p>") :
         // on strip les balises + décode les entités + collapse les espaces.
         const header = this.stripHtml(d.messages?.[0]?.text) || 'Perturbation';
-        // La description Navitia répète presque toujours le titre (le 1er
-        // message = le titre). On la déduplique : si la description commence
-        // par le titre, on retire la redondance pour un affichage propre.
-        let description =
-          this.stripHtml(d.messages?.map((m) => m.text).join(' — ')) ||
-          undefined;
-        if (description && description.startsWith(header)) {
-          const rest = description
-            .slice(header.length)
-            .replace(/^[—\s—-]+/, '')
-            .trim();
-          description = rest || undefined;
+        // Les messages Navitia se répètent massivement (le même incident est
+        // publié sur plusieurs canaux avec le même texte). On déduplique les
+        // PHRASES uniques au lieu de tout concaténer : chaque message est
+        // découpé en phrases, les phrases déjà vues sont ignorées.
+        const seenSentences = new Set<string>();
+        const uniqueSentences: string[] = [];
+        for (const msg of d.messages ?? []) {
+          const cleaned = this.stripHtml(msg.text);
+          if (!cleaned) continue;
+          // Découpe en phrases (Navitia sépare par « — » ou par point).
+          for (const sentence of cleaned.split(/\s+—\s+|\.\s+/)) {
+            const norm = sentence
+              .toLowerCase()
+              .replace(/[^\wà-ÿ]+/g, ' ')
+              .trim();
+            if (!norm || seenSentences.has(norm)) continue;
+            seenSentences.add(norm);
+            uniqueSentences.push(sentence.trim());
+          }
         }
+        // Le header est le premier message nettoyé ; la description est la
+        // concaténation des phrases qui ne répètent pas le header.
+        const cleanHeader = this.cleanAlertText(header);
+        const descriptionSentences = uniqueSentences.filter(
+          (s) =>
+            this.cleanAlertText(s).toLowerCase() !== cleanHeader.toLowerCase(),
+        );
+        const description =
+          descriptionSentences.length > 0
+            ? this.cleanAlertText(descriptionSentences.join('. '))
+            : undefined;
         return {
           id: d.id || `alert-${i}`,
           headerText: this.cleanAlertText(header),
