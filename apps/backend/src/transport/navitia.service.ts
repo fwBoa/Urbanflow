@@ -339,7 +339,7 @@ export class NavitiaService {
         '/disruptions',
         { count: '50' },
       );
-      return (data.disruptions ?? []).slice(0, 50).map((d, i) => {
+      const alerts = (data.disruptions ?? []).slice(0, 50).map((d, i) => {
         // Les messages Navitia sont du HTML (ex. "<p>La ligne 72…</p>") :
         // on strip les balises + décode les entités + collapse les espaces.
         const header = this.stripHtml(d.messages?.[0]?.text) || 'Perturbation';
@@ -358,8 +358,10 @@ export class NavitiaService {
         }
         return {
           id: d.id || `alert-${i}`,
-          headerText: header,
-          descriptionText: description,
+          headerText: this.cleanAlertText(header),
+          descriptionText: description
+            ? this.cleanAlertText(description)
+            : undefined,
           severity: this.mapSeverity(d.severity?.name || d.status),
           affectedRoutes: this.extractAffectedRoutes(d),
           // C6 : vraies lignes structurées (code + mode + couleur IDFM),
@@ -371,12 +373,82 @@ export class NavitiaService {
           effect: d.effect || undefined,
         };
       });
+
+      // ─── Filtre temporel : ne garder que les alertes pertinentes ───
+      // Navitia continue d'envoyer des disruptions dont la période est
+      // close (mesuré 32/50 en prod) — afficher des alertes périmées
+      // détruit la confiance dans le temps réel.
+      const now = new Date();
+      const filtered = alerts.filter((a) => {
+        const period = a.activePeriod?.[0];
+        if (!period) return true; // pas de période → on garde (prudence)
+        const end = this.parseNavitiaTime(period.end);
+        if (end && end < now) return false; // périmée → rejetée
+        return true;
+      });
+
+      // Déduplication par contenu : Navitia renvoie parfois le même
+      // incident sous plusieurs ids (une par ligne impactée).
+      const seen = new Set<string>();
+      const deduped = filtered.filter((a) => {
+        const key = `${a.headerText}|${a.affectedRoutes.join(',')}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      this.logger.debug(
+        `Disruptions: ${(data.disruptions ?? []).length} reçues → ${filtered.length} actives → ${deduped.length} dédupliquées`,
+      );
+      return deduped;
     } catch (e) {
       this.logger.warn(
         `Navitia disruptions unavailable: ${e instanceof Error ? e.message : e}`,
       );
       return [];
     }
+  }
+
+  /**
+   * Nettoie le texte des alertes Navitia (après stripHtml) :
+   * - artefacts de gare « A<>Passerelle » → « A ↔ Passerelle » ;
+   * - préfixes marketing (« 🚍#InfoTrafic - », « #InfoTrafic ») ;
+   * - hashtags et emojis transport Navitia ;
+   * - espaces multiples.
+   */
+  private cleanAlertText(text: string): string {
+    return (
+      text
+        .replace(/<>/g, ' ↔ ')
+        .replace(/(?:🚍|🚌|🚇|🚆|🚈)?\s*#InfoTrafic\s*[-–:]?\s*/gi, '')
+        .replace(/#[A-Za-zÀ-ÿ]+/g, '')
+        // Emojis transport + variation selectors (séparés pour éviter une
+        // classe de caractères combinée — règle no-misleading-character-class).
+        .replace(/[\u{1F500}-\u{1FAFF}]/gu, '')
+        .replace(/[\u{2600}-\u{27BF}]/gu, '')
+        .replace(/\u{FE0F}/gu, '')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s\-:–]+/u, '')
+        .trim()
+    );
+  }
+
+  /**
+   * Parse un horaire Navitia (« 20260907T165000 ») en Date (heure locale
+   * du serveur — les horaires Navitia n'embarquent pas de fuseau).
+   */
+  private parseNavitiaTime(s: string | undefined): Date | null {
+    if (!s) return null;
+    const m = s.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
+    if (!m) return null;
+    return new Date(
+      Number(m[1]),
+      Number(m[2]) - 1,
+      Number(m[3]),
+      Number(m[4]),
+      Number(m[5]),
+      Number(m[6]),
+    );
   }
 
   private mapSeverity(
