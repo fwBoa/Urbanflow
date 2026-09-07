@@ -307,31 +307,6 @@ export default function ProfilePage() {
             className="mb-4 relative rounded-[var(--card-radius)] bg-[var(--color-eco-green)]/8 border border-[var(--color-eco-green)]/25"
           >
             <div className="relative rounded-[calc(var(--card-radius)-1px)] p-3.5 overflow-hidden">
-              {/* Particules : 6 éclats one-shot (rareté de l'événement).
-                  GPU-safe : transform/opacity uniquement. */}
-              {!reducedMotion && (
-                <div aria-hidden className="absolute inset-0 pointer-events-none">
-                  {[...Array(6)].map((_, i) => (
-                    <motion.span
-                      key={i}
-                      className="absolute w-1.5 h-1.5 rounded-full bg-[var(--color-eco-green)]"
-                      style={{ left: `${12 + i * 15}%`, bottom: 10 }}
-                      initial={{ opacity: 0, y: 0, scale: 0.5 }}
-                      animate={{
-                        opacity: [0, 0.85, 0.85, 0],
-                        y: [-6, -26, -44, -58],
-                        scale: [0.5, 1, 0.9, 0.3],
-                      }}
-                      transition={{
-                        duration: 1.5,
-                        delay: 0.35 + i * 0.13,
-                        ease: [0.23, 1, 0.32, 1],
-                        times: [0, 0.25, 0.7, 1],
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
               <div className="flex items-start gap-3 relative">
                 {/* Médaillon : l'emoji du badge obtenu (donnée backend).
                     Pop avec rotation compensée — rien de nulle part. */}
