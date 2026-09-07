@@ -304,10 +304,9 @@ export default function ProfilePage() {
             exit={reducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.98 }}
             transition={{ type: "spring", duration: 0.5, bounce: 0.18 }}
             role="status"
-            className="mb-4 relative rounded-[var(--card-radius)] p-[1px] bg-gradient-to-b from-[var(--color-eco-green)]/45 via-[var(--color-eco-green)]/18 to-transparent"
+            className="mb-4 relative rounded-[var(--card-radius)] bg-[var(--color-eco-green)]/8 border border-[var(--color-eco-green)]/25"
           >
-            {/* Double-bezel : coque dégradée + cœur interne concentrique */}
-            <div className="relative rounded-[calc(var(--card-radius)-1px)] bg-[var(--color-surface)] p-3.5 overflow-hidden">
+            <div className="relative rounded-[calc(var(--card-radius)-1px)] p-3.5 overflow-hidden">
               {/* Particules : 6 éclats one-shot (rareté de l'événement).
                   GPU-safe : transform/opacity uniquement. */}
               {!reducedMotion && (
