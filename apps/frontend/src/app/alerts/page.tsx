@@ -527,31 +527,56 @@ function AlertsPageContent() {
                   <h2 className={`text-sm font-semibold leading-snug ${config.text}`}>
                     {alert.headerText}
                   </h2>
-                  {alert.descriptionText && (
-                    <p className={`text-xs mt-1 opacity-90 leading-relaxed ${config.text} ${expandedId === alert.id ? "" : "line-clamp-2"}`}>
-                      {alert.descriptionText}
-                    </p>
-                  )}
-                  {/* Dépliage : la description complète + période, sans quitter
-                      la liste (motif « résumé + voir plus », USWDS/Material). */}
-                  {alert.descriptionText && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedId((cur) => (cur === alert.id ? null : alert.id))
-                      }
-                      aria-expanded={expandedId === alert.id}
-                      className={`mt-1 inline-flex items-center gap-0.5 text-[11px] font-medium ${config.text} opacity-80 hover:opacity-100 transition-opacity`}
-                    >
-                      {expandedId === alert.id ? "Réduire" : "Voir plus"}
-                      <UrbanFlowIcon
-                        type="action"
-                        name={expandedId === alert.id ? "arrow-left" : "arrow-right"}
-                        size={11}
-                        className={expandedId === alert.id ? "" : "rotate-90"}
-                      />
-                    </button>
-                  )}
+                  {/* Résumé (état replié) ou texte intégral (état déplié) :
+                      le backend fournit descriptionText (~200 chars) ET
+                      fullText (toutes les infos utiles, sans troncature). */}
+                  {(() => {
+                    const expanded = expandedId === alert.id;
+                    const body = expanded
+                      ? (alert.fullText ?? alert.descriptionText)
+                      : alert.descriptionText;
+                    if (!body) return null;
+                    return (
+                      <p
+                        className={`text-xs mt-1 opacity-90 leading-relaxed ${config.text} ${expanded ? "" : "line-clamp-2"}`}
+                      >
+                        {body}
+                      </p>
+                    );
+                  })()}
+                  {/* Dépliage : le texte intégral remplace le résumé —
+                      l'utilisateur accède à TOUTES les infos (détours,
+                      arrêts de report…) sans quitter la liste. Le bouton
+                      n'existe que si un texte plus long est disponible. */}
+                  {(() => {
+                    const hasMore =
+                      alert.fullText != null &&
+                      alert.descriptionText != null &&
+                      alert.fullText.length > alert.descriptionText.length;
+                    if (!alert.descriptionText && !alert.fullText) return null;
+                    if (!hasMore) return null;
+                    const expanded = expandedId === alert.id;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedId((cur) =>
+                            cur === alert.id ? null : alert.id,
+                          )
+                        }
+                        aria-expanded={expanded}
+                        className={`mt-1 inline-flex items-center gap-0.5 text-[11px] font-medium ${config.text} opacity-80 hover:opacity-100 transition-opacity`}
+                      >
+                        {expanded ? "Réduire" : "Voir plus"}
+                        <UrbanFlowIcon
+                          type="action"
+                          name={expanded ? "arrow-left" : "arrow-right"}
+                          size={11}
+                          className={expanded ? "" : "rotate-90"}
+                        />
+                      </button>
+                    );
+                  })()}
                   {/* Période de validité Navitia : contexte de datation de la
                       perturbation (du ... au ...), indépendant du polling. */}
                   {alert.activePeriod?.[0]?.start && (

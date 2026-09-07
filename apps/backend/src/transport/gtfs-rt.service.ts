@@ -22,6 +22,11 @@ export interface RealtimeAlert {
   activePeriod: { start: string; end: string }[];
   cause?: string;
   effect?: string;
+  /**
+   * Texte intégral (sans troncature) pour l'affichage déplié « Voir plus ».
+   * descriptionText reste le résumé court (~200 chars) de l'état replié.
+   */
+  fullText?: string;
 }
 
 /** Mode de transport déduit du nom de ligne. Miroir de lib/alerts.ts côté frontend. */

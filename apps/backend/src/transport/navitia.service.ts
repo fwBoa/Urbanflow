@@ -385,10 +385,17 @@ export class NavitiaService {
           descriptionSentences.length > 0
             ? this.truncateSentences(descriptionSentences, 200)
             : undefined;
+        // Texte intégral nettoyé : toutes les phrases uniques, SANS troncature
+        // — affiché uniquement à l'état déplié (« Voir plus ») côté frontend.
+        const fullText =
+          descriptionSentences.length > 0
+            ? this.cleanAlertText(descriptionSentences.join('. '))
+            : undefined;
         return {
           id: d.id || `alert-${i}`,
           headerText: shortHeader,
           descriptionText: description,
+          fullText,
           severity: this.mapSeverity(d.severity?.name || d.status),
           affectedRoutes: this.extractAffectedRoutes(d),
           // C6 : vraies lignes structurées (code + mode + couleur IDFM),

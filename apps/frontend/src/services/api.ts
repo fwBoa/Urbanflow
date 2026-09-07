@@ -112,6 +112,8 @@ export interface RealtimeAlert {
   activePeriod?: { start: string; end: string }[];
   cause?: string;
   effect?: string;
+  /** Texte intégral pour l'affichage déplié « Voir plus » (non tronqué). */
+  fullText?: string;
 }
 
 export interface JourneySegment {
