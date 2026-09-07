@@ -336,15 +336,23 @@ export default function ProfilePage() {
                 </div>
               )}
               <div className="flex items-start gap-3 relative">
-                {/* Médaille : rotation compense le pop (entre par la gauche,
-                    se redresse en spring — rien n'apparaît de nulle part). */}
+                {/* Médaillon du succès : l'emoji du badge obtenu (donnée du
+                    backend), pas une icône générique. Si plusieurs badges,
+                    le premier est affiché + compteur sur le médaillon. */}
                 <motion.div
                   initial={reducedMotion ? false : { opacity: 0, scale: 0.6, rotate: -14 }}
                   animate={{ opacity: 1, scale: 1, rotate: 0 }}
                   transition={{ type: "spring", duration: 0.55, bounce: 0.3, delay: 0.08 }}
                   className="relative shrink-0 w-11 h-11 rounded-full bg-[var(--color-eco-green)]/15 ring-1 ring-[var(--color-eco-green)]/30 flex items-center justify-center"
                 >
-                  <UrbanFlowIcon type="status" name="medal" size={18} className="text-[var(--color-eco-green)]" />
+                  <span className="text-xl leading-none" aria-hidden>
+                    {newBadges[0]?.emoji ?? "🏅"}
+                  </span>
+                  {newBadges.length > 1 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--color-eco-green)] text-white text-[10px] font-bold flex items-center justify-center">
+                      +{newBadges.length - 1}
+                    </span>
+                  )}
                 </motion.div>
                 <div className="flex-1 min-w-0">
                   <motion.p
