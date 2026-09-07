@@ -363,23 +363,32 @@ export class NavitiaService {
             uniqueSentences.push(sentence.trim());
           }
         }
-        // Le header est le premier message nettoyé ; la description est la
-        // concaténation des phrases qui ne répètent pas le header.
+        // Le header est un TITRE COURT (recommandation USWDS : ≤ 1 ligne) —
+        // Navitia met souvent tout le détail dans le 1er message : on
+        // tronque à la première phrase utile (max ~90 chars, coupé au mot).
         const cleanHeader = this.cleanAlertText(header);
-        const descriptionSentences = uniqueSentences.filter(
-          (s) =>
-            this.cleanAlertText(s).toLowerCase() !== cleanHeader.toLowerCase(),
-        );
+        const shortHeader =
+          cleanHeader.length > 90
+            ? cleanHeader.slice(0, 90).replace(/\s\S*$/, '') + '…'
+            : cleanHeader;
+        // La description = les phrases uniques qui ne répètent pas le
+        // header court, tronquée à ~200 chars (coupé au mot) — le détail
+        // exhaustif des détours reste disponible mais compact.
+        const descriptionSentences = uniqueSentences
+          .map((s) => this.cleanAlertText(s))
+          .filter(
+            (s) =>
+              s.toLowerCase() !== cleanHeader.toLowerCase() &&
+              s.toLowerCase() !== shortHeader.toLowerCase().replace('…', ''),
+          );
         const description =
           descriptionSentences.length > 0
-            ? this.cleanAlertText(descriptionSentences.join('. '))
+            ? this.truncateSentences(descriptionSentences, 200)
             : undefined;
         return {
           id: d.id || `alert-${i}`,
-          headerText: this.cleanAlertText(header),
-          descriptionText: description
-            ? this.cleanAlertText(description)
-            : undefined,
+          headerText: shortHeader,
+          descriptionText: description,
           severity: this.mapSeverity(d.severity?.name || d.status),
           affectedRoutes: this.extractAffectedRoutes(d),
           // C6 : vraies lignes structurées (code + mode + couleur IDFM),
@@ -434,6 +443,21 @@ export class NavitiaService {
    * - hashtags et emojis transport Navitia ;
    * - espaces multiples.
    */
+  /**
+   * Joint les phrases en respectant une limite de longueur : on ajoute les
+   * phrases entières tant que possible, puis on coupe au dernier mot avec
+   * « … ». Jamais de mot coupé en plein milieu.
+   */
+  private truncateSentences(sentences: string[], maxLen: number): string {
+    const joined = this.cleanAlertText(sentences.join('. '));
+    if (joined.length <= maxLen) return joined;
+    const cut = joined.slice(0, maxLen);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (
+      (lastSpace > maxLen * 0.6 ? cut.slice(0, lastSpace) : cut).trim() + '…'
+    );
+  }
+
   private cleanAlertText(text: string): string {
     return (
       text

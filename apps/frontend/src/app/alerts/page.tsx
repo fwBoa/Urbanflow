@@ -150,6 +150,47 @@ const severityConfig = {
   },
 };
 
+/**
+ * Libellés canoniques des champs Navitia cause/effect — chips courtes et
+ * lisibles en un coup d'œil (P3). Fallback : la valeur brute est affichée
+ * telle quelle si non répertoriée.
+ */
+const CAUSE_LABELS: Record<string, string> = {
+  "Civil Unrest": "Manifestation",
+  "Strike": "Grève",
+  "Technical Problem": "Panne",
+  "Technical problem": "Panne",
+  "Maintenance": "Travaux",
+  "Christmas": "Fête",
+  "Weather": "Météo",
+};
+const EFFECT_LABELS: Record<string, string> = {
+  "NO_SERVICE": "Trafic interrompu",
+  "DETOUR": "Déviation",
+  "SIGNIFICANT_DELAYS": "Retards",
+  "MODIFIED_SERVICE": "Trafic modifié",
+  "REDUCED_SERVICE": "Service réduit",
+  "ADDED_SERVICE": "Service renforcé",
+  "STOP_MOVED": "Arrêt déplacé",
+};
+
+/** Pastille chip canonique (cause ou effet) — neutre, dans le ton de sévérité. */
+function AlertChip({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-current/30 ${className ?? ""}`}
+    >
+      {text}
+    </span>
+  );
+}
+
 function AlertsPageContent() {
   const { isAuthenticated } = useAuth();
   const [alerts, setAlerts] = useState<RealtimeAlert[]>([]);
@@ -163,6 +204,9 @@ function AlertsPageContent() {
   // Itération datation : heure du dernier fetch réussi — rend le polling
   // visible (l'utilisateur peut vérifier que la liste est fraîche).
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  // Alertes « dépliées » : affichage de la description complète + détail des
+  // détours. Une seule alerte dépliée à la fois (re-clic = replier).
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -441,6 +485,20 @@ function AlertsPageContent() {
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${config.badge}`}>
                       {config.label}
                     </span>
+                    {/* P3 : chips canoniques cause/effect — la nature de la
+                        perturbation est lisible sans lire le texte. */}
+                    {alert.cause && (
+                      <AlertChip
+                        text={CAUSE_LABELS[alert.cause] ?? alert.cause}
+                        className={config.text}
+                      />
+                    )}
+                    {alert.effect && (
+                      <AlertChip
+                        text={EFFECT_LABELS[alert.effect] ?? alert.effect}
+                        className={config.text}
+                      />
+                    )}
                     {/* C6 : pastilles de lignes — mode + code + couleur IDFM,
                         identifiables en 1 seconde (remplace le texte gris) */}
                     {linesOf(alert).length > 0 && (
@@ -466,18 +524,39 @@ function AlertsPageContent() {
                       </span>
                     )}
                   </div>
-                  <h2 className={`text-sm font-semibold ${config.text}`}>
+                  <h2 className={`text-sm font-semibold leading-snug ${config.text}`}>
                     {alert.headerText}
                   </h2>
                   {alert.descriptionText && (
-                    <p className={`text-xs mt-1 opacity-90 ${config.text}`}>
+                    <p className={`text-xs mt-1 opacity-90 leading-relaxed ${config.text} ${expandedId === alert.id ? "" : "line-clamp-2"}`}>
                       {alert.descriptionText}
                     </p>
+                  )}
+                  {/* Dépliage : la description complète + période, sans quitter
+                      la liste (motif « résumé + voir plus », USWDS/Material). */}
+                  {alert.descriptionText && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedId((cur) => (cur === alert.id ? null : alert.id))
+                      }
+                      aria-expanded={expandedId === alert.id}
+                      className={`mt-1 inline-flex items-center gap-0.5 text-[11px] font-medium ${config.text} opacity-80 hover:opacity-100 transition-opacity`}
+                    >
+                      {expandedId === alert.id ? "Réduire" : "Voir plus"}
+                      <UrbanFlowIcon
+                        type="action"
+                        name={expandedId === alert.id ? "arrow-left" : "arrow-right"}
+                        size={11}
+                        className={expandedId === alert.id ? "" : "rotate-90"}
+                      />
+                    </button>
                   )}
                   {/* Période de validité Navitia : contexte de datation de la
                       perturbation (du ... au ...), indépendant du polling. */}
                   {alert.activePeriod?.[0]?.start && (
-                    <p className="text-[11px] mt-1.5 opacity-70 ${config.text}">
+                    <p className={`text-[11px] mt-1.5 opacity-70 ${config.text} inline-flex items-center gap-1`}>
+                      <UrbanFlowIcon type="status" name="clock" size={11} />
                       {formatActivePeriod(alert.activePeriod)}
                     </p>
                   )}
