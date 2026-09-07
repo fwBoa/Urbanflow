@@ -46,8 +46,21 @@ export default function SplashScreen() {
   useEffect(() => {
     if (!standalone) return;
 
-    // L’affichage de la splash screen est une synchronisation initiale avec
-    // le mode d’affichage PWA ; il ne peut pas être déclenché par un événement
+    // Garde de session : le splash est un écran de **cold start** — il ne
+    // doit pas se relancer à chaque retour sur l'accueil (rechargement
+    // bfcache/visibility, reload après controllerchange SW). sessionStorage
+    // persiste sur les rechargements mais se vide à la fermeture de la PWA :
+    // le prochain lancement réel de la journée le réaffiche, comme un vrai
+    // splash mobile.
+    try {
+      if (sessionStorage.getItem("uf:splash-shown") === "1") return;
+      sessionStorage.setItem("uf:splash-shown", "1");
+    } catch {
+      // storage indisponible (private mode) → comportement précédent
+    }
+
+    // L'affichage de la splash screen est une synchronisation initiale avec
+    // le mode d'affichage PWA ; il ne peut pas être déclenché par un événement
     // externe.
     /* eslint-disable react-hooks/set-state-in-effect */
     setShow(true);
