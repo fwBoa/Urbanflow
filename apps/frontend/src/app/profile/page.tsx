@@ -293,10 +293,9 @@ export default function ProfilePage() {
     <AppShell title="Profil">
       {/* ─── Célébration de badges — chorégraphie d'obtention ───────────
           Rareté (1er débloquage = événement rare) → droit au delight.
-          Principes appliqués (emil-design-eng) : entrée ease-out custom,
-          jamais scale(0) (partir de 0.95 + opacity), stagger 70ms max,
-          springs asymétriques, exit plus rapide que l'entrée, GPU-safe
-          (transform/opacity uniquement), reduced-motion respecté. */}
+          Principes emil-design-eng : entrée ease-out custom, jamais
+          scale(0), stagger ≤ 70ms, exit plus rapide que l'entrée,
+          GPU-safe (transform/opacity), reduced-motion respecté. */}
       <AnimatePresence>
         {newBadges.length > 0 && (
           <motion.div
@@ -305,29 +304,28 @@ export default function ProfilePage() {
             exit={reducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.98 }}
             transition={{ type: "spring", duration: 0.5, bounce: 0.18 }}
             role="status"
-            className="mb-4 relative rounded-[var(--card-radius)] p-[1px] bg-gradient-to-b from-[var(--color-eco-green)]/40 via-[var(--color-eco-green)]/15 to-transparent"
+            className="mb-4 relative rounded-[var(--card-radius)] p-[1px] bg-gradient-to-b from-[var(--color-eco-green)]/45 via-[var(--color-eco-green)]/18 to-transparent"
           >
-            {/* Double-bezel : coque dégradée + cœur interne net */}
+            {/* Double-bezel : coque dégradée + cœur interne concentrique */}
             <div className="relative rounded-[calc(var(--card-radius)-1px)] bg-[var(--color-surface)] p-3.5 overflow-hidden">
-              {/* Particules de célébration : 6 éclats qui montent puis
-                  s'estompent — décoration rare, une seule fois par badge.
-                  transform/opacity uniquement (GPU-safe). */}
+              {/* Particules : 6 éclats one-shot (rareté de l'événement).
+                  GPU-safe : transform/opacity uniquement. */}
               {!reducedMotion && (
                 <div aria-hidden className="absolute inset-0 pointer-events-none">
                   {[...Array(6)].map((_, i) => (
                     <motion.span
                       key={i}
                       className="absolute w-1.5 h-1.5 rounded-full bg-[var(--color-eco-green)]"
-                      style={{ left: `${12 + i * 14}%`, bottom: 8 }}
+                      style={{ left: `${12 + i * 15}%`, bottom: 10 }}
                       initial={{ opacity: 0, y: 0, scale: 0.5 }}
                       animate={{
-                        opacity: [0, 0.9, 0.9, 0],
-                        y: [-4, -22, -38, -52],
+                        opacity: [0, 0.85, 0.85, 0],
+                        y: [-6, -26, -44, -58],
                         scale: [0.5, 1, 0.9, 0.3],
                       }}
                       transition={{
-                        duration: 1.6,
-                        delay: 0.3 + i * 0.14,
+                        duration: 1.5,
+                        delay: 0.35 + i * 0.13,
                         ease: [0.23, 1, 0.32, 1],
                         times: [0, 0.25, 0.7, 1],
                       }}
@@ -336,29 +334,31 @@ export default function ProfilePage() {
                 </div>
               )}
               <div className="flex items-start gap-3 relative">
-                {/* Médaillon du succès : l'emoji du badge obtenu (donnée du
-                    backend), pas une icône générique. Si plusieurs badges,
-                    le premier est affiché + compteur sur le médaillon. */}
+                {/* Médaillon : l'emoji du badge obtenu (donnée backend).
+                    Pop avec rotation compensée — rien de nulle part. */}
                 <motion.div
-                  initial={reducedMotion ? false : { opacity: 0, scale: 0.6, rotate: -14 }}
+                  initial={reducedMotion ? false : { opacity: 0, scale: 0.7, rotate: -10 }}
                   animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", duration: 0.55, bounce: 0.3, delay: 0.08 }}
-                  className="relative shrink-0 w-11 h-11 rounded-full bg-[var(--color-eco-green)]/15 ring-1 ring-[var(--color-eco-green)]/30 flex items-center justify-center"
+                  transition={{ type: "spring", duration: 0.55, bounce: 0.28, delay: 0.08 }}
+                  className="relative shrink-0 w-11 h-11 rounded-full bg-[var(--color-eco-green)]/12 ring-1 ring-[var(--color-eco-green)]/25 flex items-center justify-center"
                 >
                   <span className="text-xl leading-none" aria-hidden>
                     {newBadges[0]?.emoji ?? "🏅"}
                   </span>
                   {newBadges.length > 1 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--color-eco-green)] text-white text-[10px] font-bold flex items-center justify-center">
+                    <span
+                      className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--color-eco-green)] text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[var(--color-surface)]"
+                      aria-label={`${newBadges.length - 1} autres succès`}
+                    >
                       +{newBadges.length - 1}
                     </span>
                   )}
                 </motion.div>
                 <div className="flex-1 min-w-0">
                   <motion.p
-                    initial={reducedMotion ? false : { opacity: 0, y: 6 }}
+                    initial={reducedMotion ? false : { opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.14, duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                    transition={{ delay: 0.16, duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
                     className="text-sm font-semibold text-[var(--color-text-primary)]"
                   >
                     {newBadges.length > 1
@@ -369,24 +369,24 @@ export default function ProfilePage() {
                     {newBadges.map((b, i) => (
                       <motion.span
                         key={b.key}
-                        initial={reducedMotion ? false : { opacity: 0, scale: 0.85, y: 8 }}
+                        initial={reducedMotion ? false : { opacity: 0, scale: 0.9, y: 6 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         transition={{
                           type: "spring",
-                          duration: 0.45,
-                          bounce: 0.25,
-                          delay: 0.22 + i * 0.07,
+                          duration: 0.42,
+                          bounce: 0.22,
+                          delay: 0.24 + i * 0.07,
                         }}
                         className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full bg-[var(--color-surface)] text-xs font-medium text-[var(--color-text-primary)] border border-[var(--color-eco-green)]/25 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
                       >
-                        {/* L'emoji est la médaille : il pop avec un léger
-                            overshot (bounce) — célébration, pas dashboard. */}
+                        {/* L'emoji pop avec un léger overshot — célébration,
+                            pas dashboard. */}
                         <motion.span
                           aria-hidden
-                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--color-eco-green)]/15 text-sm"
-                          initial={reducedMotion ? false : { scale: 0.5 }}
-                          animate={{ scale: [1.15, 1] }}
-                          transition={{ delay: 0.3 + i * 0.07, duration: 0.35 }}
+                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--color-eco-green)]/12 text-sm"
+                          initial={reducedMotion ? false : { scale: 0.6 }}
+                          animate={{ scale: [1.12, 1] }}
+                          transition={{ delay: 0.32 + i * 0.07, duration: 0.3 }}
                         >
                           {b.emoji}
                         </motion.span>
@@ -397,7 +397,7 @@ export default function ProfilePage() {
                 </div>
                 <button
                   onClick={() => setNewBadges([])}
-                  className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] p-1 rounded-full transition-colors active:scale-90"
+                  className="shrink-0 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] p-1 rounded-full transition-[color,transform] duration-150 ease-out active:scale-90"
                   aria-label="Fermer la célébration"
                 >
                   <UrbanFlowIcon type="action" name="close" size={16} />
