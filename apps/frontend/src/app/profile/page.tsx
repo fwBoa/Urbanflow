@@ -285,8 +285,13 @@ export default function ProfilePage() {
     return `${grams}g`;
   };
 
-  // CO₂ equivalent: car emits ~120g/km, transit ~22g/km → saved = ~98g/km
-  const co2EquivalentKm = stats.co2Saved > 0 ? Math.round(stats.co2Saved / 98) : 0;
+  // Équivalence voiture : facteur ADEME 170 gCO₂/km (1 passager) — même
+  // source que le CarbonService backend et le CO2Badge. « co2Saved » étant
+  // lui-même estimé côté serveur (co2 réel × ratio voiture/transport), la
+  // division par 170 exprime l'économie en km de voiture évités.
+  const CO2_CAR_FACTOR = 170;
+  const co2EquivalentKm =
+    stats.co2Saved > 0 ? Math.round(stats.co2Saved / CO2_CAR_FACTOR) : 0;
   const unlockedCount = badges.filter((b) => b.unlocked).length;
 
   return (
@@ -524,7 +529,10 @@ export default function ProfilePage() {
         <div className="bg-[var(--color-eco-green)]/10 rounded-[var(--card-radius)] p-3 mb-4 border border-[var(--color-eco-green)]/20">
           <div className="flex items-center gap-2">
             <UrbanFlowIcon type="status" name="leaf" size={16} className="text-[var(--color-eco-green)]" />
-            <p className="text-sm text-[var(--color-eco-green)]">
+            <p
+              className="text-sm text-[var(--color-eco-green)]"
+              title="Équivalence basée sur le facteur ADEME : une voiture émet ~170 gCO₂/km avec un passager. Vos trajets en transport ont émis bien moins — la différence vaut des km de voiture non parcourus."
+            >
               <span className="font-semibold">{co2EquivalentKm} km</span> en voiture évités 🚗→🚇
             </p>
           </div>
