@@ -1,5 +1,6 @@
 import {
   journeyToSegments,
+  shouldShowNightClosedBanner,
   MODE_COLORS,
 } from "@/components/journey-helpers";
 
@@ -189,5 +190,71 @@ describe("journeyToSegments", () => {
       [48.86, 2.35],
       [48.89, 2.38],
     ]);
+  });
+});
+
+describe("shouldShowNightClosedBanner", () => {
+  const at = (h: number, m = 0) => new Date(2026, 8, 8, h, m);
+  const busJourney = { segments: [{ mode: "Bus" }, { mode: "marche" }] };
+  const metroJourney = {
+    segments: [{ mode: "Métro" }, { mode: "marche" }],
+  };
+
+  it("shows banner at 02:30 when only bus journeys are returned (no mode filter)", () => {
+    // Cas Opéra → Châtelet à 2h du matin : bus nocturnes uniquement.
+    expect(shouldShowNightClosedBanner(at(2), [busJourney])).toBe(true);
+  });
+
+  it("shows banner at 02:30 even with no results (all modes closed)", () => {
+    expect(shouldShowNightClosedBanner(at(2, 30), [])).toBe(true);
+  });
+
+  it("hides banner at 10:00 (network open, métro returned)", () => {
+    expect(shouldShowNightClosedBanner(at(10), [metroJourney])).toBe(false);
+  });
+
+  it("hides banner at 10:00 even if only bus returned (daytime = métro not closed)", () => {
+    // De jour, un résultat sans ferré ne signifie pas « réseau fermé ».
+    expect(shouldShowNightClosedBanner(at(10), [busJourney])).toBe(false);
+  });
+
+  it("hides banner at 05:45 (network reopened)", () => {
+    expect(shouldShowNightClosedBanner(at(5, 45), [busJourney])).toBe(false);
+  });
+
+  it("hides banner at 01:00 (last métros still running)", () => {
+    expect(shouldShowNightClosedBanner(at(1), [busJourney])).toBe(false);
+  });
+
+  it("shows banner when user explicitly filters on métro only at night", () => {
+    expect(
+      shouldShowNightClosedBanner(at(2), [busJourney], ["métro"]),
+    ).toBe(true);
+  });
+
+  it("hides banner when user filters on bus only at night (what they asked is running)", () => {
+    expect(
+      shouldShowNightClosedBanner(at(2), [busJourney], ["bus"]),
+    ).toBe(false);
+  });
+
+  it("handles mixed filter (métro + bus) at night: banner if no métro in results", () => {
+    expect(
+      shouldShowNightClosedBanner(at(2), [busJourney], ["métro", "bus"]),
+    ).toBe(true);
+    expect(
+      shouldShowNightClosedBanner(at(2), [metroJourney], ["métro", "bus"]),
+    ).toBe(false);
+  });
+
+  it("handles case variations (METRO, Métro, rer)", () => {
+    const upper = { segments: [{ mode: "METRO" }] };
+    expect(shouldShowNightClosedBanner(at(3), [upper])).toBe(false);
+    const rer = { segments: [{ mode: "rer" }] };
+    expect(shouldShowNightClosedBanner(at(3), [busJourney], ["rer"])).toBe(true);
+  });
+
+  it("returns false for null departure date (defensive)", () => {
+    expect(shouldShowNightClosedBanner(null, [busJourney])).toBe(false);
   });
 });

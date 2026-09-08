@@ -171,3 +171,68 @@ export function journeyToSegments(
 
   return segments;
 }
+
+/** Modes ferrés fermés la nuit à Paris (métro/RER/Transilien : ~1h15 → ~5h30). */
+const CLOSED_NIGHT_MODES = new Set(["metro", "rer", "transilien", "train"]);
+
+/**
+ * Normalise un mode pour comparaison : lowercase + suppression des accents
+ * (« Métro » → « metro », « METRO » → « metro ») — les modes backend
+ * mélangent accents et casse selon la source (GTFS vs libellés UI).
+ */
+function normMode(mode: string | undefined): string {
+  return (mode ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}
+
+/**
+ * Détermine si un bandeau « Métro/RER fermés la nuit » doit être affiché.
+ *
+ * Contexte : le moteur RAPTOR respecte les horaires réels du réseau — la nuit
+ * (aucun départ ferré disponible), il ne propose correctement que bus/Noctilien.
+ * Le bandeau explicite ce comportement à l'utilisateur plutôt que de le laisser
+ * déduire.
+ *
+ * Conditions d'affichage :
+ * - l'heure de départ locale tombe dans la plage de fermeture [01:15, 05:30) ;
+ * - l'utilisateur a demandé (filtre modes) ou attend (aucun filtrage) un mode
+ *   ferré fermé ;
+ * - aucun itinéraire retourné ne contient de mode ferré (sinon le réseau
+ *   est ouvert — le fuseau horaire de la donnée prime sur l'heure locale).
+ */
+export function shouldShowNightClosedBanner(
+  departureDate: Date | null,
+  journeys: { segments: { mode?: string }[] }[],
+  requestedModes?: string[],
+): boolean {
+  if (!departureDate) return false;
+  const minutes = departureDate.getHours() * 60 + departureDate.getMinutes();
+  const closedWindow = minutes >= 75 && minutes < 330; // 01:15 → 05:30
+  if (!closedWindow) return false;
+
+  const hasClosedMode = (j: { segments: { mode?: string }[] }) =>
+    j.segments.some((s) => CLOSED_NIGHT_MODES.has(normMode(s.mode)));
+
+  // L'utilisateur a explicitement filtré sur des modes fermés.
+  if (requestedModes && requestedModes.length > 0) {
+    const requestedClosed = requestedModes.some((m) =>
+      CLOSED_NIGHT_MODES.has(normMode(m)),
+    );
+    const requestedOnlyClosed = requestedModes.every((m) =>
+      CLOSED_NIGHT_MODES.has(normMode(m)),
+    );
+    if (requestedOnlyClosed) return true;
+    // Filtrage mixte (ferré + bus) : le bandeau s'affiche si AUCUN mode
+    // ferré n'apparaît dans les résultats (il est de facto indisponible).
+    if (requestedClosed) {
+      return !journeys.some(hasClosedMode);
+    }
+    return false;
+  }
+
+  // Aucun filtre : on montre le bandeau si aucun mode ferré dans les
+  // résultats (le réseau ferré est de facto fermé à ce départ).
+  return journeys.length > 0 ? !journeys.some(hasClosedMode) : true;
+}

@@ -10,7 +10,10 @@ import FilterChip from "@/components/FilterChip";
 import TripCard from "@/components/TripCard";
 import DynamicMap from "@/components/DynamicMap";
 import NearbyStopDrawer from "@/components/NearbyStopDrawer";
-import { journeyToSegments } from "@/components/journey-helpers";
+import {
+  journeyToSegments,
+  shouldShowNightClosedBanner,
+} from "@/components/journey-helpers";
 import JourneyLineLazy from "@/components/JourneyLineLoader";
 import { UI_MODE_COLORS } from "@/constants/mode-colors";
 import { useStopSearch, useGeocode, useJourney, useReverseGeocode, useRoute, useNearbyStops, useStopTimes } from "@/hooks/useTransport";
@@ -291,6 +294,20 @@ function SearchPageContent() {
         return sorted;
     }
   }, [journeys, activeFilter]);
+
+  // Bandeau « réseau ferré fermé la nuit » : la recherche (sans heure choisie
+  // par l'utilisateur) part de « maintenant » — on évalue la plage de fermeture
+  // au moment du fetch, et on explicite le comportement du moteur (bus
+  // nocturnes proposés, métro/RER rouvriront vers 05h30).
+  const showNightBanner = useMemo(
+    () =>
+      shouldShowNightClosedBanner(
+        new Date(),
+        journeys,
+        selectedModes.length > 0 ? selectedModes : undefined,
+      ),
+    [journeys, selectedModes],
+  );
 
   // ── Tracé animé multi-segments depuis le meilleur itinéraire ──
   // On prend le 1er itinéraire de la liste (le plus rapide après tri)
@@ -690,6 +707,14 @@ function SearchPageContent() {
             {sortedJourneys.some((t) => t.isFallback) && (
               <div className="bg-amber-50 border border-amber-200 rounded-[var(--card-radius)] p-2.5 text-xs text-amber-800 dark:bg-amber-900/20 dark:border-amber-800/30 dark:text-amber-300">
                 <span className="font-semibold">Données GTFS indisponibles.</span> Les itinéraires affichés sont des estimations basées sur la distance. Les horaires et lignes réelles seront disponibles une fois le service PRIM de retour.
+              </div>
+            )}
+            {showNightBanner && (
+              <div
+                role="status"
+                className="bg-[var(--color-eco-green)]/8 border border-[var(--color-eco-green)]/25 rounded-[var(--card-radius)] p-2.5 text-xs text-[var(--color-text-secondary)]"
+              >
+                <span className="font-semibold">Métro et RER sont fermés la nuit.</span> Le moteur ne propose que les lignes qui circulent réellement à cette heure — bus et Noctilien. Les lignes ferrées rouvriront vers 05h30.
               </div>
             )}
             {sortedJourneys.map((trip, i) => (
