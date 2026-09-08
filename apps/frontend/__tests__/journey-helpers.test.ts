@@ -250,8 +250,13 @@ describe("shouldShowNightClosedBanner", () => {
   it("handles case variations (METRO, Métro, rer)", () => {
     const upper = { segments: [{ mode: "METRO" }] };
     expect(shouldShowNightClosedBanner(at(3), [upper])).toBe(false);
-    const rer = { segments: [{ mode: "rer" }] };
-    expect(shouldShowNightClosedBanner(at(3), [busJourney], ["rer"])).toBe(true);
+    const rerJourney = { segments: [{ mode: "rer" }] };
+    // Un segment « rer » détecté comme ferré → pas de bandeau si présent.
+    expect(shouldShowNightClosedBanner(at(3), [rerJourney])).toBe(false);
+    // Le filtre « rer » demandé la nuit sans RER dans les résultats → bandeau.
+    expect(
+      shouldShowNightClosedBanner(at(3), [busJourney], ["rer"]),
+    ).toBe(true);
   });
 
   it("returns false for null departure date (defensive)", () => {
