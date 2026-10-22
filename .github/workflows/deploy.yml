@@ -30,6 +30,16 @@ jobs:
   deploy:
     name: Deploy (${{ github.event.inputs.environment || 'prod' }})
     runs-on: ubuntu-latest
+    # Un seul déploiement à la fois par environnement : un nouveau push annule
+    # celui qui attend encore une approbation. Sans cela, chaque push laissait
+    # un run en attente ; GitHub les marquait en échec au bout de 30 jours, d'où
+    # des notifications pointant vers des commits vieux d'un mois.
+    concurrency:
+      group: deploy-${{ github.event.inputs.environment || 'prod' }}
+      cancel-in-progress: true
+    # Plafond explicite : sans lui, une approbation jamais donnée fait patienter
+    # le job jusqu'au maximum de GitHub (30 jours) avant de le déclarer en échec.
+    timeout-minutes: 30
     environment: ${{ github.event.inputs.environment || 'prod' }}
     steps:
       # actions/checkout v5.0.1 (node24 runtime)
