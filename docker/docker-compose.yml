@@ -28,7 +28,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-urbanflow_dev}
       POSTGRES_DB: ${POSTGRES_DB:-urbanflow}
     ports:
-      - '5432:5432'
+      # Loopback uniquement. Le backend joint la base par le réseau Docker
+      # (postgres:5432) : la publication sur l'hôte ne sert qu'au debug local.
+      # En 0.0.0.0, Docker écrit ses propres règles iptables et contourne UFW —
+      # la base devenait joignable depuis Internet dès que le firewall amont
+      # s'ouvrait.
+      - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
