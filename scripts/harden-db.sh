@@ -21,7 +21,7 @@
 set -euo pipefail
 
 DRY_RUN=false
-if [ "$1" = "--dry-run" ]; then
+if [ "${1:-}" = "--dry-run" ]; then
   DRY_RUN=true
 fi
 
