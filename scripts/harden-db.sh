@@ -87,8 +87,20 @@ echo "👤 2/2 rôle $DB_USER — retrait de SUPERUSER"
 IS_SUPER=$(docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tAc \
   "SELECT rolsuper FROM pg_roles WHERE rolname = '$DB_USER';" | tr -d '[:space:]')
 
+# Le bootstrap user (celui qu'initdb crée, toujours d'OID 10) ne peut pas perdre
+# SUPERUSER : PostgreSQL le refuse. C'est le cas quand POSTGRES_USER est aussi
+# le rôle applicatif. La vraie correction est alors un rôle distinct, pas une
+# modification de celui-ci.
+BOOTSTRAP=$(docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+  "SELECT rolname FROM pg_roles WHERE oid = 10;" | tr -d '[:space:]')
+
 if [ "$IS_SUPER" = "f" ]; then
   echo "   Déjà NOSUPERUSER, rien à faire."
+elif [ "$DB_USER" = "$BOOTSTRAP" ]; then
+  echo "   ⏭  $DB_USER est le bootstrap user (OID 10) : PostgreSQL interdit de"
+  echo "      lui retirer SUPERUSER. Mesure non applicable en l'état."
+  echo "      Correctif réel : créer un rôle applicatif distinct et le déclarer"
+  echo "      propriétaire des objets, puis basculer DATABASE_URL."
 elif [ "$DRY_RUN" = "true" ]; then
   echo "   [dry-run] ALTER ROLE $DB_USER NOSUPERUSER;"
 else
